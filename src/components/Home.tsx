@@ -1,0 +1,37 @@
+import type { WordList } from '../state/types'
+import { SavedLists } from './SavedLists'
+
+interface Props {
+  lists: WordList[]
+  onNewList: () => void
+  onPractise: (list: WordList) => void
+  onEdit: (list: WordList) => void
+  onRename: (list: WordList) => void
+  onDelete: (list: WordList) => void
+}
+
+export function Home({ lists, onNewList, ...listActions }: Props) {
+  return (
+    <section className="mx-auto flex max-w-xl flex-col gap-6 p-4">
+      <header>
+        <h1 className="text-2xl font-semibold">Vocabulary Trainer</h1>
+        <p className="mt-1 text-slate-600 dark:text-slate-400">
+          Hear a word, say the answer, mark yourself. Everything stays on this device.
+        </p>
+      </header>
+
+      <button
+        type="button"
+        onClick={onNewList}
+        className="min-h-14 rounded-lg bg-emerald-700 text-lg text-white"
+      >
+        New list
+      </button>
+
+      <div>
+        <h2 className="mb-2 font-semibold">Saved lists</h2>
+        <SavedLists lists={lists} {...listActions} />
+      </div>
+    </section>
+  )
+}
