@@ -68,15 +68,20 @@ React 19 note: `componentDidCatch` remains the mechanism; there is still no hook
 
 ### Storage design
 
-New module `src/storage/sessionRepo.ts`, modelled directly on `listRepo`'s contract — total reads,
+New module `src/storage/drillRepo.ts`, modelled directly on `listRepo`'s contract — total reads,
 `WriteResult` writes, versioned payload, its own key.
+
+> **Renamed during execution.** This was specified as `sessionRepo.ts`, but that module already
+> exists and does something else: it stores finished-drill *history* under `pvt.sessions.v1`. Reusing
+> the name would have collided with it. `drillRepo` = the drill in progress; `sessionRepo` = the
+> drills you have finished.
 
 | Decision | Choice | Reasoning |
 |----------|--------|-----------|
-| Key | `pvt.session.v1` | Separate from `pvt.lists.v1`, so a session bug can never corrupt saved lists. |
+| Key | `pvt.drill.v1` | Separate from `pvt.lists.v1` (saved words) and `pvt.sessions.v1` (history), so a resume bug can corrupt neither. |
 | Store | `localStorage` | `sessionStorage` dies with the tab; iOS evicts backgrounded tabs, which is one of the very cases this must survive. |
 | Freshness | `savedAt` + 24 h TTL | Stale drills are discarded rather than ambushing the user (spec A5). |
-| Payload | `{ schemaVersion, savedAt, screen, list, session }` | The **list is stored with the session**, not referenced by id — a drill must survive its source list being deleted mid-run, exactly as the in-memory snapshot already does (`session.ts:42`). |
+| Payload | `{ schemaVersion, savedAt, screen, list, session, runKind }` | The **list is stored with the session**, not referenced by id — a drill must survive its source list being deleted mid-run, exactly as the in-memory snapshot already does (`session.ts:42`). `runKind` was **added during execution**: App holds a `'full' \| 'wrong-only'` label outside `Session`, and without persisting it a reload mid wrong-only re-run would log that run as `'full'` — flattering the average, the one thing that label exists to prevent. |
 | Failure | Read → `null`. Write → `WriteResult`, ignored by callers. | Persistence is a convenience layer; losing it degrades to today's behaviour (FR-6). |
 
 ### Restore and the iOS gesture chain

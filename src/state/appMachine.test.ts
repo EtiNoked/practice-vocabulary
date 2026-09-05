@@ -131,6 +131,151 @@ describe('restarting from results', () => {
   })
 })
 
+describe('starting in a mode', () => {
+  const ready = reduce(initialState, { type: 'PRACTISE_LIST', list })
+
+  it('defaults to test mode, so 001 behaviour is what an unqualified START means', () => {
+    const s = reduce(ready, { type: 'START' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('test')
+  })
+
+  it('starts a test drill', () => {
+    const s = reduce(ready, { type: 'START', mode: 'test' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('test')
+  })
+
+  it('starts a practice drill in list order', () => {
+    const s = reduce(ready, { type: 'START', mode: 'practice' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('practice')
+    expect(s.session.order).toEqual(['p1', 'p2'])
+  })
+})
+
+describe('the practice-mode loop', () => {
+  const studying = at(
+    initialState,
+    { type: 'PRACTISE_LIST', list },
+    { type: 'START', mode: 'practice' },
+  )
+
+  it('NEXT advances a card', () => {
+    const s = reduce(studying, { type: 'NEXT' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.index).toBe(1)
+  })
+
+  // The same boundary MARK already handles via isFinished.
+  it('NEXT past the last card lands on results', () => {
+    const s = at(studying, { type: 'NEXT' }, { type: 'NEXT' })
+    expect(s.screen).toBe('results')
+  })
+
+  it('PREV goes back a card', () => {
+    const s = at(studying, { type: 'NEXT' }, { type: 'PREV' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.index).toBe(0)
+  })
+
+  it('PREV never produces a negative index', () => {
+    const s = at(studying, { type: 'PREV' }, { type: 'PREV' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.index).toBe(0)
+  })
+
+  // FR-13: no marking in practice, so nothing can accumulate a score.
+  it('records no marks however far it is navigated', () => {
+    const s = at(studying, { type: 'NEXT' }, { type: 'PREV' }, { type: 'NEXT' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.marks).toEqual({})
+  })
+})
+
+describe('actions guarded by mode', () => {
+  const studying = at(
+    initialState,
+    { type: 'PRACTISE_LIST', list },
+    { type: 'START', mode: 'practice' },
+  )
+  const testing = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START', mode: 'test' })
+
+  /*
+   * Unchanged BY REFERENCE, matching the machine's existing contract for an
+   * action that does not apply — not a throw, and not a cloned object.
+   */
+  it('REVEAL is a no-op in practice mode', () => {
+    expect(reduce(studying, { type: 'REVEAL' })).toBe(studying)
+  })
+
+  it('MARK is a no-op in practice mode', () => {
+    expect(reduce(studying, { type: 'MARK', result: 'right' })).toBe(studying)
+  })
+
+  it('NEXT is a no-op in test mode', () => {
+    expect(reduce(testing, { type: 'NEXT' })).toBe(testing)
+  })
+
+  it('PREV is a no-op in test mode', () => {
+    expect(reduce(testing, { type: 'PREV' })).toBe(testing)
+  })
+
+  it('QUIT still works in practice mode', () => {
+    expect(reduce(studying, { type: 'QUIT' }).screen).toBe('results')
+  })
+})
+
+describe('SWITCH_MODE', () => {
+  const finishedTest = at(
+    initialState,
+    { type: 'PRACTISE_LIST', list },
+    { type: 'START', mode: 'test' },
+    { type: 'REVEAL' },
+    { type: 'MARK', result: 'wrong' },
+    { type: 'REVEAL' },
+    { type: 'MARK', result: 'right' },
+  )
+
+  it('flips a finished test into a practice run', () => {
+    const s = reduce(finishedTest, { type: 'SWITCH_MODE' })
+    expect(s.screen).toBe('practising')
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('practice')
+    expect(s.session.marks).toEqual({})
+    expect(s.session.index).toBe(0)
+  })
+
+  it('flips a finished practice run into a test', () => {
+    const finishedPractice = at(
+      initialState,
+      { type: 'PRACTISE_LIST', list },
+      { type: 'START', mode: 'practice' },
+      { type: 'QUIT' },
+    )
+    const s = reduce(finishedPractice, { type: 'SWITCH_MODE' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('test')
+  })
+
+  /**
+   * Built from the LIST's pairs, not the finished session's. After a wrong-only
+   * re-run the session holds only the missed pairs, and switching mode there
+   * must not quietly drop everything the user got right.
+   */
+  it('covers the whole list even after a wrong-only re-run', () => {
+    const s = at(finishedTest, { type: 'RESTART_WRONG_ONLY' }, { type: 'QUIT' }, {
+      type: 'SWITCH_MODE',
+    })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.order).toHaveLength(2)
+  })
+
+  it('is ignored anywhere but results', () => {
+    expect(reduce(initialState, { type: 'SWITCH_MODE' })).toBe(initialState)
+  })
+})
+
 describe('illegal transitions', () => {
   // The reducer must ignore actions that do not belong to the current screen
   // rather than producing a nonsensical state.
@@ -148,5 +293,13 @@ describe('illegal transitions', () => {
 
   it('ignores CONFIRM_LIST when not editing', () => {
     expect(reduce(initialState, { type: 'CONFIRM_LIST', list })).toBe(initialState)
+  })
+
+  it('ignores NEXT when not practising', () => {
+    expect(reduce(initialState, { type: 'NEXT' })).toBe(initialState)
+  })
+
+  it('ignores PREV when not practising', () => {
+    expect(reduce(initialState, { type: 'PREV' })).toBe(initialState)
   })
 })

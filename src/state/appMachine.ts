@@ -4,13 +4,16 @@ import {
   createSession,
   isFinished,
   mark as markSession,
+  nextCard,
+  otherMode,
+  prevCard,
   randomRng,
   restartShuffled,
   restartWrongOnly,
   reveal as revealSession,
   type Rng,
 } from './session'
-import type { MarkResult, Session, WordList } from './types'
+import type { DrillMode, MarkResult, Session, WordList } from './types'
 
 /**
  * The whole app as a discriminated union.
@@ -46,12 +49,18 @@ export type AppAction =
   | { type: 'PRACTISE_LIST'; list: WordList }
   | { type: 'CANCEL_EDIT' }
   | { type: 'CONFIRM_LIST'; list: WordList }
-  | { type: 'START' }
+  /** Omitting `mode` means test — 001's behaviour, and what every pre-modes caller meant. */
+  | { type: 'START'; mode?: DrillMode }
   | { type: 'REVEAL' }
   | { type: 'MARK'; result: MarkResult }
+  /** Practice-mode navigation. No-ops in test mode, where MARK does the advancing. */
+  | { type: 'NEXT' }
+  | { type: 'PREV' }
   | { type: 'QUIT' }
   | { type: 'RESTART_SHUFFLED' }
   | { type: 'RESTART_WRONG_ONLY' }
+  /** From results: run the same list again in the other mode. */
+  | { type: 'SWITCH_MODE' }
   | { type: 'GO_HOME' }
 
 export const initialState: AppState = { screen: 'home' }
@@ -95,20 +104,43 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       return {
         screen: 'practising',
         list: state.list,
-        session: createSession(state.list.pairs, rng, state.list.id),
+        session: createSession(state.list.pairs, rng, state.list.id, action.mode ?? 'test'),
       }
 
+    /*
+     * REVEAL and MARK are guarded to test mode, and NEXT/PREV to practice.
+     *
+     * Guarding rather than splitting `practising` into two screens keeps the
+     * exhaustive switch intact, and means an out-of-mode action degrades to a
+     * no-op instead of becoming a type error at a call site that cannot know the
+     * mode. Same rule as an action arriving on the wrong screen: the state comes
+     * back unchanged, by reference.
+     */
     case 'REVEAL':
-      if (state.screen !== 'practising') return state
+      if (state.screen !== 'practising' || state.session.mode !== 'test') return state
       return { ...state, session: revealSession(state.session) }
 
     case 'MARK': {
-      if (state.screen !== 'practising') return state
+      if (state.screen !== 'practising' || state.session.mode !== 'test') return state
       const session = markSession(state.session, action.result)
       return isFinished(session)
         ? { screen: 'results', list: state.list, session }
         : { ...state, session }
     }
+
+    case 'NEXT': {
+      if (state.screen !== 'practising' || state.session.mode !== 'practice') return state
+      const session = nextCard(state.session)
+      // Past the last card is the end of the run — the same boundary MARK
+      // already crosses via isFinished.
+      return isFinished(session)
+        ? { screen: 'results', list: state.list, session }
+        : { ...state, session }
+    }
+
+    case 'PREV':
+      if (state.screen !== 'practising' || state.session.mode !== 'practice') return state
+      return { ...state, session: prevCard(state.session) }
 
     case 'QUIT':
       if (state.screen !== 'practising') return state
@@ -128,6 +160,25 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
         screen: 'practising',
         list: state.list,
         session: restartWrongOnly(state.session, rng),
+      }
+
+    /*
+     * Built from `state.list.pairs`, NOT from the finished session's pairs.
+     * After a wrong-only re-run the session holds only the pairs that were
+     * missed, and switching mode there would silently drop every pair the user
+     * got right.
+     */
+    case 'SWITCH_MODE':
+      if (state.screen !== 'results') return state
+      return {
+        screen: 'practising',
+        list: state.list,
+        session: createSession(
+          state.list.pairs,
+          rng,
+          state.list.id,
+          otherMode(state.session.mode),
+        ),
       }
 
     case 'GO_HOME':

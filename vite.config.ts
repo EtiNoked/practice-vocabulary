@@ -5,6 +5,21 @@ import { defineConfig } from 'vitest/config'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    watch: {
+      // This repo lives in iCloud Drive, which touches files continuously as it
+      // syncs, and node_modules (829 MB) and dist are both in-tree. Vite's
+      // default watcher can read that churn as source edits and issue a full
+      // page reload, which wipes in-memory app state mid-drill.
+      //
+      // NOT usePolling: true. Polling is the usual iCloud/network-drive
+      // workaround for MISSED events; the failure mode here is the opposite —
+      // too many events — and polling would make it worse while also walking
+      // 829 MB on a timer.
+      ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**'],
+      usePolling: false,
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

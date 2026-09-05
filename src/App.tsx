@@ -1,7 +1,8 @@
 import { useCallback, useLayoutEffect, useState } from 'react'
 import { Home } from './components/Home'
 import { ListEditor } from './components/ListEditor'
-import { PracticeCard } from './components/PracticeCard'
+import { TestCard } from './components/TestCard'
+import { StudyCard } from './components/StudyCard'
 import { ReadyScreen } from './components/ReadyScreen'
 import { ResultsScreen } from './components/ResultsScreen'
 import { MigratePrompt } from './components/MigratePrompt'
@@ -14,6 +15,7 @@ import { speak } from './speech/tts'
 import { useVoices } from './speech/useVoices'
 import { hasVoiceFor } from './speech/tts'
 import { writeFailureMessage } from './storage/messages'
+import { drillRepo } from './storage/drillRepo'
 import { useListStore } from './storage/useListStore'
 import { useAuth } from './auth/useAuth'
 import { readGuestChoice, writeGuestChoice } from './auth/guestChoice'
@@ -23,15 +25,48 @@ import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
 import { buildSessionRecord } from './state/sessionRecord'
 
+/**
+ * Pick up a drill parked by a previous page load.
+ *
+ * Read ONCE, here, rather than in two places: the screen and the run kind have
+ * to come from the same payload, and `resumed` has to be true exactly when they
+ * did.
+ */
+function restore(): { state: AppState; runKind: SessionRecord['mode']; resumed: boolean } {
+  const drill = drillRepo.load()
+  if (!drill) return { state: initialState, runKind: 'full', resumed: false }
+  return {
+    state: { screen: 'practising', list: drill.list, session: drill.session },
+    runKind: drill.runKind,
+    resumed: true,
+  }
+}
+
 export default function App() {
-  const [state, setState] = useState<AppState>(initialState)
+  /*
+   * Seeded with a FUNCTION, not a value: passing restore() directly would
+   * re-read localStorage on every render. Restoring in the initialiser rather
+   * than an effect also means there is no first-paint flash of the home screen
+   * before the drill reappears (NFR-3).
+   */
+  const [restored] = useState(restore)
+  const [state, setState] = useState<AppState>(restored.state)
   const [lists, setLists] = useState<WordList[]>([])
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [records, setRecords] = useState<SessionRecord[]>([])
   const [toast, setToast] = useState<string | null>(null)
   // Which kind of drill is currently running, so a wrong-only re-run can be
-  // recorded as such and kept out of the plain average.
-  const [sessionMode, setSessionMode] = useState<'full' | 'wrong-only'>('full')
+  // recorded as such and kept out of the plain average. Seeded from the restored
+  // drill so a reload cannot relabel a wrong-only re-run as a full one.
+  const [sessionMode, setSessionMode] = useState<'full' | 'wrong-only'>(restored.runKind)
+  /**
+   * True while the card on screen arrived from storage rather than from a tap.
+   *
+   * FR-3: a restore has no user gesture in scope, so nothing was spoken — and on
+   * iOS Safari nothing COULD be. The card says so instead, and the flag clears
+   * on the first action, which re-establishes the chain.
+   */
+  const [resumed, setResumed] = useState(restored.resumed)
   const { voices, ready } = useVoices()
 
   // localStorage while signed out, Firestore while signed in. Nothing below this
@@ -78,6 +113,11 @@ export default function App() {
     setState(initialState)
     setSavedIds(new Set())
     setToast(null)
+    setResumed(false)
+    // The parked drill goes too. It bypasses `act`, so nothing else would clear
+    // it — and a drill the user was warned they were ending must not reappear
+    // when the next person signs in on this device.
+    drillRepo.clear()
   }, [])
 
   /**
@@ -155,6 +195,10 @@ export default function App() {
       const next = reduce(state, action)
       setState(next)
 
+      // Any action at all is a user gesture, so the "resumed" affordance has
+      // done its job and the speech chain is live again.
+      setResumed(false)
+
       /**
        * Record a finished drill.
        *
@@ -174,14 +218,50 @@ export default function App() {
         if (record) void store.recordSession(record)
       }
 
-      if (action.type === 'RESTART_WRONG_ONLY') setSessionMode('wrong-only')
-      else if (action.type === 'START' || action.type === 'RESTART_SHUFFLED') setSessionMode('full')
+      /*
+       * Computed as a local FIRST and only then stored, because the value is
+       * needed twice in this same call — once for setState and once for the
+       * persisted payload below. Reading `sessionMode` back after
+       * setSessionMode would still see the previous render's value.
+       */
+      const nextRunKind: SessionRecord['mode'] =
+        action.type === 'RESTART_WRONG_ONLY'
+          ? 'wrong-only'
+          : action.type === 'START' ||
+              action.type === 'RESTART_SHUFFLED' ||
+              action.type === 'SWITCH_MODE'
+            ? 'full'
+            : sessionMode
+      setSessionMode(nextRunKind)
+
+      /*
+       * Park or discard the drill.
+       *
+       * HERE, not in a useEffect. An effect fires a render later, so a reload
+       * landing in that gap loses the card — which is the exact defect this
+       * feature exists to fix. `act` is already the single choke point every
+       * transition flows through, so one call covers all of them.
+       *
+       * The result is deliberately ignored: persistence is a convenience layer,
+       * and a quota or private-mode failure must degrade to 001's in-memory
+       * behaviour rather than interrupt the drill (FR-6).
+       */
+      if (next.screen === 'practising') {
+        drillRepo.save({ list: next.list, session: next.session, runKind: nextRunKind })
+      } else {
+        // Covers finishing, QUIT (which routes to results) and GO_HOME (FR-4).
+        drillRepo.clear()
+      }
 
       const advances =
         action.type === 'START' ||
         action.type === 'MARK' ||
         action.type === 'RESTART_SHUFFLED' ||
-        action.type === 'RESTART_WRONG_ONLY'
+        action.type === 'RESTART_WRONG_ONLY' ||
+        action.type === 'NEXT' ||
+        // PREV too: moving back a card should say the card you moved back TO.
+        action.type === 'PREV' ||
+        action.type === 'SWITCH_MODE'
       if (advances) speakCurrent(next)
     },
     [state, speakCurrent, store, sessionMode],
@@ -217,7 +297,7 @@ export default function App() {
       {/*
         The account slot, on every screen.
 
-        In normal flow rather than fixed: PracticeCard's header already owns the
+        In normal flow rather than fixed: TestCard's header already owns the
         top-right corner with its Quit button, and an overlay lands on top of it.
         `max-w-xl px-4` matches every screen's container so the control aligns
         with the content edge, not the viewport edge. Rendered only when there is
@@ -289,22 +369,40 @@ export default function App() {
         <ReadyScreen
           list={state.list}
           saved={savedIds.has(state.list.id) || visibleLists.some((l) => l.id === state.list.id)}
-          onStart={() => act({ type: 'START' })}
+          onStart={(mode) => act({ type: 'START', mode })}
           onSave={() => void persist(state.list)}
           onBack={() => act({ type: 'GO_HOME' })}
         />
       )}
 
-      {state.screen === 'practising' && (
-        <PracticeCard
-          list={state.list}
-          session={state.session}
-          voiceMissing={voiceMissing}
-          onReveal={() => act({ type: 'REVEAL' })}
-          onMark={(result) => act({ type: 'MARK', result })}
-          onQuit={() => act({ type: 'QUIT' })}
-        />
-      )}
+      {/*
+        Routed on the SESSION's mode, not on a separate screen.
+
+        The two cards answer opposite questions — one hides the answer and
+        counts, the other hides nothing and counts nothing — so they are two
+        components rather than one with a pile of conditionals.
+      */}
+      {state.screen === 'practising' &&
+        (state.session.mode === 'practice' ? (
+          <StudyCard
+            list={state.list}
+            session={state.session}
+            resumed={resumed}
+            onNext={() => act({ type: 'NEXT' })}
+            onPrev={() => act({ type: 'PREV' })}
+            onQuit={() => act({ type: 'QUIT' })}
+          />
+        ) : (
+          <TestCard
+            list={state.list}
+            session={state.session}
+            voiceMissing={voiceMissing}
+            resumed={resumed}
+            onReveal={() => act({ type: 'REVEAL' })}
+            onMark={(result) => act({ type: 'MARK', result })}
+            onQuit={() => act({ type: 'QUIT' })}
+          />
+        ))}
 
       {state.screen === 'results' && (
         <ResultsScreen
@@ -312,6 +410,7 @@ export default function App() {
           session={state.session}
           onRestartShuffled={() => act({ type: 'RESTART_SHUFFLED' })}
           onRestartWrongOnly={() => act({ type: 'RESTART_WRONG_ONLY' })}
+          onSwitchMode={() => act({ type: 'SWITCH_MODE' })}
           onDone={() => act({ type: 'GO_HOME' })}
         />
       )}
