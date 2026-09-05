@@ -1,0 +1,58 @@
+rules_version = '2';
+
+/**
+ * These rules are the ENTIRE server-side defence for this app.
+ *
+ * There is no backend, so nothing else validates a write. Anything permitted
+ * here is reachable by anyone who opens DevTools. Every change must land with a
+ * test in tests/rules/, covering the deny case as well as the allow case —
+ * a rules suite that only proves the happy path proves nothing.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isNonEmptyString(value, maxLen) {
+      return value is string && value.size() > 0 && value.size() <= maxLen;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow delete: if isOwner(uid);
+
+      // A field whitelist, not a blocklist: an unknown field is rejected rather
+      // than quietly stored. Keeps a client bug from bloating the document.
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(
+             ['displayName', 'email', 'photoURL', 'createdAt', 'lastSeenAt']);
+
+      match /lists/{listId} {
+        allow read, delete: if isOwner(uid);
+
+        // The caps are about blast radius, not malice: with no server to stop it,
+        // one client bug could otherwise write an unbounded document.
+        allow create, update: if isOwner(uid)
+          && isNonEmptyString(request.resource.data.name, 200)
+          && request.resource.data.pairs is list
+          && request.resource.data.pairs.size() <= 500;
+      }
+
+      match /sessions/{sessionId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.listId is string
+          && request.resource.data.finishedAt is number;
+
+        // History is a log, not a document. Enforcing append-only HERE rather
+        // than in the UI means a client bug cannot rewrite the past.
+        allow update: if false;
+      }
+    }
+
+    // No catch-all match at the root. Anything not named above is denied, which
+    // is the default we want. Do not add one.
+  }
+}
