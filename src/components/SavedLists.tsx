@@ -2,6 +2,7 @@ import type { WordList } from '../state/types'
 
 interface Props {
   lists: WordList[]
+  loading?: boolean
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
   onRename: (list: WordList) => void
@@ -10,7 +11,17 @@ interface Props {
 
 const formatDate = (ms: number) => new Date(ms).toLocaleDateString('en-GB')
 
-export function SavedLists({ lists, onPractise, onEdit, onRename, onDelete }: Props) {
+export function SavedLists({ lists, loading = false, onPractise, onEdit, onRename, onDelete }: Props) {
+  // "No saved lists yet" shown to a signed-in user whose lists are still
+  // arriving reads as data loss. Say nothing definite until we know.
+  if (loading) {
+    return (
+      <p className="text-slate-600 dark:text-slate-400" role="status">
+        Loading your lists…
+      </p>
+    )
+  }
+
   if (lists.length === 0) {
     return (
       <p className="text-slate-600 dark:text-slate-400">

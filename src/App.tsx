@@ -1,17 +1,19 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useState } from 'react'
 import { Home } from './components/Home'
 import { ListEditor } from './components/ListEditor'
 import { PracticeCard } from './components/PracticeCard'
 import { ReadyScreen } from './components/ReadyScreen'
 import { ResultsScreen } from './components/ResultsScreen'
+import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
 import type { WordList } from './state/types'
 import { speak } from './speech/tts'
 import { useVoices } from './speech/useVoices'
 import { hasVoiceFor } from './speech/tts'
-import { createLocalListStore } from './storage/localListStore'
 import { writeFailureMessage } from './storage/messages'
+import { useListStore } from './storage/useListStore'
+import { useAuth } from './auth/useAuth'
 import { currentPair } from './state/session'
 
 export default function App() {
@@ -21,9 +23,10 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const { voices, ready } = useVoices()
 
-  // Signed-out storage. Phase 5 swaps this for a cloud store when a user signs in;
-  // nothing below this line knows or cares which implementation it is holding.
-  const store = useMemo(() => createLocalListStore(), [])
+  // localStorage while signed out, Firestore while signed in. Nothing below this
+  // line knows or cares which implementation it is holding.
+  const { store, error: storeError } = useListStore()
+  const { status: authStatus } = useAuth()
 
   /**
    * A layout effect rather than a plain one, deliberately.
@@ -34,14 +37,23 @@ export default function App() {
    * a flash of an empty home screen reads as data loss.
    */
   useLayoutEffect(() => {
+    if (!store) return
     const unsubscribe = store.subscribeLists(setLists, (error) => setToast(error.message))
     return () => {
       unsubscribe()
     }
   }, [store])
 
+  /**
+   * Derived, not stored: with no store we do not yet know whose data this is,
+   * so the previous identity's lists must not stay on screen. Deriving avoids a
+   * clear-then-refill cascade and cannot leave a stale frame behind.
+   */
+  const visibleLists = store ? lists : []
+
   const persist = useCallback(
     async (list: WordList) => {
+      if (!store) return
       const result = await store.saveList(list)
       if (!result.ok) {
         setToast(writeFailureMessage(result.reason))
@@ -97,27 +109,31 @@ export default function App() {
 
   return (
     <main className="min-h-dvh bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-      {toast && (
+      {(toast ?? storeError) && (
         <p role="alert" className="bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-          {toast}
+          {toast ?? storeError}
         </p>
       )}
+      <SyncStatus active={authStatus === 'signed-in'} />
       {voiceMissing && promptLang && <VoiceWarning lang={promptLang} />}
 
       {state.screen === 'home' && (
         <Home
-          lists={lists}
+          lists={visibleLists}
+          loading={store === null}
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
           onRename={async (list) => {
             const name = window.prompt('New name', list.name)
             if (name === null || name.trim() === '') return
+            if (!store) return
             const result = await store.renameList(list.id, name.trim())
             if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
           onDelete={async (list) => {
             if (!window.confirm(`Delete “${list.name}”?`)) return
+            if (!store) return
             const result = await store.removeList(list.id)
             if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
@@ -145,7 +161,7 @@ export default function App() {
       {state.screen === 'ready' && (
         <ReadyScreen
           list={state.list}
-          saved={savedIds.has(state.list.id) || lists.some((l) => l.id === state.list.id)}
+          saved={savedIds.has(state.list.id) || visibleLists.some((l) => l.id === state.list.id)}
           onStart={() => act({ type: 'START' })}
           onSave={() => void persist(state.list)}
           onBack={() => act({ type: 'GO_HOME' })}

@@ -4,6 +4,8 @@ import { SavedLists } from './SavedLists'
 
 interface Props {
   lists: WordList[]
+  /** True while we do not yet know whose lists to show. */
+  loading?: boolean
   onNewList: () => void
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
@@ -11,7 +13,7 @@ interface Props {
   onDelete: (list: WordList) => void
 }
 
-export function Home({ lists, onNewList, ...listActions }: Props) {
+export function Home({ lists, loading = false, onNewList, ...listActions }: Props) {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-6 p-4">
       <header>
@@ -33,7 +35,7 @@ export function Home({ lists, onNewList, ...listActions }: Props) {
 
       <div>
         <h2 className="mb-2 font-semibold">Saved lists</h2>
-        <SavedLists lists={lists} {...listActions} />
+        <SavedLists lists={lists} loading={loading} {...listActions} />
       </div>
     </section>
   )

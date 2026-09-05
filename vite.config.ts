@@ -9,6 +9,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // tests/rules/** needs the Firestore emulator (and a JRE) and runs under
+    // vitest.rules.config.ts via `npm run test:rules`. Keeping it out here is
+    // what lets `npm test` stay fast and dependency-free.
+    include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
       include: ['src/parse/**', 'src/speech/**', 'src/storage/**', 'src/state/**'],
     },
