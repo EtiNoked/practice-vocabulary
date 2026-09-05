@@ -128,6 +128,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  /*
+   * The theme is applied as an attribute on <html>, which jsdom shares across
+   * every test in a file. Without this, one test choosing dark leaves the next
+   * one already overridden — and that failure reads as "the component ignored
+   * its stored value", which is a long way from the truth.
+   */
+  document.documentElement.removeAttribute('data-theme')
   // Guarded: not every test environment exposes a working localStorage, and a
   // teardown failure here would mask the actual assertion failures.
   try {

@@ -826,3 +826,37 @@ describe('signing out', () => {
     confirm.mockRestore()
   })
 })
+
+describe('the theme control with no account system', () => {
+  /*
+   * `renderApp()` defaults to `configured: false` — no Firebase project — which
+   * is the local-only build, and the shape almost every test in this file uses.
+   * AccountMenu renders nothing at all there, so without its own slot the theme
+   * control would be unreachable in exactly the configuration a contributor runs
+   * `npm run dev` in.
+   */
+  it('is reachable in the corner slot', () => {
+    renderApp()
+
+    expect(screen.getByRole('group', { name: /theme/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('radio')).toHaveLength(3)
+  })
+
+  it('applies a choice to the document', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('radio', { name: /dark/i }))
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
+
+  it('gives way to the account menu once Firebase is configured', () => {
+    renderApp(signedInStore(account))
+
+    // One slot, not two controls side by side: signed in, the theme lives
+    // inside the avatar's popover.
+    expect(screen.queryByRole('group', { name: /theme/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /eti/i })).toBeInTheDocument()
+  })
+})

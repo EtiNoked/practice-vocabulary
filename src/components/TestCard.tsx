@@ -126,14 +126,14 @@ export function TestCard({
           <button
             type="button"
             onClick={() => onMark('right')}
-            className="btn btn-lg flex-1 bg-correct text-white"
+            className="btn btn-lg flex-1 bg-correct text-correct-ink"
           >
             Right ✓
           </button>
           <button
             type="button"
             onClick={() => onMark('wrong')}
-            className="btn btn-lg flex-1 bg-incorrect text-white"
+            className="btn btn-lg flex-1 bg-incorrect text-incorrect-ink"
           >
             Wrong ✗
           </button>

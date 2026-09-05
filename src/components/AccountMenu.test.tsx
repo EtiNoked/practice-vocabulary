@@ -328,3 +328,37 @@ describe('signing out mid-drill', () => {
     confirm.mockRestore()
   })
 })
+
+describe('the theme control', () => {
+  // Reaching the theme control should not require an account, so it is in BOTH
+  // popovers. It is also the one control here that is safe to click by accident.
+  it('is in the signed-in popover', async () => {
+    renderMenu(signedIn())
+    await open(/eti/i)
+
+    expect(screen.getByRole('group', { name: /theme/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('radio')).toHaveLength(3)
+  })
+
+  it('is in the guest popover too', async () => {
+    renderMenu(asGuest())
+    await open(/sign in/i)
+
+    expect(screen.getByRole('group', { name: /theme/i })).toBeInTheDocument()
+  })
+
+  it('does not close the menu when used', async () => {
+    renderMenu(signedIn())
+    await open(/eti/i)
+
+    await userEvent.click(screen.getByRole('radio', { name: /dark/i }))
+
+    // The popover tears itself down on an outside pointerdown, and the toggle
+    // sits inside `popoverRef` so it is already excluded — but that exclusion is
+    // exactly the kind of thing a later refactor breaks silently, and a theme
+    // control that dismisses the menu on every click is unusable.
+    expect(screen.getByRole('group', { name: /theme/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /sign out/i })).toBeInTheDocument()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
+})

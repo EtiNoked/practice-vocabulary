@@ -79,10 +79,15 @@
   --text-word: 2.5rem;     --text-word--line-height: 1.1;
 
   /* --- Colour -------------------------------------------------------------
-     Light only. Dark mode was deliberately dropped rather than lost: one palette
-     gets designed well where two get designed adequately, and because every value
-     lives here, a dark set would return as a second block of these same names
-     rather than as 83 hand-picked `dark:` class pairs.
+     The light palette, and the default. Dark is the second block below, and it
+     arrived exactly the way 005 said it would when it dropped the first attempt:
+     as these same names redefined under two selectors, not as 83 hand-picked
+     `dark:` class pairs. Not one component knows which theme it is in.
+
+     So: a colour is added HERE and in both dark blocks, or it is not added.
+     theme.test.ts fails a name that appears in one and not the others, because a
+     token defined only in light keeps its light value in dark — one stubbornly
+     pale panel on a dark page, with no failure anywhere to explain it.
 
      Ratios below are against --color-ground.
 
@@ -91,7 +96,15 @@
        primary is teal-700, not teal-600  — white on teal-600 is ~3.7:1, under AA.
        correct is green-700, not green-600 — white on green-600 is ~3.3:1.
      And accent NEVER carries white text: white on orange-500 is ~2.8:1, which
-     fails even the large-text threshold. It is a tint behind ink, or a border. */
+     fails even the large-text threshold. It is a tint behind ink, or a border.
+
+     Every fill names its own foreground — `--color-*-ink`. In light these are all
+     plain white and the indirection looks like ceremony; in dark it is the whole
+     reason the palette works. `--color-correct` has TWO jobs: a fill under the
+     drill's "Right" button, and text for the revealed answer. On a dark ground
+     the text job needs a light green, and white on light green is 1.6:1 — so the
+     foreground has to be a token that can move with it, not a `text-white` typed
+     at the call site. */
   --color-ground: #f6fbfa;          /* the page. Faint mint — a white page reads as a document */
   --color-surface: #ffffff;         /* cards lift off the ground */
   --color-surface-sunken: #edf6f4;  /* input wells, quiet panels */
@@ -105,7 +118,9 @@
   --color-accent: #f97316;          /* never a fill under white text */
   --color-accent-soft: #fff3e9;     /* banner and badge backgrounds, with ink on top */
   --color-correct: #15803d;         /* white on it ~5.0:1 */
+  --color-correct-ink: #ffffff;     /* the foreground ON --color-correct */
   --color-incorrect: #e11d48;       /* white on it ~4.7:1 — the ONE "wrong" colour */
+  --color-incorrect-ink: #ffffff;   /* the foreground ON --color-incorrect */
   --color-incorrect-soft: #fff1f3;
   --color-line: #dceae8;            /* surfaces */
   --color-line-strong: #bfd8d4;     /* inputs and anything interactive */
@@ -123,15 +138,130 @@
   --shadow-lift: 0 2px 4px rgb(20 52 58 / 0.06), 0 12px 28px rgb(20 52 58 / 0.10);
 }
 
+/* ---------------------------------------------------------------------------
+   Dark.
+
+   The second block the note above promised: the SAME nineteen names, redefined.
+   Not one `dark:` class, and not one component touched — every colour utility in
+   this project compiles to `var(--color-…)` (`.bg-ground{background-color:
+   var(--color-ground)}`), so re-pointing the variables re-colours every screen at
+   once. theme.test.ts asserts that, so it cannot quietly stop being true.
+
+   TWO selectors, and the split is the feature:
+
+     the @media block   the OS preference, applied with NO JavaScript at all. This
+                        is what makes the common path flash-free — a dark-OS
+                        visitor's FIRST paint is already dark, before React
+                        exists. The usual anti-flash trick, a blocking inline
+                        <script> in <head>, is not available to us: script-src
+                        forbids 'unsafe-inline' and csp.test.ts pins that. Here it
+                        is also not needed.
+
+     [data-theme='…']   an explicit choice, which must BEAT the media query.
+
+   How the override wins is worth stating, because the obvious answer is wrong:
+   NOT layer order. Tailwind 4.3 flattens its layers — the compiled output has
+   only a `properties` layer and emits `@theme` as an unlayered `:root,:host` —
+   so `@layer base` would win nothing. What wins is specificity, (0,2,0) against
+   (0,1,0), plus source order. Hence these blocks sit at the top level, here,
+   immediately after @theme.
+
+   `:root:not([data-theme='light'])`, not a bare `:root`, and that `:not` is the
+   single easiest thing to get wrong in this file: without it, choosing Light on a
+   dark-OS device does nothing, because the media block and the attribute block
+   would tie and the media block comes first.
+
+   The inversion is deliberately NOT literal. primary, correct and incorrect all
+   get LIGHTER, because on a dark ground they have to be readable as text — which
+   is why each one names its own `--color-*-ink` foreground. Ratios are computed
+   against --color-ground, not judged by eye:
+     ink 15.5:1 · ink-muted 9.3:1 · ink-faint 6.4:1 · primary 9.6:1
+     accent 10.6:1 · correct 10.2:1 · incorrect 9.4:1 · every fill ≥ 8.2:1
+--------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-ground: #0b1a1d;
+    --color-surface: #12262a;
+    --color-surface-sunken: #0a1618;
+    --color-ink: #e6f2f1;
+    --color-ink-muted: #a7c0c4;
+    --color-ink-faint: #83a0a6;
+    --color-primary: #2dd4bf;
+    --color-primary-bright: #5eead4;
+    --color-primary-soft: #134e4a;
+    --color-primary-ink: #04211f;
+    --color-accent: #fdba74;
+    --color-accent-soft: #3a2410;
+    --color-correct: #4ade80;
+    --color-correct-ink: #052e16;
+    --color-incorrect: #fda4af;
+    --color-incorrect-ink: #4c0519;
+    --color-incorrect-soft: #3f1220;
+    --color-line: #22403f;
+    --color-line-strong: #33534f;
+
+    /* Ink-tinted shadows are invisible on a dark ground, so the BORDER carries
+       the separation here that the shadow carries in light, and the shadow only
+       deepens the well beneath a lifted surface. */
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px rgb(0 0 0 / 0.36);
+    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.36), 0 12px 28px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* Identical to the block above, by necessity: `@media` cannot be combined with a
+   plain selector in one rule, and a CSS-only theme has no preprocessor to share
+   them. The set-equality guard in theme.test.ts is what makes the duplication
+   safe — it fails if the two blocks ever stop defining exactly the same names. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-ground: #0b1a1d;
+  --color-surface: #12262a;
+  --color-surface-sunken: #0a1618;
+  --color-ink: #e6f2f1;
+  --color-ink-muted: #a7c0c4;
+  --color-ink-faint: #83a0a6;
+  --color-primary: #2dd4bf;
+  --color-primary-bright: #5eead4;
+  --color-primary-soft: #134e4a;
+  --color-primary-ink: #04211f;
+  --color-accent: #fdba74;
+  --color-accent-soft: #3a2410;
+  --color-correct: #4ade80;
+  --color-correct-ink: #052e16;
+  --color-incorrect: #fda4af;
+  --color-incorrect-ink: #4c0519;
+  --color-incorrect-soft: #3f1220;
+  --color-line: #22403f;
+  --color-line-strong: #33534f;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px rgb(0 0 0 / 0.36);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.36), 0 12px 28px rgb(0 0 0 / 0.5);
+}
+
 @layer base {
   /*
-   * No `color-scheme` declaration, deliberately.
+   * `color-scheme` is back, and now stated per theme rather than left open.
    *
-   * v1 had `color-scheme: light dark`, which is right for an app with a dark
-   * theme and actively wrong for one without: it invites the browser to paint
-   * form controls dark against surfaces that are always light — the worst of
-   * both. This app is light, and says so by saying nothing.
+   * v1 had `color-scheme: light dark`. 005 removed it, and was right to: on an
+   * app with no dark theme that value invites the browser to paint form controls
+   * dark against surfaces that are always light — the worst of both. With two
+   * real themes the reasoning inverts. Without a declaration, scrollbars, date
+   * pickers, autofill and spinners stay light on a near-black page.
+   *
+   * `light` here rather than `light dark`, and that is the same argument once
+   * more: `light dark` hands the decision back to the OS, which would quietly
+   * defeat an explicit choice — a user who picked Light on a dark-OS device
+   * would get light surfaces with dark form controls. Each dark selector above
+   * declares `dark` for itself, so every state is stated exactly once.
+   * `[data-theme='light']` needs no rule of its own: it inherits this line.
    */
+  :root {
+    color-scheme: light;
+  }
+
   html {
     background-color: var(--color-ground);
     color: var(--color-ink);
@@ -203,7 +333,7 @@
 
   .btn-danger {
     background-color: var(--color-incorrect);
-    color: #fff;
+    color: var(--color-incorrect-ink);
   }
 
   /* The drill's two big answers, and the welcome screen's two choices. Tall,
