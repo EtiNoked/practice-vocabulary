@@ -1,11 +1,19 @@
 # Only needed if you deploy to GitHub Pages instead of Cloudflare Pages.
-# GitHub Pages serves from /<repo-name>/, so `base` must be set in vite.config.ts
-# to match — see .claude/specs/001-vocab-trainer/deployment.md.
+#
+# Deliberately manual-only (workflow_dispatch). Running on every push to main
+# fails with "Ensure GitHub Pages has been enabled" until Pages is switched on,
+# which puts a red X on every commit for a workflow most setups will never use.
+#
+# To use GitHub Pages:
+#   1. Settings -> Pages -> Source: GitHub Actions
+#   2. Set `base: '/practice-vocabulary/'` in vite.config.ts, or the deployed
+#      page is blank with 404s on every asset
+#   3. Run this workflow from the Actions tab, or restore the push trigger below
+#
+# See .claude/specs/001-vocab-trainer/deployment.md for the full walkthrough.
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
