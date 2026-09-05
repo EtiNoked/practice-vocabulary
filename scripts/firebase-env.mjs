@@ -40,17 +40,38 @@ if (existsSync(TARGET) && !force) {
   process.exit(1)
 }
 
-if (process.stdin.isTTY) {
-  console.log('Paste the firebaseConfig snippet from the Firebase console, then press Ctrl-D:\n')
+/**
+ * Read the snippet from a file, or interactively from stdin.
+ *
+ * Streaming rather than readFileSync(0): reading fd 0 synchronously throws
+ * EAGAIN against a macOS TTY, so it only ever worked for piped input.
+ */
+async function readInput() {
+  const fileFlag = process.argv.indexOf('--file')
+  if (fileFlag !== -1) {
+    const path = process.argv[fileFlag + 1]
+    if (!path) {
+      console.error('✗ --file needs a path.')
+      process.exit(1)
+    }
+    if (!existsSync(path)) {
+      console.error(`✗ No such file: ${path}`)
+      process.exit(1)
+    }
+    return readFileSync(path, 'utf8')
+  }
+
+  if (process.stdin.isTTY) {
+    console.log('Paste the firebaseConfig snippet from the Firebase console.')
+    console.log('Then press Enter, then Ctrl-D.\n')
+  }
+
+  const chunks = []
+  for await (const chunk of process.stdin) chunks.push(chunk)
+  return Buffer.concat(chunks).toString('utf8')
 }
 
-let input = ''
-try {
-  input = readFileSync(0, 'utf8')
-} catch {
-  console.error('✗ Could not read from stdin.')
-  process.exit(1)
-}
+const input = await readInput()
 
 if (input.trim() === '') {
   console.error('✗ Nothing pasted. Copy the config object from the Firebase console and retry.')
