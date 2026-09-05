@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
 import { Home } from './components/Home'
 import { ListEditor } from './components/ListEditor'
 import { PracticeCard } from './components/PracticeCard'
@@ -10,44 +10,47 @@ import type { WordList } from './state/types'
 import { speak } from './speech/tts'
 import { useVoices } from './speech/useVoices'
 import { hasVoiceFor } from './speech/tts'
-import { listRepo } from './storage/listRepo'
+import { createLocalListStore } from './storage/localListStore'
+import { writeFailureMessage } from './storage/messages'
 import { currentPair } from './state/session'
 
 export default function App() {
   const [state, setState] = useState<AppState>(initialState)
-  const [lists, setLists] = useState<WordList[]>(() => listRepo.getAll())
+  const [lists, setLists] = useState<WordList[]>([])
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
   const { voices, ready } = useVoices()
 
-  const refresh = useCallback(() => setLists(listRepo.getAll()), [])
+  // Signed-out storage. Phase 5 swaps this for a cloud store when a user signs in;
+  // nothing below this line knows or cares which implementation it is holding.
+  const store = useMemo(() => createLocalListStore(), [])
+
+  /**
+   * A layout effect rather than a plain one, deliberately.
+   *
+   * The local store emits synchronously on subscribe, so subscribing before the
+   * browser paints means a returning user never sees a frame of "No saved lists
+   * yet" before their lists appear. With `useEffect` that frame is painted, and
+   * a flash of an empty home screen reads as data loss.
+   */
+  useLayoutEffect(() => {
+    const unsubscribe = store.subscribeLists(setLists, (error) => setToast(error.message))
+    return () => {
+      unsubscribe()
+    }
+  }, [store])
 
   const persist = useCallback(
-    (list: WordList) => {
-      const existing = listRepo.getById(list.id)
-      const result = existing
-        ? listRepo.update(list.id, {
-            pairs: list.pairs,
-            col1Lang: list.col1Lang,
-            col2Lang: list.col2Lang,
-            langSource: list.langSource,
-          })
-        : listRepo.save(list)
-
+    async (list: WordList) => {
+      const result = await store.saveList(list)
       if (!result.ok) {
-        setToast(
-          result.reason === 'quota'
-            ? "This device's storage is full, so the list wasn't saved. You can still practise it now."
-            : "Couldn't save to this browser's storage. You can still practise this list now.",
-        )
+        setToast(writeFailureMessage(result.reason))
         return
       }
-      if (existing && list.name !== existing.name) listRepo.rename(list.id, list.name)
       setSavedIds((s) => new Set(s).add(list.id))
       setToast(null)
-      refresh()
     },
-    [refresh],
+    [store],
   )
 
   /**
@@ -107,18 +110,16 @@ export default function App() {
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
-          onRename={(list) => {
+          onRename={async (list) => {
             const name = window.prompt('New name', list.name)
-            if (name && name.trim() !== '') {
-              listRepo.rename(list.id, name.trim())
-              refresh()
-            }
+            if (name === null || name.trim() === '') return
+            const result = await store.renameList(list.id, name.trim())
+            if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
-          onDelete={(list) => {
-            if (window.confirm(`Delete “${list.name}”?`)) {
-              listRepo.remove(list.id)
-              refresh()
-            }
+          onDelete={async (list) => {
+            if (!window.confirm(`Delete “${list.name}”?`)) return
+            const result = await store.removeList(list.id)
+            if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
         />
       )}
@@ -134,7 +135,7 @@ export default function App() {
             // from a stored list, so silently dropping their correction if they
             // skipped a Save button would be surprising. A brand-new list is not
             // saved until they ask, via "Save this list" on the next screen.
-            if (state.mode === 'update') persist(list)
+            if (state.mode === 'update') void persist(list)
             act({ type: 'CONFIRM_LIST', list })
           }}
           onCancel={() => act({ type: 'CANCEL_EDIT' })}
@@ -146,7 +147,7 @@ export default function App() {
           list={state.list}
           saved={savedIds.has(state.list.id) || lists.some((l) => l.id === state.list.id)}
           onStart={() => act({ type: 'START' })}
-          onSave={() => persist(state.list)}
+          onSave={() => void persist(state.list)}
           onBack={() => act({ type: 'GO_HOME' })}
         />
       )}

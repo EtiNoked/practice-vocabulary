@@ -40,3 +40,33 @@ export interface Score {
   pct: number
   wrongPairs: WordPair[]
 }
+
+/**
+ * One finished drill, written when the app reaches the results screen.
+ *
+ * A log entry, not a document: nothing rewrites it after the fact, which the
+ * security rules enforce with `allow update: if false`.
+ */
+export interface SessionRecord {
+  id: string
+  listId: string
+  /**
+   * Denormalised on purpose. History has to survive deleting the list, so the
+   * name is captured at drill time rather than looked up later.
+   */
+  listName: string
+  right: number
+  wrong: number
+  total: number
+  pct: number
+  /**
+   * Snapshot of the missed pairs. Also the raw material for a future per-word
+   * mastery feature — capturing it now avoids needing a backfill later.
+   */
+  wrongPairs: WordPair[]
+  finishedAt: number
+  /** A wrong-only re-run is real practice, but must not flatter the average. */
+  mode: 'full' | 'wrong-only'
+  /** True when the user quit before the last card. */
+  partial: boolean
+}
