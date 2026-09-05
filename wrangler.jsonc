@@ -1,0 +1,26 @@
+{
+  // Cloudflare Workers deployment config.
+  //
+  // The project is connected to Cloudflare as a WORKER (Workers Builds), not as
+  // a Pages project. A git-connected Workers build needs this file, and fails in
+  // ~0s without it — the build aborts before it starts because nothing tells it
+  // what to deploy.
+  //
+  // `name` MUST match the Worker name on the Cloudflare dashboard exactly, or
+  // the build fails with a name mismatch.
+  //
+  // There is no `main`: this is an assets-only Worker. The app is a static SPA
+  // with no server-side code, so there is no entry script to run.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "practice-vocabulary",
+  "compatibility_date": "2026-09-05",
+  "assets": {
+    "directory": "./dist",
+    // Serve index.html for any unmatched path. The app has no router today, so
+    // this mostly guards against a deep link or a refresh 404ing.
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -30,3 +30,6 @@ coverage
 firestore-debug.log
 firebase-debug.log
 .firebase/
+
+# Wrangler
+.wrangler/
