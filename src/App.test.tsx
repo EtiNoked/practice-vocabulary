@@ -5,7 +5,14 @@ import { listRepo } from './storage/listRepo'
 import { sessionRepo } from './storage/sessionRepo'
 import type { WordList } from './state/types'
 import { setStubVoices, speechCalls } from './test/setup'
-import { renderApp } from './test/renderApp'
+import {
+  configuredGuestStore,
+  renderApp,
+  resolvingStore,
+  signedInStore,
+} from './test/renderApp'
+import { GUEST_CHOICE_KEY, writeGuestChoice } from './auth/guestChoice'
+import type { AuthUser } from './auth/types'
 
 const seeded: WordList = {
   id: 'seed',
@@ -22,7 +29,12 @@ const seeded: WordList = {
   origin: 'manual',
 }
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  // sessionStorage holds the "continue as guest" choice. Without this the choice
+  // leaks between tests and their ORDER decides whether the welcome screen shows.
+  sessionStorage.clear()
+})
 
 describe('typing a list and practising it', () => {
   it('goes from an empty app to a score', async () => {
@@ -297,5 +309,166 @@ describe('practising a Dutch/French list', () => {
     expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
     expect((screen.getByLabelText(/column 2 language/i) as HTMLSelectElement).value).toBe('fr')
     expect(screen.queryByText(/guessed/i)).not.toBeInTheDocument()
+  })
+})
+
+const account: AuthUser = {
+  uid: 'u1',
+  displayName: 'Eti',
+  email: 'eti@example.com',
+  photoURL: null,
+}
+
+describe('the welcome gate', () => {
+  it('shows the front door to a first-time visitor, and nothing else', () => {
+    renderApp(configuredGuestStore())
+
+    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument()
+
+    // The whole point: the app is NOT behind it. Asserting the absence of the
+    // home screen's primary action, not merely that some heading is present.
+    expect(screen.queryByRole('button', { name: /new list/i })).not.toBeInTheDocument()
+  })
+
+  it('lets a guest through, and remembers for the session', async () => {
+    renderApp(configuredGuestStore())
+
+    await userEvent.click(screen.getByRole('button', { name: /continue as guest/i }))
+
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+    expect(sessionStorage.getItem(GUEST_CHOICE_KEY)).toBe('1')
+  })
+
+  it('does not ask again once the choice is made', () => {
+    writeGuestChoice(true)
+    renderApp(configuredGuestStore())
+
+    // A reload inside the tab is not a new decision.
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /continue as guest/i })).not.toBeInTheDocument()
+  })
+
+  it('never appears when there is no Firebase project to sign in to', () => {
+    renderApp()
+
+    // A local-only build must be exactly what it always was. A front door
+    // offering a sign-in that cannot work is worse than no front door.
+    expect(screen.queryByRole('button', { name: /continue as guest/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
+
+  it('does not flash at a returning user whose session is still restoring', () => {
+    renderApp(resolvingStore())
+
+    // R2: onAuthStateChanged fires null BEFORE restoring a session. Showing the
+    // login screen there tells someone they were silently logged out.
+    expect(screen.queryByRole('button', { name: /sign in with google/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /continue as guest/i })).not.toBeInTheDocument()
+  })
+
+  it('opens on its own once someone is signed in', () => {
+    renderApp(signedInStore(account))
+
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /continue as guest/i })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Gets a signed-in app as far as a running drill.
+ *
+ * Deliberately builds the list through the UI rather than seeding listRepo: a
+ * signed-in app is backed by the Firestore store, so a localStorage-seeded list
+ * is invisible to it. A brand-new list needs no store at all to be drilled —
+ * only saving one does.
+ */
+async function drillAsSignedIn(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /new list/i }))
+  const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
+  await user.type(cells()[0]!, 'daughter')
+  await user.type(cells()[1]!, 'dochter')
+  await user.click(screen.getByRole('button', { name: /start practice/i }))
+  await user.click(screen.getByRole('button', { name: /^start$/i }))
+}
+
+describe('the account slot', () => {
+  it('is there on the home screen and stays there through a drill', async () => {
+    const user = userEvent.setup()
+    renderApp(signedInStore(account))
+
+    expect(screen.getByRole('button', { name: /eti/i })).toBeInTheDocument()
+    await drillAsSignedIn(user)
+
+    // Disconnecting should not require navigating home first.
+    expect(screen.getByRole('button', { name: /eti/i })).toBeInTheDocument()
+  })
+
+  it('does not exist at all without a Firebase project', () => {
+    renderApp()
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument()
+  })
+
+  it('does not let an open menu drive the drill', async () => {
+    const user = userEvent.setup()
+    renderApp(signedInStore(account))
+
+    await drillAsSignedIn(user)
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /eti/i }))
+
+    // PracticeCard binds Y/N on window, so without a guard this marks the card
+    // and ends the drill underneath the menu the user is reading.
+    await user.keyboard('n')
+
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /right/i })).toBeInTheDocument()
+  })
+})
+
+describe('signing out', () => {
+  it('returns to the front door', async () => {
+    const user = userEvent.setup()
+    renderApp(signedInStore(account))
+
+    await user.click(screen.getByRole('button', { name: /eti/i }))
+    await user.click(screen.getByRole('menuitem', { name: /sign out/i }))
+
+    expect(await screen.findByRole('button', { name: /continue as guest/i })).toBeInTheDocument()
+    expect(sessionStorage.getItem(GUEST_CHOICE_KEY)).toBeNull()
+  })
+
+  it('resets the app rather than leaving it mid-flow', async () => {
+    const user = userEvent.setup()
+    renderApp(signedInStore(account))
+
+    await user.click(screen.getByRole('button', { name: /new list/i }))
+    expect(screen.getByRole('button', { name: /start practice/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /eti/i }))
+    await user.click(screen.getByRole('menuitem', { name: /sign out/i }))
+    await user.click(await screen.findByRole('button', { name: /continue as guest/i }))
+
+    // Back at home, not still in the editor of the account that just left.
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /start practice/i })).not.toBeInTheDocument()
+  })
+
+  it('abandons a running drill without recording it', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderApp(signedInStore(account))
+
+    await drillAsSignedIn(user)
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+
+    await user.click(screen.getByRole('button', { name: /eti/i }))
+    await user.click(screen.getByRole('menuitem', { name: /sign out/i }))
+
+    expect(confirm).toHaveBeenCalledTimes(1)
+    // A drill the user was warned they were ending must not turn up in history
+    // as though they had finished it.
+    expect(sessionRepo.getAll()).toEqual([])
+    confirm.mockRestore()
   })
 })

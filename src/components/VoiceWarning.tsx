@@ -20,7 +20,7 @@ export function VoiceWarning({ lang }: Props) {
   return (
     <div
       role="status"
-      className="mx-auto max-w-xl rounded-lg bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+      className="mx-auto max-w-xl rounded-lg bg-accent-soft p-3 text-sm text-ink"
     >
       <p>
         <strong>No {LANG_NAMES[lang]} voice on this device.</strong> The words are shown as text

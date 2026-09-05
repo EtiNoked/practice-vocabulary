@@ -41,7 +41,7 @@ export function SyncStatus({ active }: Props) {
   return (
     <p
       role="status"
-      className="bg-slate-200 p-2 text-center text-sm text-slate-800 dark:bg-slate-700 dark:text-slate-100"
+      className="bg-surface-sunken p-2 text-center text-sm text-ink"
     >
       You&rsquo;re offline. You can keep practising — changes will sync to your account when you
       reconnect.

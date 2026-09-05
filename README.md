@@ -16,6 +16,11 @@ drill recorded so you can see whether you're improving. Signing in is an upgrade
 gate: the app is fully usable without it, and a signed-out visitor downloads no
 account-related code at all.
 
+The first thing you see is that choice — **Sign in with Google** or **Continue as guest** —
+on a screen of its own, asked once per browser session rather than as a banner above your
+lists on every visit. Continuing as a guest is a first-class answer, not a way of putting
+the question off.
+
 ## Accounts
 
 | | Signed out | Signed in |
@@ -29,8 +34,15 @@ account-related code at all.
 Signing in for the first time offers to copy this device's lists into your account. It's
 opt-in, it never deletes the local copies, and running it twice can't duplicate anything.
 
-Signing out clears the cached copy of your cloud data from the device. **Delete my account**
-removes your lists, your history and the account itself, permanently.
+Once signed in, your Google picture sits in the top corner of every screen. Behind it are
+**Sign out** and **Delete my account**. Signed out but still using the app, that corner
+holds a small **Sign in** instead, so syncing is always one tap away without the home
+screen advertising it.
+
+Signing out clears the cached copy of your cloud data from the device and returns you to
+that first screen. If a drill is running it asks first, because ending it there means it
+is not recorded. **Delete my account** removes your lists, your history and the account
+itself, permanently.
 
 Your data is readable only by you — enforced by Firestore security rules on the server, not
 by the app. Lists you had before signing in are never touched by any of this.
@@ -127,6 +139,23 @@ by device rather than by browser.
 
 Vite · React · TypeScript (strict) · Tailwind · Vitest. Two runtime dependencies:
 `react` and `react-dom`.
+
+Every colour, type size, radius and shadow in the app is defined once, in
+[`src/index.css`](src/index.css), and nothing outside that file names a raw Tailwind
+palette colour. Shared `.btn` / `.card` / `.field` classes live there too, which is where
+the 44px minimum touch target is enforced — it used to be a convention retyped at every
+call site, and a convention is not something a test can check.
+
+The typeface is [Lexend](https://github.com/googlefonts/lexend), self-hosted and served
+from `src/assets/fonts/` under the SIL Open Font License. It was chosen because its design
+brief is reading proficiency, which is the actual job here; self-hosted because the app's
+Content-Security-Policy allows no third-party font host and should stay that way.
+
+**The app is light-only.** Dark mode was removed deliberately, not lost: one palette gets
+designed well where two get designed adequately. Because every value lives in one place,
+a dark theme would come back as a second block of the same token names rather than as the
+83 hand-picked `dark:` class pairs it used to be. `src/test/theme.test.ts` fails if one
+reappears by accident.
 
 Adding a fourth language is a data change: one entry in
 [`src/lang/languages.ts`](src/lang/languages.ts) — a voice tag, a display name,

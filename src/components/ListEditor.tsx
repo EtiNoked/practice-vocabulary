@@ -51,23 +51,23 @@ const Row = memo(function Row({
         aria-label={`Row ${index + 1} column 1`}
         value={row.col1}
         onChange={(e) => onChange(index, { col1: e.target.value })}
-        className="min-h-11 flex-1 rounded border border-slate-300 px-2 dark:border-slate-600 dark:bg-slate-800"
+        className="min-h-11 flex-1 rounded border border-line-strong px-2"
       />
       <input
         data-cell="col2"
         aria-label={`Row ${index + 1} column 2`}
         value={row.col2}
         onChange={(e) => onChange(index, { col2: e.target.value })}
-        className="min-h-11 flex-1 rounded border border-slate-300 px-2 dark:border-slate-600 dark:bg-slate-800"
+        className="min-h-11 flex-1 rounded border border-line-strong px-2"
       />
-      <span className="w-24 shrink-0 text-xs text-amber-700 dark:text-amber-400">
+      <span className="w-24 shrink-0 text-xs text-accent">
         {incomplete ? 'Incomplete' : ''}
       </span>
       <button
         type="button"
         aria-label={`Delete row ${index + 1}`}
         onClick={() => onDelete(index)}
-        className="min-h-11 min-w-11 rounded border border-slate-300 dark:border-slate-600"
+        className="min-h-11 min-w-11 rounded border border-line-strong"
       >
         ✕
       </button>
@@ -244,21 +244,21 @@ export function ListEditor({
           setName(e.target.value)
           setDirty(true)
         }}
-        className="mt-1 min-h-11 w-full rounded border border-slate-300 px-2 dark:border-slate-600 dark:bg-slate-800"
+        className="field mt-1"
       />
 
       <p
         className={`mt-3 inline-block rounded px-2 py-1 text-sm ${
           guessed
-            ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200'
-            : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+            ? 'bg-accent-soft text-ink'
+            : 'bg-primary-soft text-ink'
         }`}
       >
         Column 1 {LANG_NAMES[effective.col1Lang]} → Column 2 {LANG_NAMES[effective.col2Lang]} 🔊
         {guessed && ' (guessed)'}
       </p>
       {guessed && (
-        <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+        <p className="mt-1 text-xs text-ink-muted">
           Not right? Pick the languages below — or name them in a first row.
         </p>
       )}
@@ -273,7 +273,7 @@ export function ListEditor({
               id={`lang-${column}`}
               value={column === 'col1' ? effective.col1Lang : effective.col2Lang}
               onChange={(e) => chooseLang(column, e.target.value as LangCode)}
-              className="min-h-11 rounded border border-slate-300 px-2 dark:border-slate-600 dark:bg-slate-800"
+              className="min-h-11 rounded border border-line-strong px-2"
             >
               {LANG_CODES.map((code) => (
                 <option key={code} value={code}>
@@ -286,7 +286,7 @@ export function ListEditor({
         <button
           type="button"
           onClick={handleSwap}
-          className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+          className="btn btn-quiet"
         >
           Swap columns ⇄
         </button>
@@ -318,24 +318,24 @@ export function ListEditor({
             setRows((c) => [...c, emptyRow()])
             setDirty(true)
           }}
-          className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+          className="btn btn-quiet"
         >
           Add row
         </button>
         <button
           type="button"
           onClick={() => setShowPaste((v) => !v)}
-          className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+          className="btn btn-quiet"
         >
           Paste or import a list
         </button>
-        <span className="text-sm text-slate-600 dark:text-slate-400">
+        <span className="text-sm text-ink-muted">
           {completeCount} complete {completeCount === 1 ? 'pair' : 'pairs'}
         </span>
       </div>
 
       {rows.length > LONG_LIST_WARNING && (
-        <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+        <p className="mt-2 text-sm text-accent">
           That&apos;s a long list — it may feel slow to edit on a phone.
         </p>
       )}
@@ -351,14 +351,14 @@ export function ListEditor({
           type="button"
           disabled={completeCount === 0}
           onClick={handleConfirm}
-          className="min-h-11 rounded bg-emerald-700 px-4 text-white disabled:opacity-40"
+          className="min-h-11 rounded bg-primary px-4 text-white disabled:opacity-40"
         >
           Start practice
         </button>
         <button
           type="button"
           onClick={handleCancel}
-          className="min-h-11 rounded border border-slate-300 px-4 dark:border-slate-600"
+          className="min-h-11 rounded border border-line-strong px-4"
         >
           Cancel
         </button>

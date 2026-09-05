@@ -56,7 +56,7 @@ export function PastePanel({ onAdd }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-slate-300 p-3 dark:border-slate-600">
+    <div className="rounded-lg border border-line-strong p-3">
       <label className="block text-sm font-medium" htmlFor="paste-box">
         Paste your list, one pair per line
       </label>
@@ -67,7 +67,7 @@ export function PastePanel({ onAdd }: Props) {
         onChange={(e) => setText(e.target.value)}
         rows={5}
         placeholder={'daughter\tdochter\nto die\tdoodgaan'}
-        className="mt-1 w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-600 dark:bg-slate-800"
+        className="mt-1 w-full rounded border border-line-strong p-2 font-mono text-sm"
       />
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -76,7 +76,7 @@ export function PastePanel({ onAdd }: Props) {
           id="delimiter"
           value={override === '' ? (detection.delimiter ?? '') : override}
           onChange={(e) => setOverride(e.target.value as Delimiter | '')}
-          className="rounded border border-slate-300 p-1 dark:border-slate-600 dark:bg-slate-800"
+          className="rounded border border-line-strong p-1"
         >
           <option value="">{inconclusive ? "Couldn't tell — pick one" : 'Auto'}</option>
           {DELIMITERS.map((d) => (
@@ -86,7 +86,7 @@ export function PastePanel({ onAdd }: Props) {
           ))}
         </select>
 
-        <label className="ml-auto cursor-pointer rounded border border-slate-300 px-2 py-1 dark:border-slate-600">
+        <label className="ml-auto cursor-pointer rounded border border-line-strong px-2 py-1">
           Upload a file
           <input
             type="file"
@@ -101,7 +101,7 @@ export function PastePanel({ onAdd }: Props) {
       </div>
 
       {inconclusive && (
-        <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+        <p className="mt-2 text-sm text-accent">
           Couldn&apos;t work out the separator from this text — pick one above.
           {detection.confidence > 0 &&
             ` (best guess matched ${Math.round(detection.confidence * 100)}% of lines, below the ${Math.round(
@@ -109,9 +109,9 @@ export function PastePanel({ onAdd }: Props) {
             )}% needed)`}
         </p>
       )}
-      {fileError && <p className="mt-2 text-sm text-red-700 dark:text-red-400">{fileError}</p>}
+      {fileError && <p className="mt-2 text-sm text-incorrect">{fileError}</p>}
 
-      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-2 text-sm text-ink-muted">
         Will add {complete} complete {complete === 1 ? 'pair' : 'pairs'}
         {incomplete > 0 && `, ${incomplete} incomplete`}
       </p>
@@ -124,7 +124,7 @@ export function PastePanel({ onAdd }: Props) {
           setText('')
           setOverride('')
         }}
-        className="mt-2 rounded bg-slate-800 px-3 py-2 text-white disabled:opacity-40 dark:bg-slate-200 dark:text-slate-900"
+        className="btn btn-primary mt-2"
       >
         Add to list
       </button>

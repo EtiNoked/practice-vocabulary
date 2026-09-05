@@ -16,6 +16,9 @@ import { hasVoiceFor } from './speech/tts'
 import { writeFailureMessage } from './storage/messages'
 import { useListStore } from './storage/useListStore'
 import { useAuth } from './auth/useAuth'
+import { readGuestChoice, writeGuestChoice } from './auth/guestChoice'
+import { WelcomeScreen } from './components/WelcomeScreen'
+import { AccountMenu } from './components/AccountMenu'
 import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
 import { buildSessionRecord } from './state/sessionRecord'
@@ -34,8 +37,48 @@ export default function App() {
   // localStorage while signed out, Firestore while signed in. Nothing below this
   // line knows or cares which implementation it is holding.
   const { store, error: storeError } = useListStore()
-  const { status: authStatus, user } = useAuth()
+  const { status: authStatus, user, available: authAvailable } = useAuth()
   const migration = useMigration(store, user?.uid ?? null)
+
+  // Seeded with the FUNCTION, not its result — the latter re-reads storage on
+  // every render.
+  const [guestChosen, setGuestChosen] = useState(readGuestChoice)
+
+  /**
+   * The front door.
+   *
+   * `authAvailable` is the first term deliberately: with no Firebase project the
+   * rest is never evaluated and no gate DOM exists at all, so a local-only build
+   * is byte-for-byte what it always was.
+   *
+   * Deliberately NOT raised while `resolving`. That status means a device hint
+   * exists, so this visitor is almost certainly about to resolve to signed-in,
+   * and showing them a login screen in that window asks a returning user to log
+   * in again — the same false alarm AuthStatus.resolving exists to prevent
+   * (auth/types.ts:8). Falling through is already right: `store` is null there,
+   * so Home renders its loading state.
+   */
+  const showWelcome = authAvailable && authStatus === 'guest' && !guestChosen
+
+  /**
+   * Signing out is a reset, not a navigation.
+   *
+   * Clearing the session choice is all the routing there is: `status` becomes
+   * `guest` with nothing chosen, so the gate above goes back up on its own.
+   *
+   * `setState(initialState)` rather than `act({ type: 'GO_HOME' })` — `act` runs
+   * the record-a-finished-drill branch and re-reads `sessionMode`, neither of
+   * which is wanted here. And `savedIds` MUST be cleared: it is keyed by list id
+   * and nothing else clears it on an identity change, so a list saved under one
+   * account would render "Saved ✓" under the next.
+   */
+  const handleSignedOut = useCallback(() => {
+    writeGuestChoice(false)
+    setGuestChosen(false)
+    setState(initialState)
+    setSavedIds(new Set())
+    setToast(null)
+  }, [])
 
   /**
    * A layout effect rather than a plain one, deliberately.
@@ -148,15 +191,47 @@ export default function App() {
     state.screen === 'practising' || state.screen === 'ready' ? state.list.col2Lang : null
   const voiceMissing = ready && promptLang !== null && !hasVoiceFor(promptLang, voices)
 
+  if (showWelcome) {
+    return (
+      <main className="min-h-dvh bg-ground text-ink">
+        <WelcomeScreen
+          onContinueAsGuest={() => {
+            writeGuestChoice(true)
+            setGuestChosen(true)
+          }}
+        />
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-dvh bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <main className="min-h-dvh bg-ground text-ink">
       {(toast ?? storeError) && (
-        <p role="alert" className="bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+        <p role="alert" className="bg-accent-soft p-3 text-sm text-ink">
           {toast ?? storeError}
         </p>
       )}
       <SyncStatus active={authStatus === 'signed-in'} />
       {voiceMissing && promptLang && <VoiceWarning lang={promptLang} />}
+
+      {/*
+        The account slot, on every screen.
+
+        In normal flow rather than fixed: PracticeCard's header already owns the
+        top-right corner with its Quit button, and an overlay lands on top of it.
+        `max-w-xl px-4` matches every screen's container so the control aligns
+        with the content edge, not the viewport edge. Rendered only when there is
+        an account system at all, so a local-only build has no extra DOM and no
+        extra height.
+      */}
+      {authAvailable && (
+        <div className="mx-auto flex max-w-xl justify-end px-4 pt-3">
+          <AccountMenu
+            drillInProgress={state.screen === 'practising'}
+            onSignedOut={handleSignedOut}
+          />
+        </div>
+      )}
 
       {state.screen === 'home' && (
         <Home
