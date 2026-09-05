@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import type { WordList } from '../state/types'
-import { AuthPanel } from './AuthPanel'
 import { SavedLists } from './SavedLists'
 
 interface Props {
@@ -37,8 +36,6 @@ export function Home({
           Hear a word, say the answer, mark yourself.
         </p>
       </header>
-
-      <AuthPanel />
 
       {banner}
 

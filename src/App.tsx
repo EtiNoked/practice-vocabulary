@@ -18,6 +18,7 @@ import { useListStore } from './storage/useListStore'
 import { useAuth } from './auth/useAuth'
 import { readGuestChoice, writeGuestChoice } from './auth/guestChoice'
 import { WelcomeScreen } from './components/WelcomeScreen'
+import { AccountMenu } from './components/AccountMenu'
 import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
 import { buildSessionRecord } from './state/sessionRecord'
@@ -58,6 +59,26 @@ export default function App() {
    * so Home renders its loading state.
    */
   const showWelcome = authAvailable && authStatus === 'guest' && !guestChosen
+
+  /**
+   * Signing out is a reset, not a navigation.
+   *
+   * Clearing the session choice is all the routing there is: `status` becomes
+   * `guest` with nothing chosen, so the gate above goes back up on its own.
+   *
+   * `setState(initialState)` rather than `act({ type: 'GO_HOME' })` — `act` runs
+   * the record-a-finished-drill branch and re-reads `sessionMode`, neither of
+   * which is wanted here. And `savedIds` MUST be cleared: it is keyed by list id
+   * and nothing else clears it on an identity change, so a list saved under one
+   * account would render "Saved ✓" under the next.
+   */
+  const handleSignedOut = useCallback(() => {
+    writeGuestChoice(false)
+    setGuestChosen(false)
+    setState(initialState)
+    setSavedIds(new Set())
+    setToast(null)
+  }, [])
 
   /**
    * A layout effect rather than a plain one, deliberately.
@@ -192,6 +213,25 @@ export default function App() {
       )}
       <SyncStatus active={authStatus === 'signed-in'} />
       {voiceMissing && promptLang && <VoiceWarning lang={promptLang} />}
+
+      {/*
+        The account slot, on every screen.
+
+        In normal flow rather than fixed: PracticeCard's header already owns the
+        top-right corner with its Quit button, and an overlay lands on top of it.
+        `max-w-xl px-4` matches every screen's container so the control aligns
+        with the content edge, not the viewport edge. Rendered only when there is
+        an account system at all, so a local-only build has no extra DOM and no
+        extra height.
+      */}
+      {authAvailable && (
+        <div className="mx-auto flex max-w-xl justify-end px-4 pt-3">
+          <AccountMenu
+            drillInProgress={state.screen === 'practising'}
+            onSignedOut={handleSignedOut}
+          />
+        </div>
+      )}
 
       {state.screen === 'home' && (
         <Home

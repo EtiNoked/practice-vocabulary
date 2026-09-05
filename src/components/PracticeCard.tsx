@@ -32,6 +32,21 @@ export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, on
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      /*
+       * Not while a menu or dialog owns the keyboard.
+       *
+       * These bindings are registered on `window`, so they are live for the whole
+       * drill screen — including while the account menu is open on top of it,
+       * where typing `n` would silently mark the current card wrong and end the
+       * drill underneath whatever the user was reading.
+       *
+       * Asking whether such a surface EXISTS, rather than whether the event came
+       * from inside one: focus usually rests on the trigger that opened it, which
+       * is a sibling of the menu and not within it. This says "the drill does not
+       * own the keyboard right now" without the drill needing to know what does.
+       */
+      if (document.querySelector('[role="menu"],[role="dialog"]')) return
+
       if (event.key === ' ') {
         event.preventDefault()
         replay()
