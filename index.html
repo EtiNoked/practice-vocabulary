@@ -5,14 +5,26 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      Strict by design: this app makes no network requests after load — no CDN,
-      no fonts, no analytics. Nothing the user types ever leaves the device.
+      Still strict, but no longer airtight: v1 made no network requests at all,
+      and accounts changed that. Every exception below is a NAMED Google origin
+      required by Firebase Auth or Firestore — no wildcards like `https:`, no
+      CDN, no fonts, no analytics. A signed-out user still triggers none of it.
+
+        apis.google.com          the gapi loader behind signInWithPopup
+        identitytoolkit / securetoken   the Auth REST endpoints
+        firestore.googleapis.com the database, including its WebChannel listens
+        *.firebaseapp.com        the authDomain helper iframe
+        accounts.google.com      the Google account chooser
+        *.googleusercontent.com  the signed-in user's profile photo
+
+      If you add a Firebase product, its origin has to be added here too, or it
+      fails with an opaque CSP error rather than a useful one.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+      content="default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; base-uri 'none'; form-action 'none'; object-src 'none'"
     />
-    <meta name="description" content="Practise English and Dutch vocabulary by listening. Everything stays on your device." />
+    <meta name="description" content="Practise English and Dutch vocabulary by listening. Works with no account; sign in to sync across devices." />
     <meta name="theme-color" content="#0f172a" />
     <title>Vocabulary Trainer</title>
   </head>

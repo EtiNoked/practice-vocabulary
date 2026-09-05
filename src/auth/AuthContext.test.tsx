@@ -21,6 +21,20 @@ vi.mock('./firebase', () => ({
   resetFirebaseForTests: () => {},
 }))
 
+/**
+ * Pinned false rather than left to the ambient environment.
+ *
+ * Vite loads .env.local into tests too, so without this these pass on a machine
+ * with no Firebase project and fail on one that has been set up — the tests
+ * would describe the developer's laptop instead of the code.
+ */
+vi.mock('./config', () => ({
+  firebaseConfigured: () => false,
+  firebaseConfig: () => {
+    throw new Error('firebaseConfig() must not be called when unconfigured')
+  },
+}))
+
 function Probe() {
   const { status, available } = useAuth()
   return <span data-testid="probe">{`${status}:${String(available)}`}</span>
