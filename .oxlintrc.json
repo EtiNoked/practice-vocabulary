@@ -1,13 +1,38 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": ["react", "typescript", "oxc", "import"],
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }],
     "react/no-danger": "error",
     "typescript/no-explicit-any": "error",
     "eqeqeq": "error",
-    "no-var": "error"
+    "no-var": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["firebase", "firebase/*"],
+            "message": "Import Firebase only inside src/auth/firebase.ts, which loads it behind a dynamic import(). A static import here pulls ~150 KB gzipped into the main chunk and breaks NFR4a — signed-out users must download zero Firebase. See plan.md R3."
+          }
+        ]
+      }
+    ]
   },
+  "overrides": [
+    {
+      "files": ["src/auth/firebase.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "tests/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["dist", "node_modules", "coverage"]
 }
