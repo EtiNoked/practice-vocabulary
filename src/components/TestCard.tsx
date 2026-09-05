@@ -9,20 +9,31 @@ interface Props {
   session: Session
   /** True when the device has no voice for the prompt language. */
   voiceMissing: boolean
+  /** True when this card came back from storage rather than from a tap (FR-3). */
+  resumed: boolean
   onReveal: () => void
   onMark: (result: MarkResult) => void
   onQuit: () => void
 }
 
 /**
- * One card of the drill.
+ * One card of a TEST run: hear it, answer from memory, reveal, mark yourself.
  *
  * Note what is NOT here: any effect that speaks on mount. iOS Safari silently
  * drops speech that does not descend from a user gesture, so every utterance in
- * this app originates in a click handler — the Start tap for the first card, and
- * the Right/Wrong tap for each one after.
+ * this app originates in a click handler — the Test tap for the first card, and
+ * the Right/Wrong tap for each one after. A restore is precisely the case with
+ * no gesture in scope, which is why it renders a hint instead of speaking.
  */
-export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, onQuit }: Props) {
+export function TestCard({
+  list,
+  session,
+  voiceMissing,
+  resumed,
+  onReveal,
+  onMark,
+  onQuit,
+}: Props) {
   const pair = currentPair(session)
   const tally = score(session)
 
@@ -103,6 +114,12 @@ export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, on
           </p>
         )}
       </div>
+
+      {resumed && (
+        <p className="rounded-lg bg-accent-soft p-3 text-center text-sm">
+          Resumed — tap 🔊 to hear the word again
+        </p>
+      )}
 
       {session.revealed ? (
         <div className="flex gap-2">

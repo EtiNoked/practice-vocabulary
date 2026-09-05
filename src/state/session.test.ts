@@ -5,6 +5,9 @@ import {
   currentPair,
   isFinished,
   mark,
+  nextCard,
+  otherMode,
+  prevCard,
   restartShuffled,
   restartWrongOnly,
   reveal,
@@ -57,6 +60,118 @@ describe('createSession', () => {
     mutable.length = 0
     expect(s.pairs).toHaveLength(4)
     expect(currentPair(s)).not.toBeNull()
+  })
+})
+
+describe('drill modes', () => {
+  /**
+   * The default is what keeps 001's whole test suite honest: every call site
+   * written before modes existed described TEST behaviour, so defaulting to it
+   * means those tests still assert what they were written to assert.
+   */
+  it('defaults to test mode', () => {
+    expect(createSession(pairs, noShuffle).mode).toBe('test')
+  })
+
+  it('carries the requested mode', () => {
+    expect(createSession(pairs, noShuffle, 'l1', 'practice').mode).toBe('practice')
+    expect(createSession(pairs, noShuffle, 'l1', 'test').mode).toBe('test')
+  })
+
+  // Spec A3: studying benefits from the order you wrote the list in.
+  it('practice preserves list order even when handed a shuffling rng', () => {
+    const s = createSession(pairs, seededRng(42), 'l1', 'practice')
+    expect(s.order).toEqual(['1', '2', '3', '4'])
+  })
+
+  // The counterpart: testing must not reward positional memory.
+  it('test shuffles with the same rng that practice ignores', () => {
+    const shuffled = createSession(pairs, seededRng(42), 'l1', 'test')
+    expect(shuffled.order).not.toEqual(['1', '2', '3', '4'])
+  })
+
+  it('practice still snapshots the pairs', () => {
+    const mutable = [...pairs]
+    const s = createSession(mutable, noShuffle, 'l1', 'practice')
+    mutable.length = 0
+    expect(s.pairs).toHaveLength(4)
+  })
+
+  /**
+   * Correct, and never displayed: a practice session marks nothing, so there is
+   * nothing to score. ResultsScreen must not take the score branch for one.
+   */
+  it('scores a practice session as nothing answered', () => {
+    const s = createSession(pairs, noShuffle, 'l1', 'practice')
+    expect(score(s)).toMatchObject({ right: 0, wrong: 0, total: 0, pct: 0 })
+  })
+
+  it('restartShuffled carries the mode through', () => {
+    const practice = createSession(pairs, noShuffle, 'l1', 'practice')
+    expect(restartShuffled(practice, seededRng(3)).mode).toBe('practice')
+    const test = createSession(pairs, noShuffle, 'l1', 'test')
+    expect(restartShuffled(test, seededRng(3)).mode).toBe('test')
+  })
+
+  it('restartWrongOnly carries the mode through', () => {
+    let s = createSession(pairs, noShuffle, 'l1', 'test')
+    s = mark(reveal(s), 'wrong')
+    expect(restartWrongOnly(s, seededRng(3)).mode).toBe('test')
+  })
+
+  /**
+   * "Practice again" from the results screen must not silently reshuffle: the
+   * mode owns the ordering rule, so a practice restart is still list order.
+   */
+  it('restarting a practice session keeps list order', () => {
+    const practice = createSession(pairs, noShuffle, 'l1', 'practice')
+    expect(restartShuffled(practice, seededRng(42)).order).toEqual(['1', '2', '3', '4'])
+  })
+})
+
+describe('nextCard and prevCard', () => {
+  const practice = () => createSession(pairs, noShuffle, 'l1', 'practice')
+
+  it('nextCard advances one card', () => {
+    expect(nextCard(practice()).index).toBe(1)
+  })
+
+  /**
+   * Past the last card the index runs one BEYOND the order, which is exactly
+   * what isFinished() already tests for. Clamping here instead would make a
+   * finished practice run indistinguishable from sitting on the last card.
+   */
+  it('nextCard past the last card finishes the session', () => {
+    let s = practice()
+    for (let i = 0; i < 4; i++) s = nextCard(s)
+    expect(isFinished(s)).toBe(true)
+    expect(currentPair(s)).toBeNull()
+  })
+
+  it('prevCard goes back one card', () => {
+    expect(prevCard(nextCard(nextCard(practice()))).index).toBe(1)
+  })
+
+  it('prevCard floors at the first card rather than going negative', () => {
+    expect(prevCard(practice()).index).toBe(0)
+    expect(prevCard(prevCard(practice())).index).toBe(0)
+  })
+
+  it('neither records a mark', () => {
+    expect(nextCard(nextCard(practice())).marks).toEqual({})
+  })
+
+  it('leaves the pairs and order untouched', () => {
+    const s = nextCard(practice())
+    expect(s.order).toEqual(['1', '2', '3', '4'])
+    expect(s.pairs).toHaveLength(4)
+  })
+})
+
+describe('otherMode', () => {
+  it('flips between the two modes', () => {
+    expect(otherMode('test')).toBe('practice')
+    expect(otherMode('practice')).toBe('test')
   })
 })
 

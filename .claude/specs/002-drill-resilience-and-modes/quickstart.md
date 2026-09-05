@@ -58,7 +58,7 @@ flowchart LR
 | Does practice mode score you? | No. Next/Previous only — it's revision, not assessment. |
 | Does practice shuffle? | No — list order. Test shuffles. (Assumption A3, one line to flip.) |
 | Does practice speak? | Yes. It's a listening app; you just also see the word. |
-| Where is the session stored? | `localStorage`, key `pvt.session.v1`, separate from the lists, 24-hour freshness window. |
+| Where is the session stored? | `localStorage`, key **`pvt.drill.v1`** via **`storage/drillRepo.ts`**, separate from the lists, 24-hour freshness window. |
 | Does a restored drill speak on its own? | **No** — iOS drops speech without a user gesture. You get a "tap 🔊" hint instead. |
 | Speech-rate slider? | Not in this feature. The "too quick" report turned out to be the reload bug. |
 
@@ -80,9 +80,15 @@ to a `PracticeCard` that isn't it would be a permanent trap. Mechanical rename, 
 
 ## Files
 
-**New:** `storage/sessionRepo.ts` · `components/StudyCard.tsx` · `components/ErrorBoundary.tsx` (+ tests)
+**New:** `storage/drillRepo.ts` · `components/StudyCard.tsx` · `components/ErrorBoundary.tsx` (+ tests)
 **Modified:** `vite.config.ts` · `main.tsx` · `App.tsx` · `state/{types,session,appMachine}.ts` · `components/{ReadyScreen,ResultsScreen}.tsx`
 **Untouched:** `parse/**` · `lang/**` · `speech/**` · `storage/listRepo.ts` — no list-schema migration.
+
+> **Naming correction, made during execution:** the plan called the new module
+> `storage/sessionRepo.ts`, but **that name was already taken** — `sessionRepo` stores finished-drill
+> *history* (key `pvt.sessions.v1`), which landed with the accounts feature after this plan was
+> written. The resume module is therefore **`drillRepo`** (key `pvt.drill.v1`): "the drill in
+> progress", clearly distinct from "the drills you have finished".
 
 ## Commands
 
@@ -92,7 +98,9 @@ npm run preview      # production build, no HMR — the Task 1 control experimen
 npm run typecheck && npm run lint && npm test && npm run build
 ```
 
-**Baseline:** 172 tests across 12 files, all green.
+**Baseline:** ~~172 tests across 12 files~~ → **428 tests across 31 files** at execution time. The
+plan was written before the user-accounts work (auth, Firestore, score history) merged. After this
+feature: **568 tests across 36 files**.
 
 ## Where to start
 

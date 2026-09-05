@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSession } from '../state/session'
 import type { WordList } from '../state/types'
 import { speechCalls } from '../test/setup'
-import { PracticeCard } from './PracticeCard'
+import { TestCard } from './TestCard'
 
 const list: WordList = {
   id: 'a',
@@ -23,16 +23,17 @@ const list: WordList = {
 
 const noShuffle = () => 0.999999999
 
-const setup = (voiceMissing = false) => {
+const setup = (voiceMissing = false, resumed = false) => {
   const onReveal = vi.fn()
   const onMark = vi.fn()
   const onQuit = vi.fn()
   const session = createSession(list.pairs, noShuffle, list.id)
   const utils = render(
-    <PracticeCard
+    <TestCard
       list={list}
       session={session}
       voiceMissing={voiceMissing}
+      resumed={resumed}
       onReveal={onReveal}
       onMark={onMark}
       onQuit={onQuit}
@@ -93,10 +94,11 @@ describe('the revealed state', () => {
     const onMark = vi.fn()
     const session = { ...createSession(list.pairs, noShuffle, list.id), revealed: true }
     render(
-      <PracticeCard
+      <TestCard
         list={list}
         session={session}
         voiceMissing={false}
+        resumed={false}
         onReveal={vi.fn()}
         onMark={onMark}
         onQuit={vi.fn()}
@@ -146,6 +148,30 @@ describe('degraded mode when no voice is installed', () => {
 
   it('still keeps the answer hidden', () => {
     setup(true)
+    expect(screen.queryByText('daughter')).not.toBeInTheDocument()
+  })
+})
+
+// FR-3. A restore has no user gesture in scope, so nothing was spoken and on
+// iOS nothing could be. The card has to explain the silence.
+describe('after a restore', () => {
+  it('offers the resumed hint', () => {
+    setup(false, true)
+    expect(screen.getByText(/resumed/i)).toBeInTheDocument()
+  })
+
+  it('does not show the hint in normal flow', () => {
+    setup()
+    expect(screen.queryByText(/resumed/i)).not.toBeInTheDocument()
+  })
+
+  it('still does not speak just because it was resumed', () => {
+    setup(false, true)
+    expect(speechCalls).toHaveLength(0)
+  })
+
+  it('still keeps the answer hidden', () => {
+    setup(false, true)
     expect(screen.queryByText('daughter')).not.toBeInTheDocument()
   })
 })

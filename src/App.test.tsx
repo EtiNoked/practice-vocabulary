@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { drillRepo } from './storage/drillRepo'
 import { listRepo } from './storage/listRepo'
 import { sessionRepo } from './storage/sessionRepo'
 import type { WordList } from './state/types'
@@ -50,8 +51,8 @@ describe('typing a list and practising it', () => {
     await user.click(screen.getByRole('button', { name: /start practice/i }))
     expect(screen.getByText(/you'll hear/i)).toBeInTheDocument()
 
-    // The Start tap is what establishes the iOS gesture chain for the session.
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    // The mode tap is what establishes the iOS gesture chain for the session.
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
 
     await user.click(screen.getByRole('button', { name: /show answer/i }))
@@ -71,7 +72,7 @@ describe('practising a saved list', () => {
 
     expect(screen.getByText('Lesson 3')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
 
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /wrong/i }))
@@ -87,7 +88,7 @@ describe('practising a saved list', () => {
     const user = userEvent.setup()
     renderApp()
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
     // One for Start, one for the card that marking advanced to.
@@ -135,7 +136,7 @@ describe('pasting a list', () => {
 describe('recording score history', () => {
   const drillToEnd = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /wrong/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
@@ -168,7 +169,7 @@ describe('recording score history', () => {
     renderApp()
 
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
     await user.click(screen.getByRole('button', { name: /quit/i }))
@@ -184,7 +185,7 @@ describe('recording score history', () => {
     renderApp()
 
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /quit/i }))
 
     expect(sessionRepo.getAll()).toEqual([])
@@ -255,7 +256,7 @@ describe('practising a Dutch/French list', () => {
 
     await user.click(screen.getByRole('button', { name: /practise/i }))
     expect(screen.getByText(/you'll hear/i)).toHaveTextContent(/French/)
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
 
     const spoken = speechCalls.filter((c) => c.type === 'speak')
     expect(spoken).toHaveLength(1)
@@ -274,7 +275,7 @@ describe('practising a Dutch/French list', () => {
     renderApp()
 
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ voice: 'Amelie' })
   })
 
@@ -296,7 +297,7 @@ describe('practising a Dutch/French list', () => {
     renderApp()
 
     await user.click(screen.getByRole('button', { name: /practise/i }))
-    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ lang: 'nl-NL' })
   })
 
@@ -309,6 +310,359 @@ describe('practising a Dutch/French list', () => {
     expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
     expect((screen.getByLabelText(/column 2 language/i) as HTMLSelectElement).value).toBe('fr')
     expect(screen.queryByText(/guessed/i)).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * THE REGRESSION SUITE FOR THE REPORTED BUG.
+ *
+ * "The test stops after a few seconds and I'm back at the main page" was a full
+ * page reload throwing away useState. A reload is an unmount followed by a fresh
+ * mount, which is exactly what these tests do — so if persistence regresses, the
+ * user's report comes back and this suite fails.
+ */
+describe('a drill surviving a reload', () => {
+  const startDrill = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+  }
+
+  it('comes back on the same card, with the same score', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+
+    await startDrill(user)
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+
+    // The reload.
+    first.unmount()
+    renderApp()
+
+    expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+    expect(screen.getByText(/✓ 1/)).toBeInTheDocument()
+  })
+
+  it('comes back on the same WORD, not merely the same position', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+
+    await startDrill(user)
+    // Revealing is what puts the prompt word on screen to be compared — and it
+    // doubles as proof that `revealed` itself survives the reload.
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    const before = screen.getByText(/dochter|zoon/).textContent
+
+    first.unmount()
+    renderApp()
+
+    // The drill order is shuffled, so restoring the index without the order
+    // would land on a different word and still satisfy "card 1 of 2".
+    expect(screen.getByText(/dochter|zoon/).textContent).toBe(before)
+    expect(screen.getByRole('button', { name: /right/i })).toBeInTheDocument()
+  })
+
+  it('restores a practice drill as practice, not as a test', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+
+    first.unmount()
+    renderApp()
+
+    expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /show answer/i })).not.toBeInTheDocument()
+  })
+
+  it('survives the source list being deleted mid-drill', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+
+    await startDrill(user)
+    listRepo.remove(seeded.id)
+
+    first.unmount()
+    renderApp()
+
+    // R5: the list travels inside the payload, so it cannot dangle.
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+  })
+
+  it('opens at home when nothing was saved', () => {
+    listRepo.save(seeded)
+    renderApp()
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
+
+  // FR-5: a corrupt key is discarded silently rather than crashing the app.
+  it('opens at home on a corrupt saved drill', () => {
+    listRepo.save(seeded)
+    localStorage.setItem('pvt.drill.v1', '{{{ not json')
+    renderApp()
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
+})
+
+describe('clearing the saved drill', () => {
+  const drillToEnd = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /wrong/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+  }
+
+  it('saves while the drill is running', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+
+    expect(drillRepo.load()).not.toBeNull()
+  })
+
+  // FR-4, all three exits.
+  it('clears on finishing', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await drillToEnd(user)
+    expect(drillRepo.load()).toBeNull()
+  })
+
+  it('clears on quitting', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /quit/i }))
+
+    expect(drillRepo.load()).toBeNull()
+  })
+
+  it('clears on going home', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await drillToEnd(user)
+    await user.click(screen.getByRole('button', { name: /done/i }))
+
+    expect(drillRepo.load()).toBeNull()
+  })
+
+  it('leaves the user at home after finishing and reloading', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+
+    await drillToEnd(user)
+    await user.click(screen.getByRole('button', { name: /done/i }))
+    first.unmount()
+    renderApp()
+
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
+})
+
+/**
+ * FR-3, and the subtlest requirement in the feature.
+ *
+ * A restore happens at page load with NO user gesture in scope, so iOS Safari
+ * would silently drop an auto-speak there. A restore that speaks looks perfect
+ * in desktop Chrome and is broken on the phone this app is actually used on.
+ */
+describe('a restored drill and the iOS gesture chain', () => {
+  const startAndReload = async (mode: RegExp) => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: mode }))
+    first.unmount()
+    speechCalls.length = 0
+    renderApp()
+    return userEvent.setup()
+  }
+
+  it('does not speak when a test drill is restored', async () => {
+    await startAndReload(/^test$/i)
+    expect(speechCalls).toEqual([])
+  })
+
+  it('does not speak when a practice drill is restored', async () => {
+    await startAndReload(/^practice$/i)
+    expect(speechCalls).toEqual([])
+  })
+
+  it('tells the user why it is silent, and how to hear the word', async () => {
+    await startAndReload(/^test$/i)
+    expect(screen.getByText(/resumed/i)).toBeInTheDocument()
+  })
+
+  it('speaks as soon as the user taps, re-establishing the chain', async () => {
+    const user = await startAndReload(/^test$/i)
+    await user.click(screen.getByRole('button', { name: /hear it again/i }))
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
+  })
+
+  it('drops the resumed hint once the user has acted', async () => {
+    const user = await startAndReload(/^test$/i)
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    expect(screen.queryByText(/resumed/i)).not.toBeInTheDocument()
+  })
+
+  it('shows no hint on a drill that was started normally', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.queryByText(/resumed/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('a full practice run', () => {
+  it('goes from the list to a completion panel with no score anywhere', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+
+    // Card 1: the word and its answer are both simply there.
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+    expect(screen.getByText('dochter')).toBeInTheDocument()
+    expect(screen.getByText('daughter')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    expect(screen.getByText(/all 2 words/i)).toBeInTheDocument()
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument()
+  })
+
+  it('keeps list order rather than shuffling', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+
+    // Spec A3: the order the list was written in.
+    expect(screen.getByText('dochter')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(screen.getByText('zoon')).toBeInTheDocument()
+  })
+
+  // FR-16, and FR-12's Previous. Both are taps, so the gesture chain holds.
+  it('speaks on every advance, and on going back', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(2)
+
+    // Moving back should say the card you moved back TO.
+    await user.click(screen.getByRole('button', { name: /previous/i }))
+    const spoken = speechCalls.filter((c) => c.type === 'speak')
+    expect(spoken).toHaveLength(3)
+    expect(spoken[2]).toMatchObject({ text: 'dochter' })
+  })
+
+  // FR-13: a study run must not turn up in the score history at all.
+  it('records nothing in score history', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    expect(sessionRepo.getAll()).toEqual([])
+  })
+})
+
+describe('switching mode from the results screen', () => {
+  it('goes from a finished test straight into studying the same list', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+
+    await user.click(screen.getByRole('button', { name: /study these/i }))
+
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument()
+  })
+
+  it('speaks the first card of the new mode', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    speechCalls.length = 0
+
+    await user.click(screen.getByRole('button', { name: /test yourself/i }))
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
+  })
+})
+
+// FR-6: persistence is a convenience layer. Losing it degrades to 001's
+// in-memory behaviour and must never block a drill.
+describe('a drill with localStorage refused', () => {
+  it('still runs start to finish', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError')
+    })
+
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+
+    expect(screen.getByText(/2 \/ 2/)).toBeInTheDocument()
+    vi.restoreAllMocks()
   })
 })
 
@@ -389,7 +743,7 @@ async function drillAsSignedIn(user: ReturnType<typeof userEvent.setup>) {
   await user.type(cells()[0]!, 'daughter')
   await user.type(cells()[1]!, 'dochter')
   await user.click(screen.getByRole('button', { name: /start practice/i }))
-  await user.click(screen.getByRole('button', { name: /^start$/i }))
+  await user.click(screen.getByRole('button', { name: /^test$/i }))
 }
 
 describe('the account slot', () => {
@@ -417,7 +771,7 @@ describe('the account slot', () => {
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /eti/i }))
 
-    // PracticeCard binds Y/N on window, so without a guard this marks the card
+    // TestCard binds Y/N on window, so without a guard this marks the card
     // and ends the drill underneath the menu the user is reading.
     await user.keyboard('n')
 

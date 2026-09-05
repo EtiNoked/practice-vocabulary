@@ -45,6 +45,41 @@ This is a hypothesis with strong supporting evidence, not a confirmed diagnosis.
 refutes it in ten minutes by reproducing against `npm run preview` (a production build, no HMR
 client). **The fix plan does not depend on the hypothesis being right** — see A2 below.
 
+### Task 1 result — measured 2026-09-05: NOT REPRODUCED
+
+**Does it reload under `npm run preview`? Not observed — and it did not reload under `npm run dev`
+either, so the question did not get a chance to discriminate.**
+
+What was measured:
+
+| Check | Result |
+|-------|--------|
+| Repo really is in iCloud Drive | **Yes** — `~/Library/Mobile Documents/com~apple~CloudDocs/…` |
+| Heavy directories in-tree | **Yes** — `node_modules` 829 MB, `dist` 1.0 MB, `.git` 2.3 MB |
+| Evicted `.icloud` placeholders under `src/` | None |
+| `npm run dev`, idle ~3 min, dev-server log | **0** `page reload`, **0** `hmr update` |
+
+Method note: this was measured headlessly, by grepping the dev server's own terminal output rather
+than a browser console. Vite logs `page reload <file>` from its watcher when a change forces a full
+reload, so the absence of that line means **the watcher did not fire at all** in the window — which
+is the same signal the console would have shown, minus the client.
+
+Honest limits of this measurement:
+
+- **A 3-minute idle window is not proof of absence.** iCloud churn is a function of that clone's
+  sync state. A quiet, fully-synced repo generates no events; the same repo minutes after an
+  `npm install` rewrote 829 MB generates a great many. The reported bug plausibly happened in the
+  second state.
+- **The browser half of the experiment was not run** — no browser automation was available, so
+  "uncaught error in the console" and "iOS tab eviction on backgrounding" remain unchecked.
+- Another dev server was already listening on 5173, so this run used 5174. It did not interfere.
+
+**Consequence for the plan:** the watcher hypothesis is unconfirmed rather than refuted, so Task 2
+lands as a correctness-and-comfort fix, *not* as the primary fix — exactly the case assumption A2
+was written for. **Workstream B (session persistence) is the load-bearing fix**: it makes the
+reported symptom impossible whatever the reload's cause, including the two causes above that could
+not be ruled out.
+
 ## User Stories
 
 **US-1 — My drill survives an interruption**

@@ -4,6 +4,48 @@
 **Total:** 16 tasks across 5 phases
 **Legend:** `[P]` = parallelisable with siblings · every task ends with a runnable VALIDATE
 
+---
+
+## Execution status — 2026-09-05
+
+Branch `feature/002-drill-resilience-and-modes`. Gate: `npm run typecheck && npm run lint &&
+npm test && npm run build` all exit 0. **568 tests across 36 files** (baseline was 428/31, not the
+172/12 this plan assumed — see below).
+
+| Task | Status | Note |
+|------|--------|------|
+| 1 DIAGNOSE | ⚠️ **Partial** | Measured headlessly: **0 reloads** in 3 min idle. Hypothesis NOT reproduced. Browser-console and iOS halves not runnable here. Result written into `spec.md`. |
+| 2 Vite watcher | ✅ | 0 reloads over 5 min idle after the change too — so this is a correctness fix, not a proven cure. |
+| 3 ErrorBoundary | ✅ | 5 tests. |
+| 4 types | ✅ | Blast radius was ONE function, not "every fixture" — nothing else constructs a `Session` literal. |
+| 5 drillRepo | ✅ | 26 tests. **Renamed from `sessionRepo`** — that name was taken. |
+| 6 persistence in App | ✅ | Regression suite for the reported bug: unmount → remount → same card. |
+| 7 gesture-safe restore | ✅ | Asserts `speak` is NOT called on restore, in both modes. |
+| 8 session + modes | ✅ | 36 tests. Ran **before** 5, because the compiler required it. |
+| 9 appMachine | ✅ | 36 tests. |
+| 10 domain green | ✅ | |
+| 11 rename → TestCard | ✅ | Done before the behaviour changes, per its own GOTCHA. |
+| 12 ReadyScreen | ✅ | New test file; 9 tests. |
+| 13 StudyCard | ✅ | 24 tests. |
+| 14 ResultsScreen | ✅ | New test file; 13 tests. |
+| 15 wire modes | ✅ | |
+| 16 full regression | ⚠️ **Automated part done** | Every automatable box ticked. **The manual browser and iOS Safari passes were not run** — see the checklist at the bottom. |
+
+**Deviations from the plan, all deliberate:**
+
+1. **`sessionRepo` → `drillRepo`** (key `pvt.drill.v1`). The planned name already belongs to
+   finished-drill history, which landed with the accounts work after this plan was written.
+2. **`runKind` added to the persisted payload.** Without it, a reload during a wrong-only re-run
+   logs that run as `'full'`.
+3. **`mode` defaults to `'test'`** on `createSession` and on the `START` action, rather than being
+   required. Every pre-modes call site was written to describe test behaviour, so the default keeps
+   001's assertions asserting what they were written to assert instead of churning ~30 call sites.
+4. **"Study these", not "Practise these"**, on the test-results screen. It sits directly beside
+   "Practise wrong ones only", which means something else entirely; the same verb on both would read
+   as two variants of one action.
+
+---
+
 > **TDD is mandatory**, as in 001: write the failing test (RED), the minimal code (GREEN), then
 > refactor with tests green. Baseline before starting: **172 tests across 12 files, all passing.**
 
@@ -139,13 +181,25 @@
 
 ### Task 16: FULL regression + manual QA
 - **IMPLEMENT:** Run the whole gate, then the manual script below.
-  - [ ] Test mode start → finish behaves exactly as in 001.
-  - [ ] Practice mode: word + answer visible, Next/Previous work, no score anywhere.
-  - [ ] **Reload mid-drill (Cmd-R) → same card, same score, nothing spoken until tapped.**
-  - [ ] Finish a drill, reload → lands at home, no session key in `localStorage`.
-  - [ ] Quit a drill, reload → lands at home, no session key.
-  - [ ] Disable `localStorage` (Safari private mode) → both modes still run start to finish.
-  - [ ] `npm run dev` idle 5 minutes → no page reload.
-  - [ ] iOS Safari: speech works in both modes; restore does not auto-speak.
+  - [x] Test mode start → finish behaves exactly as in 001. — *covered by the 001 App tests, which
+        still pass unchanged apart from tapping `Test` where they used to tap `Start`.*
+  - [x] Practice mode: word + answer visible, Next/Previous work, no score anywhere. — *`StudyCard`
+        (24 tests) + "a full practice run" in `App.test.tsx`.*
+  - [x] **Reload mid-drill → same card, same score, nothing spoken until tapped.** — *"a drill
+        surviving a reload" + "a restored drill and the iOS gesture chain" in `App.test.tsx`. An
+        unmount/remount is what a reload is to React.*
+  - [x] Finish a drill, reload → lands at home, no session key. — *"clearing the saved drill".*
+  - [x] Quit a drill, reload → lands at home, no session key. — *same block.*
+  - [x] `localStorage` refused → both modes still run start to finish. — *"a drill with localStorage
+        refused" (`setItem` throws `SecurityError`).*
+  - [x] `npm run dev` idle 5 minutes → no page reload. — *0 reloads. But also 0 BEFORE the fix, so
+        this passes without demonstrating the fix was needed.*
+  - [ ] **NOT RUN — needs a human.** Real browser pass: open the app, drill, press Cmd-R, confirm the
+        card comes back and is silent until 🔊 is tapped.
+  - [ ] **NOT RUN — needs a device.** iOS Safari: speech works in both modes; a restore does not
+        auto-speak. jsdom has no speech synthesis and the gesture rule is real-device behaviour, so
+        no test in this repo can stand in for it.
+  - [ ] **NOT RUN — needs a human.** Safari private mode, as the real version of the stubbed
+        storage-refusal test.
 - **GOTCHA:** The iOS pass cannot be automated — jsdom has no speech synthesis and the gesture rule is a real-device behaviour. Do it by hand on the device the bug was reported from.
 - **VALIDATE:** `npm run typecheck && npm run lint && npm test && npm run build` — all exit 0, every box ticked.

@@ -141,7 +141,7 @@
   /*
    * The app had no focus style at all before this — every control fell back to
    * whatever the browser drew. That is a gap anywhere; here it is a real one,
-   * because the drill is explicitly keyboard-driven (PracticeCard binds Space,
+   * because the drill is explicitly keyboard-driven (TestCard binds Space,
    * Enter, Y and N) and a keyboard user needs to see what their next keypress
    * will hit.
    */
