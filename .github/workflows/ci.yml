@@ -18,4 +18,15 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+
+      # The Firestore emulator needs a JRE. Ubuntu runners ship one, so the
+      # PATH prefix in the npm script is a harmless no-op here.
+      # These rules are the app's only server-side check, so an untested change
+      # to them must not reach production.
+      - run: npm run test:rules
+
       - run: npm run build
+
+      # Signed-out users must download zero Firebase (NFR4a). Fails if a static
+      # firebase/* import creeps into the eager chunk.
+      - run: node scripts/check-bundle.mjs

@@ -4,8 +4,19 @@
 **Status:** DRAFT (v1 scope)
 **Created:** 2026-09-05
 **Revised:** 2026-09-05 — v1 descoped to text entry only; photo/OCR moved to v2
+**Superseded in part:** 2026-09-05 by `003-user-accounts` — see the ⚠️ note below
 **Feature Type:** New Capability (greenfield repository)
 **Complexity:** Low-Medium
+
+> ## ⚠️ Partly superseded by `003-user-accounts`
+>
+> That feature adds Google sign-in and per-user cloud storage, which knowingly reverses **NFR1**
+> ("no backend") and **NFR2** ("no user data leaves the device"), amends **NFR4**, and delivers two
+> items this spec lists as out of scope. Struck-through lines below are the ones affected. The
+> reasoning is recorded in `.claude/specs/003-user-accounts/spec.md` § "This feature reverses two v1
+> non-functional requirements".
+>
+> Everything else in this spec still holds, and the app remains fully usable with no account.
 
 ## Overview
 
@@ -162,10 +173,10 @@ change to add it.
 
 | ID | Requirement |
 |----|-------------|
-| NFR1 | No backend, no server-side state, no API keys in the repo |
-| NFR2 | No user data leaves the device |
+| NFR1 | ~~No backend, no server-side state, no API keys in the repo~~ — **SUPERSEDED by 003-user-accounts.** A managed backend (Firebase) now holds per-user state for signed-in users. Still no self-hosted server and no *secret* keys. |
+| NFR2 | ~~No user data leaves the device~~ — **SUPERSEDED by 003-user-accounts.** Still true for signed-out users; deliberately false for signed-in ones. |
 | NFR3 | Interactive within 1s on a mid-range phone |
-| NFR4 | Total JS bundle under 150 KB gzipped (v1 has no heavy dependencies) |
+| NFR4 | Total JS bundle under 150 KB gzipped (v1 has no heavy dependencies) — **AMENDED by 003-user-accounts:** still enforced for signed-out users, who download zero Firebase. Signed-in users additionally fetch lazy Firebase chunks. |
 | NFR5 | Keyboard operable: Space = replay, Enter = reveal, Y/N = mark |
 | NFR6 | Works on current Chrome, Safari (incl. iOS), Edge, Firefox |
 
@@ -199,11 +210,11 @@ change to add it.
 ## Out of Scope (v1)
 
 - **Photographing a page and OCR** — see § Deferred to v2
-- User accounts, cloud sync, cross-device sharing
+- ~~User accounts, cloud sync, cross-device sharing~~ — **DELIVERED by 003-user-accounts**
 - Languages other than English and Dutch
 - Speech *recognition* (speaking the answer instead of self-marking)
 - Spaced repetition / long-term scheduling
-- Score history across sessions (only the current session's score is shown)
+- ~~Score history across sessions (only the current session's score is shown)~~ — **DELIVERED by 003-user-accounts**
 - Grouping, tagging or lesson structure within a list
 - Automatic deduplication on import (duplicates are kept; see Edge Cases)
 - Editing a list *during* a practice session

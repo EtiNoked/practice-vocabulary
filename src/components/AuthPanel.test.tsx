@@ -116,3 +116,73 @@ describe('unconfigured', () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe('deleting the account', () => {
+  const signedIn = (over: Partial<AuthStore> = {}) =>
+    fakeStore({ status: 'signed-in', user, available: true }, over)
+
+  it('needs an explicit confirmation, not a single click', async () => {
+    const store = signedIn()
+    renderPanel(store)
+
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
+    expect(store.deleteAccount).not.toHaveBeenCalled()
+    expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument()
+  })
+
+  it('spells out exactly what is destroyed, and what is not', async () => {
+    renderPanel(signedIn())
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
+
+    expect(screen.getByText(/all your saved lists and all your practice history/i)).toBeInTheDocument()
+    // Device lists were never part of the account.
+    expect(screen.getByText(/saved on this device .* are not affected/i)).toBeInTheDocument()
+  })
+
+  it('deletes once confirmed', async () => {
+    const store = signedIn()
+    renderPanel(store)
+
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
+    await userEvent.click(screen.getByRole('button', { name: /yes, delete everything/i }))
+    expect(store.deleteAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it('can be backed out of', async () => {
+    const store = signedIn()
+    renderPanel(store)
+
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(store.deleteAccount).not.toHaveBeenCalled()
+    expect(screen.queryByText(/cannot be undone/i)).not.toBeInTheDocument()
+  })
+
+  it('explains a re-authentication requirement instead of showing a raw error', async () => {
+    const store = signedIn({
+      deleteAccount: vi.fn(async () => ({ ok: false as const, reason: 'requires-recent-login' as const })),
+    })
+    renderPanel(store)
+
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
+    await userEvent.click(screen.getByRole('button', { name: /yes, delete everything/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/sign in again/i)
+  })
+
+  it('keeps the panel open after a partial failure so it can be retried', async () => {
+    const store = signedIn({
+      deleteAccount: vi.fn(async () => ({
+        ok: false as const,
+        reason: 'partial' as const,
+        message: 'Some of your data could not be deleted. Try again.',
+      })),
+    })
+    renderPanel(store)
+
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
+    await userEvent.click(screen.getByRole('button', { name: /yes, delete everything/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not be deleted/i)
+    expect(screen.getByRole('button', { name: /yes, delete everything/i })).toBeInTheDocument()
+  })
+})

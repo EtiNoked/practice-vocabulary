@@ -7,8 +7,39 @@ drill yourself. The app reads **column 2** aloud and keeps **column 1** hidden a
 answer. Hear it again as often as you like, reveal both columns to check, mark
 yourself right or wrong, and get a score at the end.
 
-Everything runs in your browser. No account, no server, no API keys — and nothing you
-type ever leaves your device.
+**Works with no account at all.** Signed out, everything runs in your browser and nothing
+you type ever leaves your device — exactly as it always has.
+
+**Or sign in with Google** and your lists follow you between devices, with every finished
+drill recorded so you can see whether you're improving. Signing in is an upgrade, never a
+gate: the app is fully usable without it, and a signed-out visitor downloads no
+account-related code at all.
+
+## Accounts
+
+| | Signed out | Signed in |
+|---|---|---|
+| Where lists live | This browser (`localStorage`) | Your own private area of Firestore |
+| Other devices | No | Yes |
+| Score history | This browser | Your account |
+| Data sent anywhere | None | Your name, email, lists and scores |
+| Offline | Yes | Yes — cached, and changes sync on reconnect |
+
+Signing in for the first time offers to copy this device's lists into your account. It's
+opt-in, it never deletes the local copies, and running it twice can't duplicate anything.
+
+Signing out clears the cached copy of your cloud data from the device. **Delete my account**
+removes your lists, your history and the account itself, permanently.
+
+Your data is readable only by you — enforced by Firestore security rules on the server, not
+by the app. Lists you had before signing in are never touched by any of this.
+
+### Running it yourself
+
+Sign-in needs a Firebase project. Copy `.env.example` to `.env.local` and fill in the values
+from **Firebase console → Project settings → Your apps → Web app**. Without them the app
+still runs, signed-out only, and never offers sign-in. Setup is in
+[`.claude/specs/003-user-accounts/quickstart.md`](.claude/specs/003-user-accounts/quickstart.md).
 
 ## Adding a word list
 

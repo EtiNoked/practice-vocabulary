@@ -57,6 +57,8 @@ export interface FirestoreSdk {
   orderBy: typeof import('firebase/firestore').orderBy
   writeBatch: typeof import('firebase/firestore').writeBatch
   serverTimestamp: typeof import('firebase/firestore').serverTimestamp
+  terminate: typeof import('firebase/firestore').terminate
+  clearIndexedDbPersistence: typeof import('firebase/firestore').clearIndexedDbPersistence
 }
 
 /**
@@ -120,6 +122,8 @@ async function initialise(): Promise<FirebaseServices> {
       orderBy: firestoreModule.orderBy,
       writeBatch: firestoreModule.writeBatch,
       serverTimestamp: firestoreModule.serverTimestamp,
+      terminate: firestoreModule.terminate,
+      clearIndexedDbPersistence: firestoreModule.clearIndexedDbPersistence,
     },
   }
 }
@@ -132,6 +136,31 @@ export function loadFirebase(): Promise<FirebaseServices> {
     throw error
   })
   return servicesPromise
+}
+
+/**
+ * Wipe the on-device copy of the signed-in user's cloud data.
+ *
+ * Firestore's persistent cache lives in IndexedDB and survives signOut() on its
+ * own, so without this a borrowed or shared computer keeps a readable copy of
+ * the previous user's lists (Story 6).
+ *
+ * clearIndexedDbPersistence only works on a terminated instance, so the app
+ * object is dropped afterwards and the next sign-in rebuilds it from scratch.
+ * Failure is non-fatal: another open tab holding the same database will block
+ * the clear, and being unable to tidy the cache must not prevent signing out.
+ */
+export async function clearFirestoreCache(): Promise<void> {
+  const services = await servicesPromise
+  if (!services) return
+
+  servicesPromise = null
+  try {
+    await services.fs.terminate(services.db)
+    await services.fs.clearIndexedDbPersistence(services.db)
+  } catch {
+    /* Another tab has it open, or the browser refused. Not worth failing over. */
+  }
 }
 
 /** Test seam. Never call from application code. */

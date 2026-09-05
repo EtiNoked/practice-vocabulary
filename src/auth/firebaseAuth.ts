@@ -1,4 +1,5 @@
-import { loadFirebase } from './firebase'
+import { deleteAccount, reauthenticateAndDelete } from './deleteAccount'
+import { clearFirestoreCache, loadFirebase } from './firebase'
 import {
   writeAuthHint,
   type AuthPort,
@@ -124,12 +125,31 @@ export function createFirebaseAuth(): AuthPort {
       } catch {
         /* Already treated as signed out locally. */
       }
+      // Drop the on-device copy of their cloud data. Without this, the next
+      // person to use a shared computer can still read the cached lists.
+      await clearFirestoreCache()
     },
 
     async deleteAccount(): Promise<DeleteOutcome> {
-      // Implemented in Phase 8 (Task 24), which needs the Firestore store to
-      // clear the user's documents before the account itself can go.
-      return { ok: false, reason: 'unknown', message: 'Not implemented yet.' }
+      const services = await loadFirebase().catch(() => null)
+      if (!services) {
+        return { ok: false, reason: 'unknown', message: "Couldn't reach your account." }
+      }
+
+      const outcome = await deleteAccount(services)
+
+      // Google wants proof it is really you before destroying an account. The
+      // data is already gone at this point; re-auth finishes the job.
+      const final =
+        !outcome.ok && outcome.reason === 'requires-recent-login'
+          ? await reauthenticateAndDelete(services)
+          : outcome
+
+      if (final.ok) {
+        writeAuthHint(false)
+        await clearFirestoreCache()
+      }
+      return final
     },
   }
 }

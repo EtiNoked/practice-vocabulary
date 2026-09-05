@@ -162,6 +162,7 @@ export default function App() {
         <Home
           lists={visibleLists}
           loading={store === null}
+          scope={authStatus === 'signed-in' ? 'account' : 'device'}
           banner={
             <MigratePrompt
               count={migration.count}

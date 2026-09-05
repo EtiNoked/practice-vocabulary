@@ -21,9 +21,10 @@ function messageFor(outcome: SignInOutcome): string | null {
 }
 
 export function AuthPanel() {
-  const { status, user, available, signIn, signOut } = useAuth()
+  const { status, user, available, signIn, signOut, deleteAccount } = useAuth()
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // No Firebase project configured: the app is local-only and says nothing about
   // accounts at all, rather than offering a button that cannot work.
@@ -39,20 +40,85 @@ export function AuthPanel() {
 
   if (status === 'signed-in' && user) {
     return (
-      <div className="flex flex-wrap items-center gap-3">
-        {user.photoURL && (
-          <img src={user.photoURL} alt="" className="size-8 rounded-full" width={32} height={32} />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {user.photoURL && (
+            <img src={user.photoURL} alt="" className="size-8 rounded-full" width={32} height={32} />
+          )}
+          <span className="text-sm">
+            Signed in as <strong>{user.displayName ?? user.email ?? 'your account'}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="min-h-11 rounded border border-slate-300 px-3 text-sm dark:border-slate-600"
+          >
+            Sign out
+          </button>
+          {!confirmingDelete && (
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingDelete(true)
+                setMessage(null)
+              }}
+              className="min-h-11 px-1 text-sm text-red-700 underline dark:text-red-400"
+            >
+              Delete my account
+            </button>
+          )}
+        </div>
+
+        {confirmingDelete && (
+          <section className="rounded-lg border border-red-400 p-3 dark:border-red-600">
+            <p className="text-sm">
+              This permanently deletes your account, all your saved lists and all your practice
+              history. It cannot be undone. Lists saved on this device before you signed in are not
+              affected.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  const outcome = await deleteAccount()
+                  setBusy(false)
+                  if (outcome.ok) {
+                    setConfirmingDelete(false)
+                    setMessage(null)
+                    return
+                  }
+                  // A partial failure is safe to retry, so keep the panel open.
+                  setMessage(
+                    outcome.reason === 'requires-recent-login'
+                      ? 'Google needs you to sign in again before deleting your account. Try once more.'
+                      : outcome.message,
+                  )
+                }}
+                className="min-h-11 rounded bg-red-700 px-3 text-white disabled:opacity-60"
+              >
+                {busy ? 'Deleting…' : 'Yes, delete everything'}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmingDelete(false)
+                  setMessage(null)
+                }}
+                className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+              >
+                Cancel
+              </button>
+            </div>
+            {message && (
+              <p role="alert" className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+                {message}
+              </p>
+            )}
+          </section>
         )}
-        <span className="text-sm">
-          Signed in as <strong>{user.displayName ?? user.email ?? 'your account'}</strong>
-        </span>
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="min-h-11 rounded border border-slate-300 px-3 text-sm dark:border-slate-600"
-        >
-          Sign out
-        </button>
       </div>
     )
   }

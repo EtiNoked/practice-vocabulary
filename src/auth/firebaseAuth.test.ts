@@ -15,6 +15,7 @@ const onAuthStateChanged = vi.fn()
 
 vi.mock('./firebase', () => ({
   loadFirebase: () => loadFirebaseMock(),
+  clearFirestoreCache: async () => {},
   resetFirebaseForTests: () => {},
 }))
 
