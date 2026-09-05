@@ -1,24 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../auth/useAuth'
-import type { SignInOutcome } from '../auth/types'
-
-function messageFor(outcome: SignInOutcome): string | null {
-  if (outcome.ok) return null
-  switch (outcome.reason) {
-    case 'cancelled':
-      // Closing the popup is a normal choice, not a failure. Say nothing louder
-      // than this.
-      return 'Sign-in cancelled.'
-    case 'blocked':
-      return 'Your browser blocked the sign-in popup. Allow popups for this site, then try again.'
-    case 'network':
-      return "Couldn't reach Google. Check your connection and try again."
-    case 'load-failed':
-      return "Couldn't load sign-in. You can keep using the app on this device."
-    case 'unknown':
-      return outcome.message
-  }
-}
+import { signInFailureMessage } from '../auth/messages'
 
 export function AuthPanel() {
   const { status, user, available, signIn, signOut, deleteAccount } = useAuth()
@@ -132,7 +114,7 @@ export function AuthPanel() {
           // Guarding here as well as in the adapter: a disabled button is the
           // visible half of "one popup at a time".
           setBusy(true)
-          setMessage(messageFor(await signIn()))
+          setMessage(signInFailureMessage(await signIn()))
           setBusy(false)
         }}
         className="min-h-11 rounded-lg border border-slate-300 px-4 disabled:opacity-60 dark:border-slate-600"
