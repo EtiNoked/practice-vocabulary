@@ -4,6 +4,7 @@ import { ListEditor } from './components/ListEditor'
 import { PracticeCard } from './components/PracticeCard'
 import { ReadyScreen } from './components/ReadyScreen'
 import { ResultsScreen } from './components/ResultsScreen'
+import { MigratePrompt } from './components/MigratePrompt'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
@@ -14,6 +15,7 @@ import { hasVoiceFor } from './speech/tts'
 import { writeFailureMessage } from './storage/messages'
 import { useListStore } from './storage/useListStore'
 import { useAuth } from './auth/useAuth'
+import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
 
 export default function App() {
@@ -26,7 +28,8 @@ export default function App() {
   // localStorage while signed out, Firestore while signed in. Nothing below this
   // line knows or cares which implementation it is holding.
   const { store, error: storeError } = useListStore()
-  const { status: authStatus } = useAuth()
+  const { status: authStatus, user } = useAuth()
+  const migration = useMigration(store, user?.uid ?? null)
 
   /**
    * A layout effect rather than a plain one, deliberately.
@@ -121,6 +124,13 @@ export default function App() {
         <Home
           lists={visibleLists}
           loading={store === null}
+          banner={
+            <MigratePrompt
+              count={migration.count}
+              onCopy={migration.copy}
+              onDismiss={migration.dismiss}
+            />
+          }
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}

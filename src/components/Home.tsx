@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { WordList } from '../state/types'
 import { AuthPanel } from './AuthPanel'
 import { SavedLists } from './SavedLists'
@@ -6,6 +7,8 @@ interface Props {
   lists: WordList[]
   /** True while we do not yet know whose lists to show. */
   loading?: boolean
+  /** Slot for account-level notices, e.g. the migration offer. */
+  banner?: ReactNode
   onNewList: () => void
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
@@ -13,7 +16,7 @@ interface Props {
   onDelete: (list: WordList) => void
 }
 
-export function Home({ lists, loading = false, onNewList, ...listActions }: Props) {
+export function Home({ lists, loading = false, banner, onNewList, ...listActions }: Props) {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-6 p-4">
       <header>
@@ -24,6 +27,8 @@ export function Home({ lists, loading = false, onNewList, ...listActions }: Prop
       </header>
 
       <AuthPanel />
+
+      {banner}
 
       <button
         type="button"
