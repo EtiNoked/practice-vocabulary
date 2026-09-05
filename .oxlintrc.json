@@ -11,10 +11,16 @@
     "no-restricted-imports": [
       "error",
       {
+        "paths": [
+          {
+            "name": "firebase",
+            "message": "Import Firebase only inside src/auth/firebase.ts, which loads it behind a dynamic import(). A static import here pulls the SDK into the main chunk and breaks NFR4a — signed-out users must download zero Firebase. See plan.md R3."
+          }
+        ],
         "patterns": [
           {
-            "group": ["firebase", "firebase/*"],
-            "message": "Import Firebase only inside src/auth/firebase.ts, which loads it behind a dynamic import(). A static import here pulls ~150 KB gzipped into the main chunk and breaks NFR4a — signed-out users must download zero Firebase. See plan.md R3."
+            "group": ["firebase/*"],
+            "message": "Import Firebase only inside src/auth/firebase.ts, which loads it behind a dynamic import(). A static import here pulls the SDK into the main chunk and breaks NFR4a — signed-out users must download zero Firebase. See plan.md R3."
           }
         ]
       }

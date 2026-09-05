@@ -1,4 +1,5 @@
 import type { WordList } from '../state/types'
+import { AuthPanel } from './AuthPanel'
 import { SavedLists } from './SavedLists'
 
 interface Props {
@@ -16,9 +17,11 @@ export function Home({ lists, onNewList, ...listActions }: Props) {
       <header>
         <h1 className="text-2xl font-semibold">Vocabulary Trainer</h1>
         <p className="mt-1 text-slate-600 dark:text-slate-400">
-          Hear a word, say the answer, mark yourself. Everything stays on this device.
+          Hear a word, say the answer, mark yourself.
         </p>
       </header>
+
+      <AuthPanel />
 
       <button
         type="button"

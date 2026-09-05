@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
-import App from './App'
 import { listRepo } from './storage/listRepo'
 import type { WordList } from './state/types'
 import { speechCalls } from './test/setup'
+import { renderApp } from './test/renderApp'
 
 const seeded: WordList = {
   id: 'seed',
@@ -26,7 +26,7 @@ beforeEach(() => localStorage.clear())
 describe('typing a list and practising it', () => {
   it('goes from an empty app to a score', async () => {
     const user = userEvent.setup()
-    render(<App />)
+    renderApp()
 
     await user.click(screen.getByRole('button', { name: /new list/i }))
 
@@ -54,7 +54,7 @@ describe('practising a saved list', () => {
   it('lists it on the home screen and drills it', async () => {
     listRepo.save(seeded)
     const user = userEvent.setup()
-    render(<App />)
+    renderApp()
 
     expect(screen.getByText('Lesson 3')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /practise/i }))
@@ -72,7 +72,7 @@ describe('practising a saved list', () => {
   it('speaks a word for every card, including after marking', async () => {
     listRepo.save(seeded)
     const user = userEvent.setup()
-    render(<App />)
+    renderApp()
     await user.click(screen.getByRole('button', { name: /practise/i }))
     await user.click(screen.getByRole('button', { name: /^start$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
@@ -86,7 +86,7 @@ describe('editing a saved list', () => {
   it('updates it in place and keeps the same entry', async () => {
     listRepo.save(seeded)
     const user = userEvent.setup()
-    render(<App />)
+    renderApp()
 
     await user.click(screen.getByRole('button', { name: /edit/i }))
     const daughter = screen.getByDisplayValue('daughter')
@@ -105,7 +105,7 @@ describe('editing a saved list', () => {
 describe('pasting a list', () => {
   it('accepts a spreadsheet paste and practises it', async () => {
     const user = userEvent.setup()
-    render(<App />)
+    renderApp()
     await user.click(screen.getByRole('button', { name: /new list/i }))
     await user.click(screen.getByRole('button', { name: /paste or import/i }))
 
