@@ -26,7 +26,7 @@ export function SavedLists({
   // arriving reads as data loss. Say nothing definite until we know.
   if (loading) {
     return (
-      <p className="text-slate-600 dark:text-slate-400" role="status">
+      <p className="text-ink-muted" role="status">
         Loading your lists…
       </p>
     )
@@ -34,7 +34,7 @@ export function SavedLists({
 
   if (lists.length === 0) {
     return (
-      <p className="text-slate-600 dark:text-slate-400">
+      <p className="text-ink-muted">
         No saved lists yet. Make one and it will appear here
         {scope === 'account' ? ', on any device you sign in on.' : ', on this device.'}
       </p>
@@ -46,11 +46,11 @@ export function SavedLists({
       {lists.map((list) => (
         <li
           key={list.id}
-          className="rounded-lg border border-slate-300 p-3 dark:border-slate-600"
+          className="rounded-lg border border-line-strong p-3"
         >
           <div className="flex flex-wrap items-baseline gap-2">
             <span className="font-semibold">{list.name}</span>
-            <span className="text-sm text-slate-600 dark:text-slate-400">
+            <span className="text-sm text-ink-muted">
               {list.pairs.length} {list.pairs.length === 1 ? 'word' : 'words'} ·{' '}
               {formatDate(list.updatedAt)}
             </span>
@@ -59,28 +59,28 @@ export function SavedLists({
             <button
               type="button"
               onClick={() => onPractise(list)}
-              className="min-h-11 rounded bg-emerald-700 px-3 text-white"
+              className="btn btn-primary"
             >
               Practise
             </button>
             <button
               type="button"
               onClick={() => onEdit(list)}
-              className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+              className="btn btn-quiet"
             >
               Edit
             </button>
             <button
               type="button"
               onClick={() => onRename(list)}
-              className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+              className="btn btn-quiet"
             >
               Rename
             </button>
             <button
               type="button"
               onClick={() => onDelete(list)}
-              className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+              className="btn btn-quiet"
             >
               Delete
             </button>

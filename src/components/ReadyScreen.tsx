@@ -13,10 +13,10 @@ export function ReadyScreen({ list, saved, onStart, onSave, onBack }: Props) {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">
       <h1 className="text-2xl font-semibold">{list.name}</h1>
-      <p className="text-slate-600 dark:text-slate-400">
+      <p className="text-ink-muted">
         {list.pairs.length} {list.pairs.length === 1 ? 'word' : 'words'}
       </p>
-      <p className="rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
+      <p className="rounded-lg bg-surface-sunken p-3">
         You&apos;ll hear <strong>{LANG_NAMES[list.col2Lang]}</strong>, and answer in{' '}
         <strong>{LANG_NAMES[list.col1Lang]}</strong>.
       </p>
@@ -29,7 +29,7 @@ export function ReadyScreen({ list, saved, onStart, onSave, onBack }: Props) {
       <button
         type="button"
         onClick={onStart}
-        className="min-h-14 rounded-lg bg-emerald-700 text-lg text-white"
+        className="btn btn-primary btn-lg"
       >
         Start
       </button>
@@ -39,14 +39,14 @@ export function ReadyScreen({ list, saved, onStart, onSave, onBack }: Props) {
           type="button"
           onClick={onSave}
           disabled={saved}
-          className="min-h-11 flex-1 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-600"
+          className="btn btn-quiet flex-1"
         >
           {saved ? 'Saved ✓' : 'Save this list'}
         </button>
         <button
           type="button"
           onClick={onBack}
-          className="min-h-11 flex-1 rounded border border-slate-300 dark:border-slate-600"
+          className="min-h-11 flex-1 rounded border border-line-strong"
         >
           Back
         </button>

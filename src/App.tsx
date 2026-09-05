@@ -193,7 +193,7 @@ export default function App() {
 
   if (showWelcome) {
     return (
-      <main className="min-h-dvh bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <main className="min-h-dvh bg-ground text-ink">
         <WelcomeScreen
           onContinueAsGuest={() => {
             writeGuestChoice(true)
@@ -205,9 +205,9 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-dvh bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <main className="min-h-dvh bg-ground text-ink">
       {(toast ?? storeError) && (
-        <p role="alert" className="bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+        <p role="alert" className="bg-accent-soft p-3 text-sm text-ink">
           {toast ?? storeError}
         </p>
       )}

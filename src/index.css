@@ -1,4 +1,14 @@
-@import "tailwindcss";
+/*
+ * `source(none)` plus an explicit `@source` scopes class detection to src/.
+ *
+ * Tailwind 4 otherwise scans the whole project, which here meant the prose in
+ * .claude/specs/ — so class names merely QUOTED in a spec (`dark:border-red-600`
+ * among them) were being compiled into the production stylesheet. Documentation
+ * should not be able to add bytes to what a user downloads, and a design system
+ * whose guard tests read the compiled CSS cannot afford phantom classes in it.
+ */
+@import "tailwindcss" source(none);
+@source ".";
 
 /* ---------------------------------------------------------------------------
    Lexend, self-hosted.
@@ -79,7 +89,7 @@
      Two values differ from the palette as first drawn, both forced by contrast.
      Do NOT "correct" them back:
        primary is teal-700, not teal-600  — white on teal-600 is ~3.7:1, under AA.
-       right   is green-700, not green-600 — white on green-600 is ~3.3:1.
+       correct is green-700, not green-600 — white on green-600 is ~3.3:1.
      And accent NEVER carries white text: white on orange-500 is ~2.8:1, which
      fails even the large-text threshold. It is a tint behind ink, or a border. */
   --color-ground: #f6fbfa;          /* the page. Faint mint — a white page reads as a document */
@@ -94,9 +104,9 @@
   --color-primary-ink: #ffffff;
   --color-accent: #f97316;          /* never a fill under white text */
   --color-accent-soft: #fff3e9;     /* banner and badge backgrounds, with ink on top */
-  --color-right: #15803d;           /* white on it ~5.0:1 */
-  --color-wrong: #e11d48;           /* white on it ~4.7:1 — the ONE "wrong" colour */
-  --color-wrong-soft: #fff1f3;
+  --color-correct: #15803d;         /* white on it ~5.0:1 */
+  --color-incorrect: #e11d48;       /* white on it ~4.7:1 — the ONE "wrong" colour */
+  --color-incorrect-soft: #fff1f3;
   --color-line: #dceae8;            /* surfaces */
   --color-line-strong: #bfd8d4;     /* inputs and anything interactive */
 
@@ -192,7 +202,7 @@
   }
 
   .btn-danger {
-    background-color: var(--color-wrong);
+    background-color: var(--color-incorrect);
     color: #fff;
   }
 

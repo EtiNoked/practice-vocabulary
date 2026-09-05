@@ -67,7 +67,7 @@ export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, on
 
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">
-      <header className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
+      <header className="flex items-center justify-between text-sm text-ink-muted">
         <span>
           Card {session.index + 1} of {session.order.length}
         </span>
@@ -81,23 +81,21 @@ export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, on
 
       <div
         aria-live="polite"
-        className="rounded-xl border border-slate-300 p-6 text-center dark:border-slate-600"
+        className="card p-6 text-center"
       >
-        <p className="text-xs uppercase tracking-wide text-slate-500">
+        <p className="text-xs uppercase tracking-wide text-ink-faint">
           Listen — {LANG_NAMES[list.col2Lang]}
         </p>
 
-        {voiceMissing && <p className="mt-3 text-2xl font-semibold">{pair.col2}</p>}
+        {voiceMissing && <p className="mt-3 text-word font-bold">{pair.col2}</p>}
 
         {session.revealed ? (
           <div className="mt-4 flex flex-col gap-2">
-            <p className="text-2xl font-semibold">{pair.col2}</p>
-            <p className="text-xs uppercase tracking-wide text-slate-500">
+            <p className="text-word font-bold">{pair.col2}</p>
+            <p className="text-xs uppercase tracking-wide text-ink-faint">
               {LANG_NAMES[list.col1Lang]}
             </p>
-            <p className="text-2xl font-semibold text-emerald-700 dark:text-emerald-400">
-              {pair.col1}
-            </p>
+            <p className="text-word font-bold text-correct">{pair.col1}</p>
           </div>
         ) : (
           <p className="mt-4 text-4xl" aria-hidden="true">
@@ -111,14 +109,14 @@ export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, on
           <button
             type="button"
             onClick={() => onMark('right')}
-            className="min-h-14 flex-1 rounded-lg bg-emerald-700 text-lg text-white"
+            className="btn btn-lg flex-1 bg-correct text-white"
           >
             Right ✓
           </button>
           <button
             type="button"
             onClick={() => onMark('wrong')}
-            className="min-h-14 flex-1 rounded-lg bg-rose-700 text-lg text-white"
+            className="btn btn-lg flex-1 bg-incorrect text-white"
           >
             Wrong ✗
           </button>
@@ -128,21 +126,21 @@ export function PracticeCard({ list, session, voiceMissing, onReveal, onMark, on
           <button
             type="button"
             onClick={replay}
-            className="min-h-14 flex-1 rounded-lg border border-slate-300 text-lg dark:border-slate-600"
+            className="btn btn-quiet btn-lg flex-1"
           >
             Hear it again 🔊
           </button>
           <button
             type="button"
             onClick={onReveal}
-            className="min-h-14 flex-1 rounded-lg bg-slate-800 text-lg text-white dark:bg-slate-200 dark:text-slate-900"
+            className="btn btn-lg flex-1 bg-ink text-ground"
           >
             Show answer
           </button>
         </div>
       )}
 
-      <p className="text-center text-xs text-slate-500">
+      <p className="text-center text-xs text-ink-faint">
         Space replays · Enter reveals · Y / N marks
       </p>
     </section>

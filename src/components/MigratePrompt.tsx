@@ -26,7 +26,7 @@ export function MigratePrompt({ count, onCopy, onDismiss }: Props) {
     return (
       <section
         role="alert"
-        className="rounded-lg border border-amber-400 bg-amber-50 p-3 dark:border-amber-600 dark:bg-amber-900/30"
+        className="card border-accent bg-accent-soft p-3"
       >
         <p className="text-sm">
           Copied {result.copied} of {count} {noun}. {result.failed.length} didn&rsquo;t make it —
@@ -43,14 +43,14 @@ export function MigratePrompt({ count, onCopy, onDismiss }: Props) {
               setResult(await onCopy())
               setBusy(false)
             }}
-            className="min-h-11 rounded bg-emerald-700 px-3 text-white disabled:opacity-60"
+            className="btn btn-primary"
           >
             {busy ? 'Copying…' : 'Try again'}
           </button>
           <button
             type="button"
             onClick={onDismiss}
-            className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+            className="btn btn-quiet"
           >
             Not now
           </button>
@@ -62,12 +62,12 @@ export function MigratePrompt({ count, onCopy, onDismiss }: Props) {
   if (result) return null
 
   return (
-    <section className="rounded-lg border border-slate-300 p-3 dark:border-slate-600">
+    <section className="rounded-lg border border-line-strong p-3">
       <p className="text-sm">
         You have {count} {noun} saved on this device. Copy {count === 1 ? 'it' : 'them'} to your
         account so you can use {count === 1 ? 'it' : 'them'} on your other devices?
       </p>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-1 text-sm text-ink-muted">
         {count === 1 ? 'It stays' : 'They stay'} on this device either way.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -80,14 +80,14 @@ export function MigratePrompt({ count, onCopy, onDismiss }: Props) {
             setResult(outcome)
             setBusy(false)
           }}
-          className="min-h-11 rounded bg-emerald-700 px-3 text-white disabled:opacity-60"
+          className="btn btn-primary"
         >
           {busy ? 'Copying…' : `Copy to my account`}
         </button>
         <button
           type="button"
           onClick={onDismiss}
-          className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+          className="btn btn-quiet"
         >
           Not now
         </button>

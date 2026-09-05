@@ -25,7 +25,10 @@
       content="default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; base-uri 'none'; form-action 'none'; object-src 'none'"
     />
     <meta name="description" content="Practise English and Dutch vocabulary by listening. Works with no account; sign in to sync across devices." />
-    <meta name="theme-color" content="#0f172a" />
+    <!-- Matches --color-ground. This paints Android's address bar and an
+         installed PWA's status bar, so a stale dark value here opens the app
+         with a black band above a mint page. -->
+    <meta name="theme-color" content="#f6fbfa" />
     <title>Vocabulary Trainer</title>
   </head>
   <body>

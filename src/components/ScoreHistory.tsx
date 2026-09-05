@@ -24,7 +24,7 @@ function trend(records: SessionRecord[]): { average: number; count: number } | n
 export function ScoreHistory({ records }: Props) {
   if (records.length === 0) {
     return (
-      <p className="text-slate-600 dark:text-slate-400">
+      <p className="text-ink-muted">
         No practice yet. Finish a drill and your score will show up here.
       </p>
     )
@@ -35,7 +35,7 @@ export function ScoreHistory({ records }: Props) {
   return (
     <div className="flex flex-col gap-2">
       {summary && (
-        <p className="text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-ink-muted">
           Averaging {summary.average}% over your last {summary.count} full runs.
         </p>
       )}
@@ -44,10 +44,10 @@ export function ScoreHistory({ records }: Props) {
         {records.slice(0, 10).map((record) => (
           <li
             key={record.id}
-            className="flex flex-wrap items-baseline justify-between gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
+            className="flex flex-wrap items-baseline justify-between gap-2 rounded border border-line px-3 py-2 text-sm"
           >
             <span className="font-medium">{record.listName}</span>
-            <span className="text-slate-600 dark:text-slate-400">
+            <span className="text-ink-muted">
               {record.right} / {record.total} ({record.pct}%)
               {record.mode === 'wrong-only' && ' · missed words only'}
               {record.partial && ' · stopped early'} · {formatDate(record.finishedAt)}

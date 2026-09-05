@@ -233,7 +233,7 @@ export function AccountMenu({ drillInProgress, onSignedOut }: Props) {
               setConfirmingDelete(true)
               setMessage(null)
             }}
-            className="btn btn-quiet w-full justify-start border-0 bg-transparent text-wrong"
+            className="btn btn-quiet w-full justify-start border-0 bg-transparent text-incorrect"
           >
             Delete my account
           </button>
@@ -246,7 +246,7 @@ export function AccountMenu({ drillInProgress, onSignedOut }: Props) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-account-heading"
-            className="card w-full max-w-sm border-wrong bg-wrong-soft p-4"
+            className="card w-full max-w-sm border-incorrect bg-incorrect-soft p-4"
           >
             <h2 id="delete-account-heading" className="font-semibold">
               Delete my account

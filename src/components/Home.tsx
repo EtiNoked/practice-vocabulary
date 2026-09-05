@@ -32,7 +32,7 @@ export function Home({
     <section className="mx-auto flex max-w-xl flex-col gap-6 p-4">
       <header>
         <h1 className="text-2xl font-semibold">Vocabulary Trainer</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <p className="mt-1 text-ink-muted">
           Hear a word, say the answer, mark yourself.
         </p>
       </header>
@@ -42,7 +42,7 @@ export function Home({
       <button
         type="button"
         onClick={onNewList}
-        className="min-h-14 rounded-lg bg-emerald-700 text-lg text-white"
+        className="btn btn-primary btn-lg"
       >
         New list
       </button>
