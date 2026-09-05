@@ -25,3 +25,11 @@ dist-ssr
 
 # Test coverage output
 coverage
+
+# Firebase emulator
+firestore-debug.log
+firebase-debug.log
+.firebase/
+
+# Wrangler
+.wrangler/

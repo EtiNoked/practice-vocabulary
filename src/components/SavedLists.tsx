@@ -2,6 +2,9 @@ import type { WordList } from '../state/types'
 
 interface Props {
   lists: WordList[]
+  loading?: boolean
+  /** Where these lists live, which changes what the empty state can promise. */
+  scope?: 'device' | 'account'
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
   onRename: (list: WordList) => void
@@ -10,11 +13,30 @@ interface Props {
 
 const formatDate = (ms: number) => new Date(ms).toLocaleDateString('en-GB')
 
-export function SavedLists({ lists, onPractise, onEdit, onRename, onDelete }: Props) {
+export function SavedLists({
+  lists,
+  loading = false,
+  scope = 'device',
+  onPractise,
+  onEdit,
+  onRename,
+  onDelete,
+}: Props) {
+  // "No saved lists yet" shown to a signed-in user whose lists are still
+  // arriving reads as data loss. Say nothing definite until we know.
+  if (loading) {
+    return (
+      <p className="text-slate-600 dark:text-slate-400" role="status">
+        Loading your lists…
+      </p>
+    )
+  }
+
   if (lists.length === 0) {
     return (
       <p className="text-slate-600 dark:text-slate-400">
-        No saved lists yet. Make one and it will appear here, on this device.
+        No saved lists yet. Make one and it will appear here
+        {scope === 'account' ? ', on any device you sign in on.' : ', on this device.'}
       </p>
     )
   }

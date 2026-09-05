@@ -9,8 +9,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -18,4 +18,22 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+
+      # The Firestore emulator needs a JRE, and firebase-tools requires JDK 21+.
+      # The runner's default Java is older than that, so it has to be pinned —
+      # without this the step fails with "no longer supports Java version
+      # before 21". The npm script's Homebrew PATH prefix is a no-op here.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # These rules are the app's only server-side check, so an untested change
+      # to them must not reach production.
+      - run: npm run test:rules
+
       - run: npm run build
+
+      # Signed-out users must download zero Firebase (NFR4a). Fails if a static
+      # firebase/* import creeps into the eager chunk.
+      - run: node scripts/check-bundle.mjs

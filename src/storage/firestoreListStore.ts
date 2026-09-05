@@ -1,0 +1,145 @@
+import type { SessionRecord, WordList } from '../state/types'
+import type { FirebaseServices } from '../auth/firebase'
+import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
+
+/**
+ * Recursively drop keys whose value is `undefined`.
+ *
+ * Firestore THROWS on an undefined field value rather than skipping it, and
+ * `exactOptionalPropertyTypes` means optional fields (RawRow.conf) legitimately
+ * arrive absent. Stripping at the adapter boundary is deliberate: setting
+ * `ignoreUndefinedProperties` globally would paper over genuine bugs elsewhere
+ * by silently discarding fields nobody meant to omit. See plan.md R7.
+ */
+export function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripUndefined) as unknown as T
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) out[k] = stripUndefined(v)
+    }
+    return out as T
+  }
+  return value
+}
+
+function errorCode(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code: unknown }).code
+    if (typeof code === 'string') return code
+  }
+  return ''
+}
+
+function toWriteResult(error: unknown): WriteResult {
+  switch (errorCode(error)) {
+    case 'permission-denied':
+      return { ok: false, reason: 'permission' }
+    case 'unavailable':
+      return { ok: false, reason: 'offline' }
+    case 'not-found':
+      return { ok: false, reason: 'missing' }
+    default:
+      return { ok: false, reason: 'network' }
+  }
+}
+
+export function toStoreError(error: unknown): StoreError {
+  const message = error instanceof Error ? error.message : 'Something went wrong.'
+  switch (errorCode(error)) {
+    case 'permission-denied':
+      return { kind: 'permission', message: "Your account wouldn't allow that. Try signing in again." }
+    case 'unavailable':
+      return { kind: 'offline', message: "You're offline. Showing your last synced lists." }
+    default:
+      return { kind: 'unknown', message }
+  }
+}
+
+export function createFirestoreListStore(services: FirebaseServices, uid: string): ListStore {
+  const { db, fs } = services
+  let detachers: Unsubscribe[] = []
+  let disposed = false
+
+  const listsPath = `users/${uid}/lists`
+  const sessionsPath = `users/${uid}/sessions`
+
+  /** Track every listener so dispose() can detach all of them. A leaked
+   * onSnapshot keeps firing after sign-out and would write one user's data
+   * into the next user's view. */
+  function track(detach: Unsubscribe): Unsubscribe {
+    detachers.push(detach)
+    return () => {
+      detach()
+      detachers = detachers.filter((d) => d !== detach)
+    }
+  }
+
+  async function write(fn: () => Promise<void>): Promise<WriteResult> {
+    try {
+      await fn()
+      return { ok: true }
+    } catch (error) {
+      return toWriteResult(error)
+    }
+  }
+
+  return {
+    subscribeLists(onChange, onError): Unsubscribe {
+      if (disposed) return () => {}
+      const q = fs.query(fs.collection(db, listsPath), fs.orderBy('updatedAt', 'desc'))
+      return track(
+        fs.onSnapshot(
+          q,
+          (snap) => onChange(snap.docs.map((d) => ({ ...d.data(), id: d.id }) as WordList)),
+          (error) => onError(toStoreError(error)),
+        ),
+      )
+    },
+
+    // The list's existing client-generated uuid IS the document id. That is what
+    // makes migration idempotent for free — copying the same list twice writes
+    // the same document twice rather than creating two.
+    saveList: (list) =>
+      write(async () => {
+        await fs.setDoc(fs.doc(db, listsPath, list.id), stripUndefined(list))
+      }),
+
+    renameList: (id, name) =>
+      write(async () => {
+        await fs.updateDoc(fs.doc(db, listsPath, id), { name, updatedAt: Date.now() })
+      }),
+
+    removeList: (id) =>
+      write(async () => {
+        await fs.deleteDoc(fs.doc(db, listsPath, id))
+      }),
+
+    subscribeSessions(listId, onChange, onError): Unsubscribe {
+      if (disposed) return () => {}
+      const base = fs.collection(db, sessionsPath)
+      const q =
+        listId === null
+          ? fs.query(base, fs.orderBy('finishedAt', 'desc'))
+          : fs.query(base, fs.where('listId', '==', listId), fs.orderBy('finishedAt', 'desc'))
+      return track(
+        fs.onSnapshot(
+          q,
+          (snap) => onChange(snap.docs.map((d) => ({ ...d.data(), id: d.id }) as SessionRecord)),
+          (error) => onError(toStoreError(error)),
+        ),
+      )
+    },
+
+    recordSession: (record) =>
+      write(async () => {
+        await fs.setDoc(fs.doc(db, sessionsPath, record.id), stripUndefined(record))
+      }),
+
+    async dispose(): Promise<void> {
+      disposed = true
+      detachers.forEach((d) => d())
+      detachers = []
+    },
+  }
+}
