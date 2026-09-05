@@ -87,6 +87,49 @@ describe('resilience', () => {
     expect(listRepo.getAll()).toEqual([])
   })
 
+  /**
+   * The language code set is open now, so an unrecognised code is reachable —
+   * a list saved by a newer build, a hand-edited key, a document from another
+   * device. Left unchecked it reaches BCP47[lang] as `undefined` and produces a
+   * silent utterance with an empty language name.
+   */
+  describe('unknown language codes', () => {
+    const seed = (over: Record<string, unknown>) =>
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ schemaVersion: 1, lists: [{ ...makeList(), ...over }] }),
+      )
+
+    it.each([
+      ['an unknown string', 'xx'],
+      ['a number', 42],
+      ['null', null],
+      ['absent', undefined],
+    ])('coerces %s to a valid code rather than dropping the list', (_, value) => {
+      seed({ col1Lang: value, col2Lang: value })
+      const [list] = listRepo.getAll()
+      expect(list).toBeDefined()
+      expect(['en', 'nl', 'fr']).toContain(list!.col1Lang)
+      expect(['en', 'nl', 'fr']).toContain(list!.col2Lang)
+    })
+
+    // Coerce, never destroy: the words matter more than the accent.
+    it('keeps the list and its pairs intact when coercing', () => {
+      seed({ col1Lang: 'xx' })
+      const [list] = listRepo.getAll()
+      expect(list!.name).toBe('Lesson 3')
+      expect(list!.pairs).toHaveLength(1)
+      expect(list!.col2Lang).toBe('nl')
+    })
+
+    it('leaves a valid code untouched, including a newly added one', () => {
+      seed({ col1Lang: 'nl', col2Lang: 'fr' })
+      const [list] = listRepo.getAll()
+      expect(list!.col1Lang).toBe('nl')
+      expect(list!.col2Lang).toBe('fr')
+    })
+  })
+
   it('ignores a payload from a future schema version', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ schemaVersion: 99, lists: [makeList()] }))
     expect(listRepo.getAll()).toEqual([])

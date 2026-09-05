@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { listRepo } from './storage/listRepo'
 import { sessionRepo } from './storage/sessionRepo'
 import type { WordList } from './state/types'
-import { speechCalls } from './test/setup'
+import { setStubVoices, speechCalls } from './test/setup'
 import { renderApp } from './test/renderApp'
 
 const seeded: WordList = {
@@ -207,5 +207,95 @@ describe('recording score history', () => {
     // The name was captured at drill time, so the record still reads sensibly.
     expect(screen.getByText('Lesson 3')).toBeInTheDocument()
     vi.restoreAllMocks()
+  })
+})
+
+describe('practising a Dutch/French list', () => {
+  const dutchFrench: WordList = {
+    id: 'fr1',
+    name: 'Frans les 1',
+    col1Lang: 'nl',
+    col2Lang: 'fr',
+    langSource: 'header',
+    pairs: [
+      { id: 'p1', col1: 'de deur', col2: 'la porte' },
+      { id: 'p2', col1: 'het raam', col2: 'la fenêtre' },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    origin: 'manual',
+  }
+
+  /**
+   * Asserts the LANGUAGE, not just that speech happened. "Spoke the right words
+   * in the wrong accent" is the exact defect this feature fixes, and it passes a
+   * call-count assertion perfectly well.
+   */
+  it('speaks the French column with a French voice', async () => {
+    setStubVoices([
+      { name: 'Thomas', lang: 'fr-FR' },
+      { name: 'Google Nederlands', lang: 'nl-NL' },
+      { name: 'Daniel', lang: 'en-GB' },
+    ])
+    listRepo.save(dutchFrench)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    expect(screen.getByText(/you'll hear/i)).toHaveTextContent(/French/)
+    await user.click(screen.getByRole('button', { name: /^start$/i }))
+
+    const spoken = speechCalls.filter((c) => c.type === 'speak')
+    expect(spoken).toHaveLength(1)
+    // The drill shuffles, so which of the two French words comes first is not
+    // fixed. The language and the voice are the point of this test and are.
+    expect(spoken[0]).toMatchObject({ lang: 'fr-FR', voice: 'Thomas' })
+    expect(['la porte', 'la fenêtre']).toContain(
+      spoken[0]!.type === 'speak' ? spoken[0]!.text : '',
+    )
+  })
+
+  it('falls back to any French voice the device does have', async () => {
+    setStubVoices([{ name: 'Amelie', lang: 'fr-CA' }])
+    listRepo.save(dutchFrench)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ voice: 'Amelie' })
+  })
+
+  // The warning path is generic, but a language it has never been shown for is
+  // worth proving rather than assuming.
+  it('warns by name when the device has no French voice', async () => {
+    setStubVoices([{ name: 'Google Nederlands', lang: 'nl-NL' }])
+    listRepo.save(dutchFrench)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    expect(await screen.findByText(/no french voice on this device/i)).toBeInTheDocument()
+  })
+
+  it('still speaks Dutch for an existing English/Dutch list', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^start$/i }))
+    expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ lang: 'nl-NL' })
+  })
+
+  it('carries a saved manual language choice back into the editor', async () => {
+    listRepo.save({ ...dutchFrench, langSource: 'manual' })
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
+    expect((screen.getByLabelText(/column 2 language/i) as HTMLSelectElement).value).toBe('fr')
+    expect(screen.queryByText(/guessed/i)).not.toBeInTheDocument()
   })
 })

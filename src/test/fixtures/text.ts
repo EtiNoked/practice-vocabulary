@@ -75,5 +75,38 @@ export const DUTCH_FIRST_WITH_HEADER = `Nederlands\tEngels
 dochter\tdaughter
 doodgaan\tto die`
 
+/**
+ * Dutch/French, the pairing this app was extended for. The header uses the Dutch
+ * names for both languages, because that is what a Dutch-speaking learner writes.
+ */
+export const NL_FR_WITH_HEADER = `Nederlands\tFrans
+de deur\tla porte
+het raam\tla fenêtre
+de zomer\tl'été`
+
+/**
+ * The same list with no header, which is the case that used to be labelled
+ * Dutch → English and read the French column in an English voice.
+ *
+ * Note the accent-free rows ("de tafel / la table", "gisteren / hier"). A fixture
+ * made entirely of accented words would only prove the easy half of the heuristic.
+ */
+export const NL_FR_NO_HEADER = `de deur\tla porte
+het raam\tla fenêtre
+de zomer\tl'été
+de jongen\tle garçon
+de tafel\tla table
+gisteren\thier
+de school\tl'école`
+
+/** French first, to prove the three-language detection is not positional either. */
+export const FR_NL_NO_HEADER = `la porte\tde deur
+la fenêtre\thet raam
+l'été\tde zomer
+le garçon\tde jongen
+la table\tde tafel
+hier\tgisteren
+l'école\tde school`
+
 export const EMPTY = ''
 export const WHITESPACE_ONLY = '   \n\t\n  \n'

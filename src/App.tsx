@@ -196,6 +196,8 @@ export default function App() {
           initialRows={state.rows}
           {...(state.listId !== undefined ? { listId: state.listId } : {})}
           {...(state.name !== undefined ? { initialName: state.name } : {})}
+          {...(state.langs !== undefined ? { initialLangs: state.langs } : {})}
+          {...(state.langSource !== undefined ? { initialLangSource: state.langSource } : {})}
           onConfirm={(list) => {
             // Editing an already-saved list persists straight away: the user came
             // from a stored list, so silently dropping their correction if they

@@ -85,22 +85,24 @@ has none, which is why `DUTCH_DIGRAPHS` exists in the first place).
 words: it is equally common in Dutch, so A3 would strip it anyway. Leaving it out of the source data
 makes that visible to a reader.
 
-### A3. Cross-profile marker exclusion (FR-9)
+### A3. Cross-profile marker overlap — REVISED DURING IMPLEMENTATION
 
-`de`, `en` (Dutch *and* French), `a` (English *and* French) and `is` carry no discriminating signal.
-Compute the discriminating set once, at module load:
+**The plan originally called for excluding markers shared between profiles (`EXCLUSIVE_MARKERS`).
+That was wrong and was not built.** Recorded here rather than quietly dropped.
 
-```ts
-/**
- * Markers that appear in more than one profile are not evidence — `de` is as
- * Dutch as it is French. Computed rather than hand-pruned so that adding a
- * language cannot silently reintroduce a collision.
- */
-export const EXCLUSIVE_MARKERS: Record<LangCode, ReadonlySet<string>> = …
-```
+Global exclusion throws away real signal. `de` fails to discriminate Dutch *from French* — but it
+discriminates both from English perfectly well. Removing it globally would have made every
+Dutch/English list harder to call in order to help Dutch/French lists.
 
-A test asserts that the union of the exclusive sets is disjoint, and that `de` is in none of them.
-That test is what turns FR-9 from a convention into a guarantee.
+What was built instead: **score each language independently against its full marker list**, and
+choose the winning pair jointly (§ B2). A shared marker then lifts both candidates equally and
+cancels out of the comparison *between them*, while still separating both from a language that
+lacks it. The overlap handles itself, and no data has to be pruned.
+
+The integrity test changed accordingly. Instead of asserting the exclusive sets are disjoint, it
+asserts that **every language has at least one marker no other language claims** — the property that
+actually matters, because a language whose markers are all shared could never win on function words
+alone. `de` belonging to both Dutch and French is asserted as the documented, expected case.
 
 ## Workstream B — Generalise detection
 
@@ -270,7 +272,17 @@ the 003 storage refactor.** Extend those tests; do not restructure the module.
 **Modified**
 `src/lang/languages.ts` · `src/parse/types.ts` · `src/parse/languageDetect.ts` ·
 `src/components/ListEditor.tsx` · `src/App.tsx` (pass saved languages to the editor) ·
-`src/storage/listRepo.ts` · `src/test/fixtures/text.ts` · `README.md`
+`src/state/appMachine.ts` · `src/storage/listRepo.ts` · `src/test/fixtures/text.ts` · `README.md`
+
+**`src/state/appMachine.ts` was NOT in this list originally, and the plan was wrong.** `EDIT_LIST`
+projects a `WordList` down to `RawRow[]` and drops the language fields on the floor, so there is no
+route by which a saved list's languages can reach the editor without the `editing` state carrying
+them. The fix is two optional fields (`langs`, `langSource`) alongside the `name` and `listId` that
+state already denormalises for exactly the same reason — the existing pattern, extended.
+
+The alternative — having `App` look the list up by `state.listId` — was rejected: it would be a
+second, inconsistent route for list data to reach the editor, and it would break silently if
+`EDIT_LIST` ever became reachable for a list not yet in `lists`.
 
 **New**
 `src/lang/languages.test.ts` — the profile-integrity suite (FR-5, FR-9). There is no test file for

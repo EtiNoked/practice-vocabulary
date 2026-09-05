@@ -1,8 +1,8 @@
 import { memo, useCallback, useMemo, useState } from 'react'
-import { LANG_NAMES } from '../lang/languages'
+import { LANG_CODES, LANG_NAMES, type LangCode } from '../lang/languages'
 import { detectLanguages } from '../parse/languageDetect'
 import { countComplete, isComplete, normalizeRows } from '../parse/normalize'
-import type { RawRow } from '../parse/types'
+import { isGuessed, type LangSource, type RawRow } from '../parse/types'
 import type { WordList, WordPair } from '../state/types'
 import { PastePanel } from './PastePanel'
 
@@ -13,6 +13,12 @@ interface Props {
   initialRows: RawRow[]
   initialName?: string
   listId?: string
+  /**
+   * The languages a saved list was stored with. Without these, reopening a list
+   * re-detects from its rows and throws away a choice the user already made.
+   */
+  initialLangs?: { col1: LangCode; col2: LangCode }
+  initialLangSource?: LangSource
   onConfirm: (list: WordList) => void
   onCancel: () => void
 }
@@ -82,6 +88,8 @@ export function ListEditor({
   initialRows,
   initialName,
   listId,
+  initialLangs,
+  initialLangSource,
   onConfirm,
   onCancel,
 }: Props) {
@@ -94,11 +102,73 @@ export function ListEditor({
   const [dirty, setDirty] = useState(false)
   const [showPaste, setShowPaste] = useState(false)
 
+  /**
+   * A language choice the user made, which outranks detection.
+   *
+   * Starts populated only when reopening a list that was set manually — a list
+   * whose languages were detected should go on being detected, so that editing
+   * its rows can still correct a bad guess.
+   */
+  const [override, setOverride] = useState<{ col1: LangCode; col2: LangCode } | null>(
+    initialLangSource === 'manual' && initialLangs ? initialLangs : null,
+  )
+
   // Detection runs on the live rows, so the badge reflects what the user has
   // typed right now — including a header row they just added to correct a guess.
   const detection = useMemo(() => detectLanguages(normalizeRows(rows)), [rows])
-  const bodyRows = detection.headerConsumed ? rows.slice(1) : rows
+
+  /**
+   * What the UI shows and what gets saved.
+   *
+   * `headerConsumed` deliberately still comes from DETECTION even when the
+   * languages are overridden. It answers "is row 0 a header?", which is a question
+   * about the rows and not about the languages — taking it from the override
+   * would re-admit the header row as a practisable pair.
+   */
+  const effective = override
+    ? {
+        col1Lang: override.col1,
+        col2Lang: override.col2,
+        source: 'manual' as LangSource,
+        headerConsumed: detection.headerConsumed,
+      }
+    : detection
+
+  const bodyRows = effective.headerConsumed ? rows.slice(1) : rows
   const completeCount = countComplete(bodyRows)
+
+  /**
+   * Set one column's language, moving the other out of the way if it already
+   * held that language. An exchange rather than a rejection: a user setting both
+   * columns to the same language is almost always trying to swap them.
+   */
+  const chooseLang = useCallback(
+    (column: 'col1' | 'col2', lang: LangCode) => {
+      setDirty(true)
+      setOverride((current) => {
+        const base = current ?? { col1: effective.col1Lang, col2: effective.col2Lang }
+        const other = column === 'col1' ? 'col2' : 'col1'
+        return base[other] === lang
+          ? { ...base, [column]: lang, [other]: base[column] }
+          : { ...base, [column]: lang }
+      })
+    },
+    [effective.col1Lang, effective.col2Lang],
+  )
+
+  /**
+   * Exchange both the column contents and their languages.
+   *
+   * Setting the override is not optional: swapping only the contents lets the
+   * next detection pass swap the languages straight back, and the two changes
+   * cancel out into a button that appears to do nothing.
+   */
+  const handleSwap = useCallback(() => {
+    setDirty(true)
+    // Spread the row so RawRow.conf survives — it is reserved for the OCR path.
+    setRows((current) => current.map((r) => ({ ...r, col1: r.col2, col2: r.col1 })))
+    setOverride({ col1: effective.col2Lang, col2: effective.col1Lang })
+  }, [effective.col1Lang, effective.col2Lang])
 
   const handleChange = useCallback((index: number, patch: Partial<RawRow>) => {
     setDirty(true)
@@ -136,6 +206,8 @@ export function ListEditor({
 
   function handleConfirm() {
     const clean = normalizeRows(rows)
+    // Re-detected on the CLEAN rows, which is what makes typing a header row a
+    // working correction. The override still wins over its languages.
     const detected = detectLanguages(clean)
     const body = detected.headerConsumed ? clean.slice(1) : clean
     const pairs: WordPair[] = body
@@ -148,9 +220,9 @@ export function ListEditor({
       // create mode mints a fresh one.
       id: mode === 'update' && listId ? listId : nextId(),
       name: name.trim() === '' ? 'Untitled list' : name.trim(),
-      col1Lang: detected.col1Lang,
-      col2Lang: detected.col2Lang,
-      langSource: detected.source,
+      col1Lang: override ? override.col1 : detected.col1Lang,
+      col2Lang: override ? override.col2 : detected.col2Lang,
+      langSource: override ? 'manual' : detected.source,
       pairs,
       createdAt: now,
       updatedAt: now,
@@ -158,7 +230,7 @@ export function ListEditor({
     })
   }
 
-  const guessed = detection.source !== 'header'
+  const guessed = isGuessed(effective.source)
 
   return (
     <section className="mx-auto max-w-3xl p-4">
@@ -182,14 +254,43 @@ export function ListEditor({
             : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
         }`}
       >
-        Column 1 {LANG_NAMES[detection.col1Lang]} → Column 2 {LANG_NAMES[detection.col2Lang]} 🔊
+        Column 1 {LANG_NAMES[effective.col1Lang]} → Column 2 {LANG_NAMES[effective.col2Lang]} 🔊
         {guessed && ' (guessed)'}
       </p>
       {guessed && (
         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Add a first row reading “English” and “Dutch” to set this exactly.
+          Not right? Pick the languages below — or name them in a first row.
         </p>
       )}
+
+      <div className="mt-2 flex flex-wrap items-end gap-3">
+        {(['col1', 'col2'] as const).map((column) => (
+          <div key={column} className="flex flex-col gap-1">
+            <label className="text-xs font-medium" htmlFor={`lang-${column}`}>
+              {column === 'col1' ? 'Column 1 language' : 'Column 2 language'}
+            </label>
+            <select
+              id={`lang-${column}`}
+              value={column === 'col1' ? effective.col1Lang : effective.col2Lang}
+              onChange={(e) => chooseLang(column, e.target.value as LangCode)}
+              className="min-h-11 rounded border border-slate-300 px-2 dark:border-slate-600 dark:bg-slate-800"
+            >
+              {LANG_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {LANG_NAMES[code]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={handleSwap}
+          className="min-h-11 rounded border border-slate-300 px-3 dark:border-slate-600"
+        >
+          Swap columns ⇄
+        </button>
+      </div>
 
       <div className="mt-3 hidden gap-2 text-sm font-medium sm:flex">
         <span className="flex-1">Column 1 — the answer</span>

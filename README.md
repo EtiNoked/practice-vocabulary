@@ -1,6 +1,7 @@
 # Vocabulary Trainer
 
-A small web app for practising English↔Dutch vocabulary by **listening**.
+A small web app for practising vocabulary by **listening**. English, Dutch and
+French, in any pairing — English↔Dutch, Dutch↔French, French↔English.
 
 Put a word list in — type it, paste it from a spreadsheet, or upload a file — then
 drill yourself. The app reads **column 2** aloud and keeps **column 1** hidden as the
@@ -59,10 +60,17 @@ safe: lines split at the *first* separator only, so
 
 ### Which column is which language
 
-Detected automatically. Put `English` and `Dutch` in the first row and it's read
-straight from there. Otherwise the app guesses from spelling patterns and shows an
-amber **(guessed)** badge — if the guess is wrong, add that header row and it
-corrects itself.
+**Pick them from the two dropdowns** in the editor. That is the reliable way, and
+your choice is saved with the list.
+
+The app also fills them in for you. Name the languages in the first row — `English`
+and `Dutch`, or `Nederlands` and `Frans` — and it reads them straight from there.
+Failing that it guesses from spelling patterns and shows an amber **(guessed)**
+badge. When it can't tell, it says so rather than picking: a French column read in
+an English voice is worse than being asked.
+
+Got the columns the wrong way round? **Swap columns ⇄** exchanges the words and
+their languages together.
 
 ## Practising
 
@@ -74,8 +82,9 @@ Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 
 ## If you hear nothing
 
-Speech uses your device's own voices, so a Dutch voice has to be installed. If it
-isn't, the app says so and shows the word as text instead, so you can still practise.
+Speech uses your device's own voices, so a voice for the language being read has to
+be installed. If it isn't, the app names the missing language and shows the word as
+text instead, so you can still practise.
 
 - **iPhone / iPad** — Settings → Accessibility → Spoken Content → Voices
 - **Mac** — System Settings → Accessibility → Spoken Content → System Voice → Manage
@@ -119,8 +128,14 @@ by device rather than by browser.
 Vite · React · TypeScript (strict) · Tailwind · Vitest. Two runtime dependencies:
 `react` and `react-dom`.
 
+Adding a fourth language is a data change: one entry in
+[`src/lang/languages.ts`](src/lang/languages.ts) — a voice tag, a display name,
+the words that name it in a header row, and a spelling profile — and nothing else
+anywhere. `languages.test.ts` fails if any of the four is missed.
+
 The interesting parts are all pure functions with thorough tests —
-[`src/parse/`](src/parse) turns text into word pairs,
+[`src/parse/`](src/parse) turns text into word pairs and works out which column
+holds which language,
 [`src/state/session.ts`](src/state/session.ts) runs the drill, and
 [`src/speech/tts.ts`](src/speech/tts.ts) wraps the Web Speech API's various
 cross-browser quirks.

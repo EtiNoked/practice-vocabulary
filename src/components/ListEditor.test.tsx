@@ -153,6 +153,140 @@ describe('confirming', () => {
   })
 })
 
+describe('language selectors', () => {
+  const col1Select = () => screen.getByLabelText(/column 1 language/i) as HTMLSelectElement
+  const col2Select = () => screen.getByLabelText(/column 2 language/i) as HTMLSelectElement
+
+  const NL_FR = [
+    { col1: 'de deur', col2: 'la porte' },
+    { col1: 'het raam', col2: 'la fenêtre' },
+    { col1: 'de zomer', col2: "l'été" },
+  ]
+
+  it('offers every language in the table on both selectors', () => {
+    setup()
+    for (const select of [col1Select(), col2Select()]) {
+      const options = [...select.options].map((o) => o.textContent)
+      expect(options).toEqual(expect.arrayContaining(['English', 'Dutch', 'French']))
+    }
+  })
+
+  it('prefills from detection', () => {
+    setup({ initialRows: NL_FR })
+    expect(col1Select().value).toBe('nl')
+    expect(col2Select().value).toBe('fr')
+  })
+
+  it('follows detection while the user has not chosen', async () => {
+    const { user } = setup()
+    await user.type(cells()[0]!, 'de deur')
+    await user.type(cells()[1]!, 'la fenêtre')
+    expect(col1Select().value).toBe('nl')
+  })
+
+  it('turns the badge authoritative once the user chooses', async () => {
+    const { user } = setup({ initialRows: NL_FR })
+    expect(screen.getByText(/guessed/i)).toBeInTheDocument()
+    await user.selectOptions(col2Select(), 'en')
+    expect(screen.queryByText(/guessed/i)).not.toBeInTheDocument()
+  })
+
+  /**
+   * The pinning test. Detection re-runs on every keystroke, so without an override
+   * that outranks it the user's choice is undone by their next edit.
+   */
+  it('does not let a later row edit revert the chosen language', async () => {
+    const { user } = setup({ initialRows: NL_FR })
+    await user.selectOptions(col2Select(), 'en')
+    await user.type(cells()[0]!, ' extra')
+    expect(col2Select().value).toBe('en')
+  })
+
+  it('writes the chosen languages and a manual source on save', async () => {
+    const { user, onConfirm } = setup({ initialRows: NL_FR })
+    await user.selectOptions(col1Select(), 'fr')
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    expect(list.langSource).toBe('manual')
+    expect(list.col1Lang).toBe('fr')
+  })
+
+  // Exchange rather than reject: a user setting both the same is almost always
+  // trying to swap them.
+  it('never lets both columns hold the same language', async () => {
+    const { user } = setup({ initialRows: NL_FR })
+    await user.selectOptions(col2Select(), 'nl')
+    expect(col1Select().value).toBe('fr')
+    expect(col2Select().value).toBe('nl')
+  })
+
+  it('keeps a saved manual choice when the list is reopened', () => {
+    render(
+      <ListEditor
+        mode="update"
+        listId="x"
+        initialName="Lesson 3"
+        initialRows={NL_FR}
+        initialLangs={{ col1: 'fr', col2: 'en' }}
+        initialLangSource="manual"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+    expect(col1Select().value).toBe('fr')
+    expect(col2Select().value).toBe('en')
+  })
+
+  it('still consumes a header row while the languages are overridden', async () => {
+    const { user, onConfirm } = setup({
+      initialRows: [
+        { col1: 'English', col2: 'Dutch' },
+        { col1: 'daughter', col2: 'dochter' },
+      ],
+    })
+    await user.selectOptions(col2Select(), 'fr')
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    // headerConsumed is a question about the ROWS, so overriding the languages
+    // must not re-admit the header as a practisable pair.
+    expect(list.pairs).toHaveLength(1)
+    expect(list.col2Lang).toBe('fr')
+  })
+})
+
+describe('swapping columns', () => {
+  const swap = () => screen.getByRole('button', { name: /swap columns/i })
+
+  it('exchanges the contents and the languages together', async () => {
+    const { user, onConfirm } = setup({
+      initialRows: [
+        { col1: 'daughter', col2: 'dochter' },
+        { col1: 'twins', col2: 'tweeling' },
+      ],
+    })
+    await user.click(swap())
+    expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    expect(list.pairs[0]).toMatchObject({ col1: 'dochter', col2: 'daughter' })
+    expect(list.col1Lang).toBe('nl')
+    expect(list.col2Lang).toBe('en')
+  })
+
+  it('is its own inverse', async () => {
+    const { user, onConfirm } = setup({
+      initialRows: [{ col1: 'daughter', col2: 'dochter' }],
+    })
+    await user.click(swap())
+    await user.click(swap())
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    expect(list.pairs[0]).toMatchObject({ col1: 'daughter', col2: 'dochter' })
+    expect(list.col1Lang).toBe('en')
+    expect(list.col2Lang).toBe('nl')
+  })
+})
+
 describe('modes', () => {
   // Differences between entry points must stay confined to the mode prop.
   it('renders the same controls in create and update mode', () => {

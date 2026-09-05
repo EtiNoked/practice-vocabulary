@@ -1,4 +1,5 @@
-import type { RawRow } from '../parse/types'
+import type { LangCode } from '../lang/languages'
+import type { LangSource, RawRow } from '../parse/types'
 import {
   createSession,
   isFinished,
@@ -27,6 +28,13 @@ export type AppState =
       /** Present only in update mode. */
       listId?: string
       name?: string
+      /**
+       * Carried alongside the rows for the same reason `name` is: projecting a
+       * WordList down to RawRow[] would otherwise drop the languages, and the
+       * editor would re-detect them — silently discarding a choice the user made.
+       */
+      langs?: { col1: LangCode; col2: LangCode }
+      langSource?: LangSource
     }
   | { screen: 'ready'; list: WordList }
   | { screen: 'practising'; list: WordList; session: Session }
@@ -69,6 +77,8 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
         listId: action.list.id,
         name: action.list.name,
         rows: action.list.pairs.map((p) => ({ col1: p.col1, col2: p.col2 })),
+        langs: { col1: action.list.col1Lang, col2: action.list.col2Lang },
+        langSource: action.list.langSource,
       }
 
     case 'PRACTISE_LIST':
