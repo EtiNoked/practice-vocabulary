@@ -2,6 +2,8 @@
 
 **Feature ID:** 003-user-accounts
 **Total:** 26 tasks across 8 phases
+**Status:** 24 of 26 done on `feature/user-accounts`. The 2 outstanding are console/manual work
+only the repo owner can do — see § Execution status.
 **Legend:** `[P]` = parallelisable with siblings · every task ends with a runnable VALIDATE
 
 > **TDD is mandatory**, as in 001. Write the test, watch it fail (RED), write the minimal code
@@ -17,6 +19,44 @@
 > everything in `src/parse/` are **not modified**. If a task starts editing them, the abstraction has
 > leaked — stop and reconsider. The one exception is Task 19, which adds a new type to
 > `src/state/types.ts`.
+
+---
+
+## Execution status
+
+| | |
+|---|---|
+| Branch | `feature/user-accounts` (8 commits, one per phase) |
+| Done | 24 of 26 tasks |
+| Unit tests | 317 pass (172 were the v1 baseline) |
+| Emulator tests | 40 pass (24 rules + 16 Firestore adapter) |
+| Eager bundle | 71.7 KB gzipped, budget 150 KB |
+| Invariant | `session.ts`, `appMachine.ts`, `parse/`, `speech/`, `listRepo.ts` byte-identical to `main` |
+
+**Blocked on the repo owner — both are console work, not code:**
+
+- **Task 1** — create the Firebase project, enable the Google provider and Firestore, add
+  `localhost` to authorised domains, and put the config into `.env.local`. Until then the app
+  builds, tests and runs fine, signed-out only: `firebaseConfigured()` is false, so sign-in is
+  never offered. Nothing else is blocked by this.
+- **Task 26** — the deploy half: Cloudflare Pages env vars, the production authorised domain,
+  `firebase deploy --only firestore:rules`, and the API-key referrer restriction. The CI half
+  (rules tests + bundle guard in `ci.yml`) is done.
+
+**Deviations from the plan as written:**
+
+- Task 19 (`SessionRecord` type) was pulled forward ahead of Task 4, which references it. An
+  ordering slip in the plan; the task carries no dependencies so moving it was free.
+- The `no-restricted-imports` guard needed `paths` for the bare `firebase` package plus
+  `patterns` for `firebase/*`. A single glob group also matched the relative `./firebase`
+  import, which would have banned the wrapper module from importing itself.
+- `tests/rules/` holds the Firestore adapter's tests too, not just the rules': the adapter is
+  only meaningfully tested through the real rules, and it needs the same emulator.
+- Migration copies lists but NOT local score history. The rules make session records
+  append-only, so re-writing an already-copied record is rejected and a retry could never
+  converge. Recorded in `migrate.ts`.
+- Sign-out clearing Firestore's IndexedDB cache (FR12 / Story 6) was implemented in Phase 8
+  rather than Phase 3; `signOut()` alone leaves the previous user's lists cached on the device.
 
 ---
 
