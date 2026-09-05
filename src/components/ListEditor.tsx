@@ -351,7 +351,7 @@ export function ListEditor({
           type="button"
           disabled={completeCount === 0}
           onClick={handleConfirm}
-          className="min-h-11 rounded bg-primary px-4 text-white disabled:opacity-40"
+          className="min-h-11 rounded bg-primary px-4 text-primary-ink disabled:opacity-40"
         >
           Start practice
         </button>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/useAuth'
 import { signInFailureMessage } from '../auth/messages'
+import { ThemeToggle } from './ThemeToggle'
 
 interface Props {
   /** A drill is running, so signing out destroys it — ask before doing that. */
@@ -143,6 +144,13 @@ export function AccountMenu({ drillInProgress, onSignedOut }: Props) {
             <p className="text-sm text-ink-muted">
               Sync your lists and scores across your devices.
             </p>
+
+            {/* A guest gets the theme control too. It is not an account setting,
+                and gating it behind signing in would be a strange thing to do to
+                someone who has just been offered the choice not to. */}
+            <div className="border-t border-line pt-2">
+              <ThemeToggle />
+            </div>
             {message && (
               <p role="alert" className="rounded-md bg-accent-soft p-2 text-sm text-ink">
                 {message}
@@ -203,6 +211,13 @@ export function AccountMenu({ drillInProgress, onSignedOut }: Props) {
             {user.email && user.email !== label && (
               <p className="truncate text-sm text-ink-muted">{user.email}</p>
             )}
+          </div>
+
+          {/* Above the account actions, and outside the menuitem sequence: this
+              changes how the app looks, not who is signed into it, and it is the
+              only control here that is not destructive or near-destructive. */}
+          <div className="border-b border-line px-2 py-2">
+            <ThemeToggle />
           </div>
 
           <button

@@ -21,6 +21,7 @@ import { useAuth } from './auth/useAuth'
 import { readGuestChoice, writeGuestChoice } from './auth/guestChoice'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { AccountMenu } from './components/AccountMenu'
+import { ThemeToggle } from './components/ThemeToggle'
 import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
 import { buildSessionRecord } from './state/sessionRecord'
@@ -295,23 +296,33 @@ export default function App() {
       {voiceMissing && promptLang && <VoiceWarning lang={promptLang} />}
 
       {/*
-        The account slot, on every screen.
+        The settings slot, on every screen.
 
         In normal flow rather than fixed: TestCard's header already owns the
         top-right corner with its Quit button, and an overlay lands on top of it.
         `max-w-xl px-4` matches every screen's container so the control aligns
-        with the content edge, not the viewport edge. Rendered only when there is
-        an account system at all, so a local-only build has no extra DOM and no
-        extra height.
+        with the content edge, not the viewport edge.
+
+        Always rendered now, where it used to collapse without a Firebase project.
+        The theme lives in here, and it is not an account setting — leaving the
+        slot out of a local-only build would take dark mode with it.
       */}
-      {authAvailable && (
-        <div className="mx-auto flex max-w-xl justify-end px-4 pt-3">
+      <div className="mx-auto flex max-w-xl justify-end px-4 pt-3">
+        {authAvailable ? (
           <AccountMenu
             drillInProgress={state.screen === 'practising'}
             onSignedOut={handleSignedOut}
           />
-        </div>
-      )}
+        ) : (
+          /*
+           * No account system, so no avatar and no popover to hang the theme
+           * control in — but the theme is not an account setting, and a
+           * local-only build would otherwise have no way to reach it at all.
+           * The same slot, the same alignment, one control instead of two.
+           */
+          <ThemeToggle />
+        )}
+      </div>
 
       {state.screen === 'home' && (
         <Home

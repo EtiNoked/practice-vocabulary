@@ -151,11 +151,25 @@ from `src/assets/fonts/` under the SIL Open Font License. It was chosen because 
 brief is reading proficiency, which is the actual job here; self-hosted because the app's
 Content-Security-Policy allows no third-party font host and should stay that way.
 
-**The app is light-only.** Dark mode was removed deliberately, not lost: one palette gets
-designed well where two get designed adequately. Because every value lives in one place,
-a dark theme would come back as a second block of the same token names rather than as the
-83 hand-picked `dark:` class pairs it used to be. `src/test/theme.test.ts` fails if one
-reappears by accident.
+**Dark mode is a second block of the same token names**, and nothing else. It was removed
+in 005 as 83 hand-picked `dark:` class pairs and came back in 007 as nineteen redefined
+custom properties — no component knows which theme it is in, and `src/test/theme.test.ts`
+still fails if a `dark:` variant reappears anywhere in `src/`.
+
+It offers **System, Light and Dark**, from the menu behind the avatar (or, where there is
+no Firebase project and so no avatar, from the same corner slot on its own). System is the
+default, and it costs no JavaScript: the OS preference is answered by a
+`prefers-color-scheme` media query in CSS, so the first frame is already right. Only an
+explicit override reaches for storage — a `data-theme` attribute written by
+[`src/theme/theme.ts`](src/theme/theme.ts) before React renders. That split is not
+incidental; the usual anti-flash trick, a blocking inline `<script>`, is barred by the
+app's own CSP.
+
+Two rules follow from having two palettes. A colour must be defined in **all three** blocks
+or none — one defined only in light silently keeps its light value in dark. And a filled
+control names its foreground with a `--color-*-ink` token rather than a literal, because
+`--color-correct` is a dark green in light and a light green in dark, and white only works
+on one of them.
 
 Adding a fourth language is a data change: one entry in
 [`src/lang/languages.ts`](src/lang/languages.ts) — a voice tag, a display name,
