@@ -1,6 +1,7 @@
 import type { SessionRecord, WordList } from '../state/types'
 import type { FirebaseServices } from '../auth/firebase'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
+import { MAX_RECORDS as MAX_SESSION_RECORDS } from './sessionRepo'
 
 /**
  * Recursively drop keys whose value is `undefined`.
@@ -118,10 +119,24 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
     subscribeSessions(listId, onChange, onError): Unsubscribe {
       if (disposed) return () => {}
       const base = fs.collection(db, sessionsPath)
+      /*
+       * Bounded, matching sessionRepo.MAX_RECORDS.
+       *
+       * This subscribed to an UNBOUNDED collection, which was survivable only
+       * while nothing read past the newest ten. 006's review screens read all of
+       * it, on every recomputation — so the two stores have to agree on how much
+       * history exists, or the same user gets a different missed-word set on two
+       * devices.
+       */
       const q =
         listId === null
-          ? fs.query(base, fs.orderBy('finishedAt', 'desc'))
-          : fs.query(base, fs.where('listId', '==', listId), fs.orderBy('finishedAt', 'desc'))
+          ? fs.query(base, fs.orderBy('finishedAt', 'desc'), fs.limit(MAX_SESSION_RECORDS))
+          : fs.query(
+              base,
+              fs.where('listId', '==', listId),
+              fs.orderBy('finishedAt', 'desc'),
+              fs.limit(MAX_SESSION_RECORDS),
+            )
       return track(
         fs.onSnapshot(
           q,

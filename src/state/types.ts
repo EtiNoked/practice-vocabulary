@@ -84,6 +84,13 @@ export interface Score {
   total: number
   pct: number
   wrongPairs: WordPair[]
+  /**
+   * The complement of `wrongPairs` over the marked cards.
+   *
+   * Together the two partition exactly what was answered — never the whole list,
+   * so a drill quit half way still yields a truthful pair of arrays.
+   */
+  rightPairs: WordPair[]
 }
 
 /**
@@ -109,6 +116,21 @@ export interface SessionRecord {
    * mastery feature — capturing it now avoids needing a backfill later.
    */
   wrongPairs: WordPair[]
+  /**
+   * Snapshot of the pairs answered correctly.
+   *
+   * OPTIONAL, and absent means "this drill predates right-answer recording" —
+   * never "nothing was right", which is an empty array. Records are append-only
+   * (`allow update: if false` in firestore.rules), so there is no backfill and
+   * never will be: every record written before 006 is permanently blind here,
+   * and the review screens say so rather than showing an empty Right section.
+   *
+   * Also omitted above MAX_RIGHT_PAIRS, and stripped from older records under
+   * localStorage quota pressure — both of which land in exactly the same
+   * "not recorded" path the legacy records take, which is why that path is worth
+   * building properly rather than treating as an edge case.
+   */
+  rightPairs?: WordPair[]
   finishedAt: number
   /** A wrong-only re-run is real practice, but must not flatter the average. */
   mode: 'full' | 'wrong-only'
