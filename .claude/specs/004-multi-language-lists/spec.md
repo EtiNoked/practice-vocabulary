@@ -164,7 +164,8 @@ flowchart TD
 | FR-6 | `matchHeaderCell` iterates `LANG_CODES`, not a literal list, so every language in the table is matchable from a header row. |
 | FR-7 | The heuristic scores **each column against each language independently**. The cross-subtraction of English markers is removed. |
 | FR-8 | The chosen assignment is the highest-scoring pair of **distinct** languages across both columns. |
-| FR-9 | A marker word that appears in more than one profile is excluded from scoring, because it carries no discriminating signal. This is enforced by a test, not by discipline. |
+| FR-9 | ~~A marker word that appears in more than one profile is excluded from scoring.~~ **Revised during implementation:** markers are *not* pruned. Independent per-language scoring plus a joint choice of pair makes a shared marker cancel out where it carries no signal, while keeping it where it does. What is enforced by test is that every language has at least one marker no other claims. See `plan.md` § A3. |
+| FR-9a | Every language must carry positive spelling evidence of its own. English had none while the detector was binary — "not Dutch" sufficed — and a language that can only score zero loses to any rival that scores anything. |
 | FR-10 | When the winning pair does not beat the runner-up by `MARGIN`, detection returns `source: 'default'` rather than a low-confidence guess. |
 | FR-11 | `DEFAULT_DETECTION` stays `en` → `nl` — the commonest case for existing users. |
 | FR-12 | Detection remains a pure function of `RawRow[]`. No I/O, no React, no locale sniffing. |

@@ -1,3 +1,4 @@
+import { LANG_CODES, type LangCode } from '../lang/languages'
 import type { WordList } from '../state/types'
 
 export const STORAGE_KEY = 'pvt.lists.v1'
@@ -17,6 +18,34 @@ function isWordList(value: unknown): value is WordList {
   if (typeof value !== 'object' || value === null) return false
   const l = value as Record<string, unknown>
   return typeof l.id === 'string' && typeof l.name === 'string' && Array.isArray(l.pairs)
+}
+
+/**
+ * Coerce a stored language code to one the app knows.
+ *
+ * COERCES, never rejects. Dropping the list would lose the user's words over a
+ * two-character field; a wrong-but-valid code costs at most one drill read in the
+ * wrong accent, which the editor's amber badge and language selectors then fix.
+ * That matches this module's contract that the worst acceptable outcome is
+ * degraded rather than destructive.
+ *
+ * This could not fire while the code set was closed and nothing wrote an unknown
+ * value. It can now: a list saved by a newer build, a hand-edited key, or a
+ * document written by another device. Left unchecked, an unknown code reaches
+ * BCP47[lang] as `undefined` and produces a silent utterance and an empty
+ * language name in three components.
+ */
+function toLangCode(value: unknown, fallback: LangCode): LangCode {
+  return typeof value === 'string' && (LANG_CODES as readonly string[]).includes(value)
+    ? (value as LangCode)
+    : fallback
+}
+
+function withValidLangs(list: WordList): WordList {
+  const col1Lang = toLangCode(list.col1Lang, 'en')
+  const col2Lang = toLangCode(list.col2Lang, 'nl')
+  if (col1Lang === list.col1Lang && col2Lang === list.col2Lang) return list
+  return { ...list, col1Lang, col2Lang }
 }
 
 /**
@@ -41,7 +70,7 @@ function read(): WordList[] {
     const payload = parsed as Partial<Payload>
     if (payload.schemaVersion !== SCHEMA_VERSION) return []
     if (!Array.isArray(payload.lists)) return []
-    return payload.lists.filter(isWordList)
+    return payload.lists.filter(isWordList).map(withValidLangs)
   } catch {
     return []
   }
