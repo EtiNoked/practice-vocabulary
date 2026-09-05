@@ -5,10 +5,11 @@ import { PracticeCard } from './components/PracticeCard'
 import { ReadyScreen } from './components/ReadyScreen'
 import { ResultsScreen } from './components/ResultsScreen'
 import { MigratePrompt } from './components/MigratePrompt'
+import { ScoreHistory } from './components/ScoreHistory'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
-import type { WordList } from './state/types'
+import type { SessionRecord, WordList } from './state/types'
 import { speak } from './speech/tts'
 import { useVoices } from './speech/useVoices'
 import { hasVoiceFor } from './speech/tts'
@@ -17,12 +18,17 @@ import { useListStore } from './storage/useListStore'
 import { useAuth } from './auth/useAuth'
 import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
+import { buildSessionRecord } from './state/sessionRecord'
 
 export default function App() {
   const [state, setState] = useState<AppState>(initialState)
   const [lists, setLists] = useState<WordList[]>([])
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const [records, setRecords] = useState<SessionRecord[]>([])
   const [toast, setToast] = useState<string | null>(null)
+  // Which kind of drill is currently running, so a wrong-only re-run can be
+  // recorded as such and kept out of the plain average.
+  const [sessionMode, setSessionMode] = useState<'full' | 'wrong-only'>('full')
   const { voices, ready } = useVoices()
 
   // localStorage while signed out, Firestore while signed in. Nothing below this
@@ -47,12 +53,21 @@ export default function App() {
     }
   }, [store])
 
+  useLayoutEffect(() => {
+    if (!store) return
+    const unsubscribe = store.subscribeSessions(null, setRecords, () => {})
+    return () => {
+      unsubscribe()
+    }
+  }, [store])
+
   /**
    * Derived, not stored: with no store we do not yet know whose data this is,
    * so the previous identity's lists must not stay on screen. Deriving avoids a
    * clear-then-refill cascade and cannot leave a stale frame behind.
    */
   const visibleLists = store ? lists : []
+  const visibleRecords = store ? records : []
 
   const persist = useCallback(
     async (list: WordList) => {
@@ -96,6 +111,29 @@ export default function App() {
     (action: AppAction) => {
       const next = reduce(state, action)
       setState(next)
+
+      /**
+       * Record a finished drill.
+       *
+       * Deliberately here and not in appMachine.ts: the reducer is pure and must
+       * stay that way — a write inside it would be a side effect in a pure
+       * function and would break its existing tests.
+       *
+       * `sessionMode` still holds the mode of the session that just ENDED: the
+       * mode for a new session is set by START/RESTART below, while results are
+       * only ever entered by MARK or QUIT.
+       */
+      if (state.screen === 'practising' && next.screen === 'results' && store) {
+        const record = buildSessionRecord(next.list, next.session, {
+          mode: sessionMode,
+          partial: action.type === 'QUIT',
+        })
+        if (record) void store.recordSession(record)
+      }
+
+      if (action.type === 'RESTART_WRONG_ONLY') setSessionMode('wrong-only')
+      else if (action.type === 'START' || action.type === 'RESTART_SHUFFLED') setSessionMode('full')
+
       const advances =
         action.type === 'START' ||
         action.type === 'MARK' ||
@@ -103,7 +141,7 @@ export default function App() {
         action.type === 'RESTART_WRONG_ONLY'
       if (advances) speakCurrent(next)
     },
-    [state, speakCurrent],
+    [state, speakCurrent, store, sessionMode],
   )
 
   const promptLang =
@@ -131,6 +169,7 @@ export default function App() {
               onDismiss={migration.dismiss}
             />
           }
+          history={<ScoreHistory records={visibleRecords} />}
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}

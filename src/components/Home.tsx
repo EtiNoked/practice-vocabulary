@@ -9,6 +9,8 @@ interface Props {
   loading?: boolean
   /** Slot for account-level notices, e.g. the migration offer. */
   banner?: ReactNode
+  /** Slot for the score history list. */
+  history?: ReactNode
   onNewList: () => void
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
@@ -16,7 +18,7 @@ interface Props {
   onDelete: (list: WordList) => void
 }
 
-export function Home({ lists, loading = false, banner, onNewList, ...listActions }: Props) {
+export function Home({ lists, loading = false, banner, history, onNewList, ...listActions }: Props) {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-6 p-4">
       <header>
@@ -42,6 +44,13 @@ export function Home({ lists, loading = false, banner, onNewList, ...listActions
         <h2 className="mb-2 font-semibold">Saved lists</h2>
         <SavedLists lists={lists} loading={loading} {...listActions} />
       </div>
+
+      {history && (
+        <div>
+          <h2 className="mb-2 font-semibold">Recent practice</h2>
+          {history}
+        </div>
+      )}
     </section>
   )
 }
