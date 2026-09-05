@@ -33,6 +33,7 @@ import {
   toDrillPairs,
   type ReviewWindow,
 } from './state/missedWords'
+import { latestScores } from './state/listProgress'
 import { buildSessionRecord } from './state/sessionRecord'
 
 /**
@@ -183,6 +184,14 @@ export default function App() {
    * tab left open for days does not go on answering for the day it was opened.
    */
   const [now, setNow] = useState(() => Date.now())
+
+  /**
+   * Where each list stands, for the coloured border on its row.
+   *
+   * Derived from the history already subscribed to app-wide — no extra read, and
+   * it updates the moment a drill is recorded.
+   */
+  const listScores = useMemo(() => latestScores(visibleRecords), [visibleRecords])
 
   const readyList = state.screen === 'ready' ? state.list : null
 
@@ -440,6 +449,7 @@ export default function App() {
               onDismiss={migration.dismiss}
             />
           }
+          scores={listScores}
           history={<ScoreHistory records={visibleRecords} />}
           onSeeAllHistory={() => act({ type: 'OPEN_REVIEW' })}
           onNewList={() => act({ type: 'NEW_LIST' })}

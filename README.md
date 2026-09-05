@@ -92,6 +92,15 @@ the option to shuffle and go again or drill only the ones you got wrong.
 
 Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 
+Each saved list wears its last score as a coloured border: **green** for a clean sweep,
+**amber** from 70% up, **red** below that, and no colour at all until you have drilled it.
+The score is printed beside the name too — a border colour on its own is no use to a
+colour-blind reader or a greyscale screenshot.
+
+The colour comes from your most recent **full** run. Wrong-only re-runs and drills you
+stopped early are ignored, because a deliberately harder subset would otherwise turn a list
+red for the crime of practising its weak spots.
+
 ## Reviewing what you got wrong
 
 **Menu → Review** lists every finished drill, newest first, grouped under Today,

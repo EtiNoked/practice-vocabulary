@@ -40,7 +40,12 @@ export function ScoreHistory({ records }: Props) {
         </p>
       )}
 
-      <ul className="flex flex-col gap-1">
+      {/*
+        Named, so the log is addressable as a region. The same score can now
+        appear both here and on the list's own row, and "which 50% do you mean"
+        is a question a screen-reader user has to answer too.
+      */}
+      <ul aria-label="Recent practice" className="flex flex-col gap-1">
         {records.slice(0, 10).map((record) => (
           <li
             key={record.id}

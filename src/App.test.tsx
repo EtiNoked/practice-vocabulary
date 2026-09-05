@@ -160,7 +160,10 @@ describe('recording score history', () => {
       mode: 'full',
       partial: false,
     })
-    expect(screen.getByText(/1 \/ 2 \(50%\)/)).toBeInTheDocument()
+    // Scoped to the history list: the same score now also appears on the list's
+    // own row, as the standing its border colour draws.
+    const history = screen.getByRole('list', { name: /recent practice/i })
+    expect(within(history).getByText(/1 \/ 2 \(50%\)/)).toBeInTheDocument()
   })
 
   it('records a quit-early drill as partial, over what was answered', async () => {
@@ -1186,5 +1189,77 @@ describe('the drill keyboard while the menu is open', () => {
     await user.keyboard('n')
 
     expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+  })
+})
+
+describe('a list shows how it is going', () => {
+  // Scoped: after a drill, the list's name appears in its history entry too.
+  const row = () =>
+    within(screen.getByRole('list', { name: /saved lists/i })).getByText('Lesson 3').closest('li')!
+
+  it('is uncoloured until it has been drilled', () => {
+    listRepo.save(seeded)
+    renderApp()
+    expect(row()).toHaveClass('border-line-strong')
+  })
+
+  it('turns red after a bad run, and green after a clean one', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    // Both wrong — 0%.
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /wrong/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /wrong/i }))
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
+
+    expect(row()).toHaveClass('border-incorrect')
+    expect(screen.getByText(/last score 0 \/ 2 \(0%\)/i)).toBeInTheDocument()
+
+    // Both right — 100%.
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
+
+    expect(row()).toHaveClass('border-correct')
+  })
+
+  it('is not repainted by a missed-words re-run', async () => {
+    /*
+     * A wrong-only drill is a deliberately harder subset. Letting it set the
+     * colour would turn a list red for the crime of practising its weak spots.
+     */
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    // A full run, one of two right — 50%, red.
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /wrong/i }))
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
+    expect(row()).toHaveClass('border-incorrect')
+
+    // Now drill the one missed word and get it wrong again.
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /wrong/i }))
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
+
+    // Still the full run's 50%, not the subset's 0%.
+    expect(screen.getByText(/last score 1 \/ 2 \(50%\)/i)).toBeInTheDocument()
   })
 })
