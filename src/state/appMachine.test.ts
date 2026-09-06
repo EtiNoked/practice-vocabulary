@@ -52,9 +52,9 @@ describe('reaching the editor', () => {
     expect(s.rows).toHaveLength(2)
   })
 
-  it('cancelling the editor returns home', () => {
+  it('cancelling the editor returns to my lists, where it was opened from (012 D-8)', () => {
     const s = at(initialState, { type: 'NEW_LIST' }, { type: 'CANCEL_EDIT' })
-    expect(s.screen).toBe('home')
+    expect(s.screen).toBe('lists')
   })
 })
 
@@ -742,9 +742,22 @@ describe('building a test (011)', () => {
     expect(s.session.listId).toBe('')
   })
 
-  it('starts a saved test straight from home, where the saved-tests list lives', () => {
-    const s = reduce({ screen: 'home' }, { type: 'START_RUN', run: poolRun(), mode: 'test' })
+  /*
+   * THE regression this guard has already produced once.
+   *
+   * A saved test is run from the saved-tests list, and 012 moved that list off home onto
+   * its own screen. Leaving the guard naming `home` would make the Run button a silent
+   * no-op there — which is exactly what happened in 011 when the guard named only
+   * `testSetup`, and it was caught end-to-end rather than here. This is the cheap catch.
+   */
+  it('starts a saved test straight from My tests, where the saved-tests list lives', () => {
+    const s = reduce({ screen: 'tests' }, { type: 'START_RUN', run: poolRun(), mode: 'test' })
     expect(s.screen).toBe('practising')
+  })
+
+  it('no longer starts one from home, which holds no tests since 012', () => {
+    const home: AppState = { screen: 'home' }
+    expect(reduce(home, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(home)
   })
 
   it('refuses to start on top of a drill or a game already running, by reference', () => {
@@ -807,5 +820,84 @@ describe('a fresh draw (011 FR-26)', () => {
   it('ignores it anywhere but results, by reference', () => {
     const home: AppState = { screen: 'home' }
     expect(reduce(home, { type: 'RESTART_FRESH_DRAW' })).toBe(home)
+  })
+})
+
+describe('the section screens (012)', () => {
+  const drilling = () => at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+
+  /*
+   * Legal from EVERY screen, the running drill included — the same rule OPEN_REVIEW,
+   * OPEN_GAME and OPEN_TEST_SETUP already follow. The "you will lose this drill" confirm
+   * belongs to NavMenu, because a pure reducer must not open a dialog.
+   */
+  it.each([
+    ['OPEN_LISTS', 'lists'],
+    ['OPEN_TESTS', 'tests'],
+    ['OPEN_GAMES', 'games'],
+  ] as const)('%s reaches %s from anywhere', (type, screen) => {
+    for (const from of [
+      initialState,
+      { screen: 'review' } as AppState,
+      reduce(initialState, { type: 'PRACTISE_LIST', list }),
+      drilling(),
+    ]) {
+      expect(reduce(from, { type }).screen).toBe(screen)
+    }
+  })
+
+  it('carries nothing — a section derives what it shows from the live data', () => {
+    expect(reduce(initialState, { type: 'OPEN_LISTS' })).toEqual({ screen: 'lists' })
+    expect(reduce(initialState, { type: 'OPEN_TESTS' })).toEqual({ screen: 'tests' })
+    expect(reduce(initialState, { type: 'OPEN_GAMES' })).toEqual({ screen: 'games' })
+  })
+
+  it('goes home from any of them', () => {
+    for (const from of ['lists', 'tests', 'games'] as const) {
+      expect(reduce({ screen: from }, { type: 'GO_HOME' }).screen).toBe('home')
+    }
+  })
+
+  describe('a seeded review filter (012 FR-5)', () => {
+    it('carries the list id when one is given', () => {
+      const s = reduce(initialState, { type: 'OPEN_REVIEW', listId: 'a' })
+      expect(s).toEqual({ screen: 'review', listId: 'a' })
+    })
+
+    /*
+     * The KEY must be absent, not present-and-undefined.
+     *
+     * `exactOptionalPropertyTypes` is on, so `{ listId: undefined }` does not satisfy
+     * `listId?: string` — and a state carrying an explicit undefined would also stop
+     * being structurally equal to the state the menu produces.
+     */
+    it('carries no key at all when none is given', () => {
+      const s = reduce(initialState, { type: 'OPEN_REVIEW' })
+      expect(s).toEqual({ screen: 'review' })
+      expect(Object.hasOwn(s, 'listId')).toBe(false)
+    })
+
+    it('still opens from a running drill, seed or no seed', () => {
+      expect(reduce(drilling(), { type: 'OPEN_REVIEW', listId: 'a' })).toEqual({
+        screen: 'review',
+        listId: 'a',
+      })
+    })
+  })
+
+  describe('the new screens do not become a back door', () => {
+    it('refuses REVEAL, MARK, NEXT and ANSWER, by reference', () => {
+      for (const from of ['lists', 'tests', 'games'] as const) {
+        const state: AppState = { screen: from }
+        for (const action of [
+          { type: 'REVEAL' },
+          { type: 'MARK', result: 'right' },
+          { type: 'NEXT' },
+          { type: 'ADVANCE' },
+        ] as AppAction[]) {
+          expect(reduce(state, action)).toBe(state)
+        }
+      }
+    })
   })
 })

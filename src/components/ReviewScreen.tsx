@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { byDay } from '../state/dayLabel'
 import { groupRuns, runLabel, type RunGroup } from '../state/runGroup'
 import { bandBorder } from '../state/scoreBand'
 import type { SessionRecord } from '../state/types'
@@ -12,25 +13,6 @@ interface Props {
 }
 
 const ALL = 'all'
-
-/**
- * 'Today' / 'Yesterday' / an en-GB date, matching `formatDate` elsewhere.
- *
- * Compares LOCAL MIDNIGHTS rather than elapsed milliseconds. 23:30 yesterday and
- * 00:30 today are an hour apart and two different days, and subtracting raw time
- * would file them together.
- *
- * Deliberately a different notion of time from `missedWords.ts`, whose windows
- * roll from `now`. A heading is a calendar idea; a window is a duration. Do not
- * unify them.
- */
-function dayLabel(ms: number, now: number): string {
-  const startOf = (t: number) => new Date(t).setHours(0, 0, 0, 0)
-  const days = Math.round((startOf(now) - startOf(ms)) / 86_400_000)
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  return new Date(ms).toLocaleDateString('en-GB')
-}
 
 /**
  * Every list that appears in the history, named as it was most recently drilled.
@@ -75,13 +57,8 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
 
   const runs = useMemo(() => groupRuns(shown), [shown])
 
-  const days: Array<{ label: string; rows: RunGroup[] }> = []
-  for (const run of runs) {
-    const label = dayLabel(run.finishedAt, now)
-    const last = days[days.length - 1]
-    if (last && last.label === label) last.rows.push(run)
-    else days.push({ label, rows: [run] })
-  }
+  // `groupRuns` already returns newest-first, which is what `byDay` requires of its caller.
+  const days = byDay(runs, (run) => run.finishedAt, now)
 
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">

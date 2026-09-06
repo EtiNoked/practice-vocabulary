@@ -46,6 +46,17 @@ export type MissedSource =
  */
 export type AppState =
   | { screen: 'home' }
+  /**
+   * The three section screens (012).
+   *
+   * Stateless on purpose. What each one shows is derived in `App` from the live
+   * subscriptions, exactly as `home` derived its lists before this feature moved them —
+   * a section carrying a snapshot would go stale the moment another tab wrote, and would
+   * have to be invalidated by hand from four places.
+   */
+  | { screen: 'lists' }
+  | { screen: 'tests' }
+  | { screen: 'games' }
   | {
       screen: 'editing'
       mode: 'create' | 'update'
@@ -87,7 +98,21 @@ export type AppState =
    */
   | { screen: 'practising'; run: DrillRun; session: Session }
   | { screen: 'results'; run: DrillRun; session: Session }
-  | { screen: 'review' }
+  | {
+      screen: 'review'
+      /**
+       * Seeds the list filter, when arriving from one list's practice line (012 FR-5).
+       *
+       * A SEED, not the filter itself: the filter's own state stays in the component, the
+       * rule `testSetup.initial` and `gameSetup.initial` already follow (008 D-11). A
+       * controlled prop would yank the user's choice back on the next re-render.
+       *
+       * ABSENT means "all lists", which is what arriving from the menu means. Absent
+       * rather than a sentinel, and the reducer spreads it in conditionally, because
+       * `exactOptionalPropertyTypes` does not accept an explicit `undefined` here.
+       */
+      listId?: string
+    }
   /**
    * The game's three screens (008).
    *
@@ -148,8 +173,13 @@ export type AppAction =
   | { type: 'RESTART_WRONG_ONLY' }
   /** From results: run the same list again in the other mode. */
   | { type: 'SWITCH_MODE' }
-  | { type: 'OPEN_REVIEW' }
+  /** `listId` seeds the review screen's filter; omitting it means every list. */
+  | { type: 'OPEN_REVIEW'; listId?: string }
   | { type: 'OPEN_REVIEW_DETAIL'; recordId: string }
+  /** The three sections (012). Legal from anywhere, like OPEN_REVIEW and OPEN_GAME. */
+  | { type: 'OPEN_LISTS' }
+  | { type: 'OPEN_TESTS' }
+  | { type: 'OPEN_GAMES' }
   /** Arrive at ready with a subset of the list's words to drill. */
   | { type: 'PRACTISE_MISSED'; list: WordList; pairs: WordPair[]; source: MissedSource }
   /** Drop the subset and go back to the whole list, staying on ready. */
@@ -235,13 +265,35 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
      * its own mid-drill sign-out warning.
      */
     case 'OPEN_REVIEW':
-      return { screen: 'review' }
+      /*
+       * The seed is SPREAD rather than assigned, so an action without one produces a
+       * state with no `listId` key at all. `exactOptionalPropertyTypes` rejects an
+       * explicit undefined against `listId?: string`, and a state carrying one would
+       * also stop being structurally equal to the one the menu produces.
+       */
+      return { screen: 'review', ...(action.listId !== undefined && { listId: action.listId }) }
 
     case 'OPEN_REVIEW_DETAIL':
       return { screen: 'reviewDetail', recordId: action.recordId }
 
+    /*
+     * Legal from every screen, the running drill included — the same rule OPEN_REVIEW
+     * above and OPEN_GAME below already follow. NavMenu owns the "you will lose this
+     * drill" confirm, because a pure reducer must not open a dialog.
+     */
+    case 'OPEN_LISTS':
+      return { screen: 'lists' }
+
+    case 'OPEN_TESTS':
+      return { screen: 'tests' }
+
+    case 'OPEN_GAMES':
+      return { screen: 'games' }
+
     case 'CANCEL_EDIT':
-      return state.screen === 'editing' ? { screen: 'home' } : state
+      // My lists, not home: that is the only place the editor is opened from, and 012 D-8
+      // makes "back" mean the owning section rather than the front door.
+      return state.screen === 'editing' ? { screen: 'lists' } : state
 
     case 'CONFIRM_LIST':
       return state.screen === 'editing' ? { screen: 'ready', list: action.list } : state
@@ -364,15 +416,19 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       return { screen: 'testSetup', initial: action.test }
 
     /*
-     * Legal from the builder AND from home, because a saved test is run from the home
-     * screen's list — guarding this to `testSetup` alone made that button a silent no-op,
-     * which is precisely what the end-to-end test caught.
+     * Legal from the builder AND from the saved-tests screen, because a saved test is run
+     * from that list — guarding this to `testSetup` alone made that button a silent no-op
+     * in 011, which is precisely what the end-to-end test caught.
+     *
+     * `tests` rather than `home` since 012: the saved-tests list moved to its own screen,
+     * and a guard that names where a collection USED to live is the same defect wearing a
+     * different screen name. `appMachine.test.ts` now asserts both halves.
      *
      * Named screens rather than "anywhere": the point of the guard is that a run cannot
      * start on top of a drill or a game already in flight.
      */
     case 'START_RUN':
-      if (state.screen !== 'testSetup' && state.screen !== 'home') return state
+      if (state.screen !== 'testSetup' && state.screen !== 'tests') return state
       return {
         screen: 'practising',
         run: action.run,
