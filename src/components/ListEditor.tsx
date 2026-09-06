@@ -1,8 +1,8 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 import { LANG_CODES, LANG_NAMES, type LangCode } from '../lang/languages'
-import { detectLanguages } from '../parse/languageDetect'
+import { detectLanguages, type LanguageDetection } from '../parse/languageDetect'
 import { countComplete, isComplete, normalizeRows } from '../parse/normalize'
-import { isGuessed, type LangSource, type RawRow } from '../parse/types'
+import { isGuessed, SOURCE_RANK, type LangSource, type RawRow } from '../parse/types'
 import type { WordList, WordPair } from '../state/types'
 import { PastePanel } from './PastePanel'
 
@@ -18,6 +18,7 @@ interface Props {
    * re-detects from its rows and throws away a choice the user already made.
    */
   initialLangs?: { col1: LangCode; col2: LangCode }
+  /** How those languages were arrived at. Decides whether re-detection may win. */
   initialLangSource?: LangSource
   onConfirm: (list: WordList) => void
   onCancel: () => void
@@ -75,6 +76,41 @@ const Row = memo(function Row({
   )
 })
 
+/** The languages a reopened list was saved with, if it was ever saved. */
+interface StoredLangs {
+  col1: LangCode
+  col2: LangCode
+  source: LangSource
+}
+
+/**
+ * Decide between what the rows look like now and what the list was saved with.
+ *
+ * Re-detection wins only when it is at least as authoritative as the stored
+ * source, which is what lets editing rows correct a bad guess while stopping a
+ * weaker guess from undoing a settled one.
+ *
+ * The case this exists for: a list saved from a header row keeps no header — it
+ * was consumed into the languages — so reopening it re-detects from the words
+ * alone. On a list the heuristic cannot call, that lands on the plain en/nl
+ * default, which is BACKWARDS for a Dutch-first list. Swapping the columns then
+ * paired the reversed languages with the swapped rows, and update mode saved it
+ * on the spot: the drill went on to label the Dutch word "English", read it in an
+ * English voice, and there was no way to see why.
+ *
+ * `headerConsumed` always comes from detection: it answers "is row 0 a header?",
+ * which is a question about the rows in front of us and not about the languages.
+ */
+function resolveLangs(detection: LanguageDetection, stored: StoredLangs | null) {
+  if (!stored || SOURCE_RANK[detection.source] >= SOURCE_RANK[stored.source]) return detection
+  return {
+    col1Lang: stored.col1,
+    col2Lang: stored.col2,
+    source: stored.source,
+    headerConsumed: detection.headerConsumed,
+  }
+}
+
 /**
  * The single editor, shared by "new list" and "edit a saved list".
  *
@@ -103,19 +139,24 @@ export function ListEditor({
   const [showPaste, setShowPaste] = useState(false)
 
   /**
-   * A language choice the user made, which outranks detection.
+   * A language choice the user made IN THIS EDITING SESSION, which outranks
+   * everything else.
    *
-   * Starts populated only when reopening a list that was set manually — a list
-   * whose languages were detected should go on being detected, so that editing
-   * its rows can still correct a bad guess.
+   * Starts empty even when reopening a manually-set list: a stored 'manual'
+   * source already outranks anything detection can produce (see `resolveLangs`),
+   * so seeding it here would only duplicate that rule in a second place.
    */
-  const [override, setOverride] = useState<{ col1: LangCode; col2: LangCode } | null>(
-    initialLangSource === 'manual' && initialLangs ? initialLangs : null,
-  )
+  const [override, setOverride] = useState<{ col1: LangCode; col2: LangCode } | null>(null)
+
+  const stored: StoredLangs | null =
+    initialLangs && initialLangSource
+      ? { col1: initialLangs.col1, col2: initialLangs.col2, source: initialLangSource }
+      : null
 
   // Detection runs on the live rows, so the badge reflects what the user has
   // typed right now — including a header row they just added to correct a guess.
   const detection = useMemo(() => detectLanguages(normalizeRows(rows)), [rows])
+  const resolved = resolveLangs(detection, stored)
 
   /**
    * What the UI shows and what gets saved.
@@ -132,7 +173,7 @@ export function ListEditor({
         source: 'manual' as LangSource,
         headerConsumed: detection.headerConsumed,
       }
-    : detection
+    : resolved
 
   const bodyRows = effective.headerConsumed ? rows.slice(1) : rows
   const completeCount = countComplete(bodyRows)
@@ -167,7 +208,13 @@ export function ListEditor({
     setDirty(true)
     // Spread the row so RawRow.conf survives — it is reserved for the OCR path.
     setRows((current) => current.map((r) => ({ ...r, col1: r.col2, col2: r.col1 })))
-    setOverride({ col1: effective.col2Lang, col2: effective.col1Lang })
+    // Functional, like the rows above: two swaps that land in one batch must
+    // exchange the languages twice as well, or the rows and the languages come
+    // apart — which is the same reversal this whole path exists to prevent.
+    setOverride((current) => {
+      const base = current ?? { col1: effective.col1Lang, col2: effective.col2Lang }
+      return { col1: base.col2, col2: base.col1 }
+    })
   }, [effective.col1Lang, effective.col2Lang])
 
   const handleChange = useCallback((index: number, patch: Partial<RawRow>) => {
@@ -207,8 +254,9 @@ export function ListEditor({
   function handleConfirm() {
     const clean = normalizeRows(rows)
     // Re-detected on the CLEAN rows, which is what makes typing a header row a
-    // working correction. The override still wins over its languages.
-    const detected = detectLanguages(clean)
+    // working correction. The override still wins over its languages, and so do
+    // the stored languages when re-detection is the weaker of the two.
+    const detected = resolveLangs(detectLanguages(clean), stored)
     const body = detected.headerConsumed ? clean.slice(1) : clean
     const pairs: WordPair[] = body
       .filter(isComplete)
