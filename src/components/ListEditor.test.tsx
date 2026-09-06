@@ -287,6 +287,101 @@ describe('swapping columns', () => {
   })
 })
 
+/**
+ * A saved list carries languages that its rows can no longer prove. A header row
+ * is CONSUMED on save, so reopening that list re-detects from the words alone —
+ * and on a list the heuristic cannot call, that is the plain en/nl default.
+ *
+ * The bug this covers: for a Dutch-first list the default is BACKWARDS, and it
+ * arrived silently. Swapping the columns then paired those reversed languages
+ * with the swapped rows, update mode saved it on the spot, and the drill went on
+ * to label the Dutch word "English" and read it in an English voice.
+ */
+describe('reopening a saved list', () => {
+  const col1Select = () => screen.getByLabelText(/column 1 language/i) as HTMLSelectElement
+  const col2Select = () => screen.getByLabelText(/column 2 language/i) as HTMLSelectElement
+
+  /** Dutch first, English second, and no signal in either — detection defaults. */
+  const UNCALLABLE_NL_EN = [
+    { col1: 'arm', col2: 'arm' },
+    { col1: 'hand', col2: 'hand' },
+    { col1: 'vinger', col2: 'finger' },
+    { col1: 'knie', col2: 'knee' },
+  ]
+
+  const reopen = (props: Partial<Parameters<typeof ListEditor>[0]> = {}) => {
+    const onConfirm = vi.fn()
+    render(
+      <ListEditor
+        mode="update"
+        listId="x"
+        initialName="Lesson 3"
+        initialRows={UNCALLABLE_NL_EN}
+        initialLangs={{ col1: 'nl', col2: 'en' }}
+        initialLangSource="header"
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+        {...props}
+      />,
+    )
+    return { onConfirm, user: userEvent.setup() }
+  }
+
+  it('keeps languages a header row settled, which the rows no longer carry', () => {
+    reopen()
+    expect(col1Select().value).toBe('nl')
+    expect(col2Select().value).toBe('en')
+  })
+
+  it('does not save the fallback guess over them', async () => {
+    const { user, onConfirm } = reopen()
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    expect(list.col1Lang).toBe('nl')
+    expect(list.col2Lang).toBe('en')
+    expect(list.langSource).toBe('header')
+  })
+
+  it('swaps a reopened list into languages that match its words', async () => {
+    const { user, onConfirm } = reopen()
+    await user.click(screen.getByRole('button', { name: /swap columns/i }))
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    // Dutch moved to column 2 — the column that is spoken aloud — so the
+    // languages have to move with it.
+    expect(list.pairs[2]).toMatchObject({ col1: 'finger', col2: 'vinger' })
+    expect(list.col1Lang).toBe('en')
+    expect(list.col2Lang).toBe('nl')
+  })
+
+  // The other half of the rule: editing rows must still be able to correct a
+  // guess, so a source at least as strong as the stored one wins.
+  it('lets a typed header overrule what a guess was saved as', async () => {
+    const { user, onConfirm } = reopen({
+      initialLangs: { col1: 'en', col2: 'nl' },
+      initialLangSource: 'heuristic',
+      initialRows: [{ col1: 'Nederlands', col2: 'Engels' }, ...UNCALLABLE_NL_EN],
+    })
+    expect(col1Select().value).toBe('nl')
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    expect(list.col1Lang).toBe('nl')
+    expect(list.col2Lang).toBe('en')
+    expect(list.langSource).toBe('header')
+    expect(list.pairs).toHaveLength(4)
+  })
+
+  // And the user always outranks both.
+  it('still lets the selectors override the stored languages', async () => {
+    const { user, onConfirm } = reopen()
+    await user.selectOptions(col1Select(), 'fr')
+    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    const list = onConfirm.mock.calls[0]![0]
+    expect(list.col1Lang).toBe('fr')
+    expect(list.langSource).toBe('manual')
+  })
+})
+
 describe('modes', () => {
   // Differences between entry points must stay confined to the mode prop.
   it('renders the same controls in create and update mode', () => {
