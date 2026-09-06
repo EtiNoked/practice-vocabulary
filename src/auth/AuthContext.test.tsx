@@ -66,8 +66,9 @@ describe('with no Firebase configuration (unset VITE_FIREBASE_* vars)', () => {
       </AuthProvider>,
     )
 
-    // v1 behaviour intact...
-    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+    // v1 behaviour intact — the front door renders and its sections are reachable.
+    // ("New list" moved onto My lists in 012; the brief is what home shows now.)
+    expect(screen.getByRole('button', { name: /my lists/i })).toBeInTheDocument()
     // ...and no dead sign-in button.
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument()
   })

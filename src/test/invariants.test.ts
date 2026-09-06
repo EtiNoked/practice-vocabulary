@@ -269,8 +269,19 @@ describe('there is exactly one grouping rule (011 D-4)', () => {
     expect(offenders).toEqual([])
   })
 
-  it('routes both history surfaces through groupRuns', () => {
-    for (const path of ['../components/ScoreHistory.tsx', '../components/ReviewScreen.tsx']) {
+  it('routes every drill-history surface through groupRuns', () => {
+    /*
+     * `ScoreHistory.tsx` was one of these until 012 emptied the home screen. Its rolling
+     * average moved to `state/scoreTrend.ts` — which folds first — and the list it sat
+     * above is `ReviewScreen`'s job now. `App.tsx` joined the list in the same change: it
+     * folds the records per list for the practice line on each row, and counting raw
+     * records there would report three practices for one three-list test.
+     */
+    for (const path of [
+      '../components/ReviewScreen.tsx',
+      '../state/scoreTrend.ts',
+      '../App.tsx',
+    ]) {
       expect(sources[path] ?? '').toContain('groupRuns')
     }
   })

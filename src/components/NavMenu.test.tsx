@@ -5,25 +5,21 @@ import { NavMenu } from './NavMenu'
 import type { AppState } from '../state/appMachine'
 
 const setup = (over: Partial<Parameters<typeof NavMenu>[0]> = {}) => {
-  const onHome = vi.fn()
-  const onReview = vi.fn()
-  const onGame = vi.fn()
-  const onTest = vi.fn()
+  const routes = {
+    onHome: vi.fn(),
+    onLists: vi.fn(),
+    onTests: vi.fn(),
+    onGames: vi.fn(),
+    onPractices: vi.fn(),
+  }
   render(
-    <NavMenu
-      screen={'home' as AppState['screen']}
-      guard={null}
-      onHome={onHome}
-      onReview={onReview}
-      onGame={onGame}
-      onTest={onTest}
-      {...over}
-    />,
+    <NavMenu screen={'home' as AppState['screen']} guard={null} {...routes} {...over} />,
   )
-  return { onHome, onReview, onGame, onTest, user: userEvent.setup() }
+  return { ...routes, user: userEvent.setup() }
 }
 
-const trigger = () => screen.getByRole('button', { name: /menu/i })
+const trigger = () => screen.getByRole('button', { name: /^menu$/i })
+const item = (name: string) => screen.getByRole('menuitem', { name })
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -37,12 +33,20 @@ describe('the popover', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('opens to the two destinations', async () => {
+  it('keeps a text label on the trigger, glyph or no glyph', () => {
+    // An icon-only trigger would break NFR-5 and every end-to-end suite's accessible-name
+    // lookup in the same stroke.
+    setup()
+    expect(trigger()).toHaveTextContent('Menu')
+  })
+
+  it('opens to the five sections', async () => {
     const { user } = setup()
     await user.click(trigger())
     expect(trigger()).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('menuitem', { name: /home/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /review/i })).toBeInTheDocument()
+    for (const name of ['Home', 'My lists', 'My tests', 'My games', 'My practices']) {
+      expect(item(name)).toBeInTheDocument()
+    }
   })
 
   it('uses role="menu", which is what stands the drill keyboard down', async () => {
@@ -55,16 +59,6 @@ describe('the popover', () => {
     const { user } = setup()
     await user.click(trigger())
     expect(document.querySelector('[role="menu"]')).not.toBeNull()
-  })
-
-  it('marks the screen you are already on', async () => {
-    const { user } = setup({ screen: 'review' as AppState['screen'] })
-    await user.click(trigger())
-    expect(screen.getByRole('menuitem', { name: /review/i })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
-    expect(screen.getByRole('menuitem', { name: /home/i })).not.toHaveAttribute('aria-current')
   })
 
   it('closes on Escape and hands focus back to the trigger', async () => {
@@ -93,94 +87,138 @@ describe('the popover', () => {
   })
 
   it('closes after navigating', async () => {
-    const { user, onReview } = setup()
+    const { user, onPractices } = setup()
     await user.click(trigger())
-    await user.click(screen.getByRole('menuitem', { name: /review/i }))
-    expect(onReview).toHaveBeenCalledTimes(1)
+    await user.click(item('My practices'))
+    expect(onPractices).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})
+
+describe('every section is reachable', () => {
+  it.each([
+    ['Home', 'onHome'],
+    ['My lists', 'onLists'],
+    ['My tests', 'onTests'],
+    ['My games', 'onGames'],
+    ['My practices', 'onPractices'],
+  ] as const)('%s calls its route', async (name, handler) => {
+    const harness = setup()
+    await harness.user.click(trigger())
+    await harness.user.click(item(name))
+    expect(harness[handler]).toHaveBeenCalled()
+  })
+
+  it('gives every item an icon, and hides every icon from assistive tech', async () => {
+    const { user } = setup()
+    await user.click(trigger())
+    const items = screen.getAllByRole('menuitem')
+    expect(items).toHaveLength(5)
+    for (const el of items) {
+      const svg = el.querySelector('svg')
+      expect(svg).not.toBeNull()
+      // The label is the name; the glyph must not join it.
+      expect(svg!.getAttribute('aria-hidden')).toBe('true')
+    }
+  })
+})
+
+/**
+ * `aria-current` marks the SECTION, not the screen (012 FR-10).
+ *
+ * A section owns several screens — the editor and the ready screen belong to My lists,
+ * the builder to My tests — and telling a user they are nowhere while they are two taps
+ * into a section is the failure worth guarding.
+ */
+describe('marking where you are', () => {
+  const currentItem = () =>
+    screen.getAllByRole('menuitem').find((el) => el.hasAttribute('aria-current')) ?? null
+
+  it.each([
+    ['home', 'Home'],
+    ['lists', 'My lists'],
+    ['editing', 'My lists'],
+    ['ready', 'My lists'],
+    ['tests', 'My tests'],
+    ['testSetup', 'My tests'],
+    ['games', 'My games'],
+    ['gameSetup', 'My games'],
+    ['playing', 'My games'],
+    ['gameResults', 'My games'],
+    ['review', 'My practices'],
+    ['reviewDetail', 'My practices'],
+  ] as const)('%s belongs to %s', async (screenName, expected) => {
+    const { user } = setup({ screen: screenName as AppState['screen'] })
+    await user.click(trigger())
+    expect(item(expected)).toHaveAttribute('aria-current', 'page')
+    expect(currentItem()).toBe(item(expected))
+  })
+
+  /*
+   * A drill can be reached from a list OR from a saved test, so there is no honest
+   * section to mark. Absent is the answer rather than a gap: marking one would tell the
+   * user they are somewhere they may not be.
+   */
+  it.each(['practising', 'results'] as const)('%s belongs to no section', async (where) => {
+    const { user } = setup({ screen: where as AppState['screen'] })
+    await user.click(trigger())
+    expect(currentItem()).toBeNull()
   })
 })
 
 describe('leaving something unfinished', () => {
   it('says nothing when there is nothing to lose', async () => {
     const confirm = vi.spyOn(window, 'confirm')
-    const { user, onReview } = setup({ guard: null })
+    const { user, onPractices } = setup({ guard: null })
     await user.click(trigger())
-    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+    await user.click(item('My practices'))
     expect(confirm).not.toHaveBeenCalled()
-    expect(onReview).toHaveBeenCalled()
+    expect(onPractices).toHaveBeenCalled()
   })
 
   it('warns that a drill will end and go unrecorded', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { user, onReview } = setup({ guard: 'drill' })
+    const { user, onPractices } = setup({ guard: 'drill' })
     await user.click(trigger())
-    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+    await user.click(item('My practices'))
     expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/won't be recorded/i))
-    expect(onReview).toHaveBeenCalledTimes(1)
+    expect(onPractices).toHaveBeenCalledTimes(1)
   })
 
-  it('stays put when the warning is declined', async () => {
+  it('stays put — and stays open — when the warning is declined', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const { user, onReview } = setup({ guard: 'drill' })
+    const { user, onPractices } = setup({ guard: 'drill' })
     await user.click(trigger())
-    await user.click(screen.getByRole('menuitem', { name: /review/i }))
-    expect(onReview).not.toHaveBeenCalled()
+    await user.click(item('My practices'))
+    expect(onPractices).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).toBeInTheDocument()
   })
 
   it('warns about unsaved list changes in the editor', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { user, onHome } = setup({ guard: 'edit' })
     await user.click(trigger())
-    await user.click(screen.getByRole('menuitem', { name: /home/i }))
+    await user.click(item('Home'))
     expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/have not saved/i))
     expect(onHome).toHaveBeenCalled()
-  })
-})
-
-describe('the game entry (008)', () => {
-  it('offers a route into the game', async () => {
-    const onGame = vi.fn()
-    render(<NavMenu screen="home" guard={null} onHome={() => {}} onReview={() => {}} onGame={onGame} onTest={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Play a game' }))
-    expect(onGame).toHaveBeenCalled()
-  })
-
-  it('marks where you already are on every game screen', async () => {
-    for (const where of ['gameSetup', 'playing', 'gameResults'] as const) {
-      const { unmount } = render(
-        <NavMenu screen={where} guard={null} onHome={() => {}} onReview={() => {}} onGame={() => {}} onTest={() => {}} />,
-      )
-      await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-      expect(screen.getByRole('menuitem', { name: 'Play a game' })).toHaveAttribute(
-        'aria-current',
-        'page',
-      )
-      unmount()
-    }
   })
 
   it('warns before abandoning a game, and says what is actually kept', async () => {
     // A quit game IS recorded for what it asked, so this must not borrow the drill's
     // "it won't be recorded" wording.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const onHome = vi.fn()
-    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} onTest={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Home' }))
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('scored so far'))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { user, onHome } = setup({ screen: 'playing' as AppState['screen'], guard: 'game' })
+    await user.click(trigger())
+    await user.click(item('Home'))
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('scored so far'))
     expect(onHome).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('leaves the game when the warning is accepted', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const onHome = vi.fn()
-    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} onTest={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Home' }))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { user, onHome } = setup({ screen: 'playing' as AppState['screen'], guard: 'game' })
+    await user.click(trigger())
+    await user.click(item('Home'))
     expect(onHome).toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 })

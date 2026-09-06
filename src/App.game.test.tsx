@@ -6,6 +6,7 @@ import { sessionRepo } from './storage/sessionRepo'
 import type { WordList } from './state/types'
 import { speechCalls } from './test/setup'
 import { renderApp } from './test/renderApp'
+import { goToSync } from './test/navigate'
 import { drillRepo } from './storage/drillRepo'
 import { QUESTION_MS, VERDICT_MS } from './game/types'
 
@@ -94,6 +95,10 @@ const tiles = () => {
 
 const openGame = () => {
   renderApp()
+  // "Play a game" moved off home onto My games (012 D-1), and `goToSync` is the form
+  // this file needs: userEvent drives timers of its own and deadlocks against the
+  // 100ms interval, which is why the whole suite uses fireEvent.
+  goToSync('My games')
   click(screen.getByRole('button', { name: 'Play a game' }))
 }
 
@@ -313,7 +318,8 @@ describe('a game teaches the drill (008 D-3)', () => {
     }
 
     click(screen.getByRole('button', { name: 'Done' }))
-    // Back on home, into the list's ready screen the ordinary way.
+    // Back at the brief, then into the list's ready screen the ordinary way.
+    goToSync('My lists')
     click(screen.getByRole('button', { name: /practise/i }))
 
     // Four words got wrong in a game, offered back on the drill's ready screen.
@@ -334,6 +340,7 @@ describe('a game teaches the drill (008 D-3)', () => {
       await wait(VERDICT_MS)
     }
     click(screen.getByRole('button', { name: 'Done' }))
+    goToSync('My lists')
     click(screen.getByRole('button', { name: /practise/i }))
     expect(screen.queryByText(/before right answers were saved/i)).not.toBeInTheDocument()
   })
