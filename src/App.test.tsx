@@ -860,3 +860,331 @@ describe('the theme control with no account system', () => {
     expect(screen.getByRole('button', { name: /eti/i })).toBeInTheDocument()
   })
 })
+
+describe('the navigation menu', () => {
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: /^menu$/i }))
+  }
+
+  it('is present in a local-only build, alongside the theme control', async () => {
+    // Navigation is not an account feature, so the slot must carry it whether or
+    // not Firebase is configured.
+    const user = userEvent.setup()
+    renderApp()
+    await openMenu(user)
+    expect(screen.getByRole('menuitem', { name: /review/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument()
+  })
+
+  it('reaches the review screen from home', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await openMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+    expect(screen.getByRole('heading', { name: /review/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /new list/i })).not.toBeInTheDocument()
+  })
+
+  it('comes back home again', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await openMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+    await openMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: /home/i }))
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
+
+  it('is reachable from the drill and from the results screen', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.getByRole('button', { name: /^menu$/i })).toBeInTheDocument()
+  })
+
+  it('warns before abandoning a drill, and records nothing when accepted', async () => {
+    listRepo.save(seeded)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+
+    await openMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/won't be recorded/i))
+    // Walking out is not the same as quitting: QUIT scores what you managed,
+    // leaving discards it. Matches signing out mid-drill.
+    expect(sessionRepo.getAll()).toHaveLength(0)
+  })
+
+  it('leaves the drill running when the warning is declined', async () => {
+    listRepo.save(seeded)
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await openMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+
+    expect(screen.getByRole('button', { name: /show answer/i })).toBeInTheDocument()
+  })
+
+  it('clears the parked drill on the way out, so a reload does not resurrect it', async () => {
+    listRepo.save(seeded)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(drillRepo.load()).not.toBeNull()
+
+    await openMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+    expect(drillRepo.load()).toBeNull()
+  })
+})
+
+describe('practising the words you missed', () => {
+  const DAY = 86_400_000
+
+  /** A finished drill over `seeded`, with the named words marked wrong. */
+  const seedRecord = (
+    finishedAt: number,
+    wrong: Array<{ col1: string; col2: string }>,
+    right: Array<{ col1: string; col2: string }> | null = [],
+  ) => {
+    const withIds = (ps: Array<{ col1: string; col2: string }>) =>
+      ps.map((p, i) => ({ id: `x${i}-${finishedAt}`, ...p }))
+    sessionRepo.add({
+      id: `rec-${finishedAt}`,
+      listId: seeded.id,
+      listName: seeded.name,
+      right: right?.length ?? 0,
+      wrong: wrong.length,
+      total: wrong.length + (right?.length ?? 0),
+      pct: 0,
+      wrongPairs: withIds(wrong),
+      ...(right === null ? {} : { rightPairs: withIds(right) }),
+      finishedAt,
+      mode: 'full',
+      partial: false,
+    })
+  }
+
+  const daughter = { col1: 'daughter', col2: 'dochter' }
+  const son = { col1: 'son', col2: 'zoon' }
+
+  it('counts the missed words per window on the ready screen', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [daughter, son])
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    expect(screen.getByRole('button', { name: /today · 0/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /this week · 2/i })).toBeEnabled()
+  })
+
+  it('leaves out a word that has since been answered right', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 3 * DAY, [daughter, son])
+    seedRecord(Date.now() - 1 * DAY, [], [daughter])
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    // Two were missed; one has been fixed since.
+    expect(screen.getByRole('button', { name: /this week · 1/i })).toBeInTheDocument()
+  })
+
+  it('drills only the still-missed words', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 3 * DAY, [daughter, son])
+    seedRecord(Date.now() - 1 * DAY, [], [daughter])
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    expect(screen.getByText(/1 word you missed in the last week/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.getByText(/card 1 of 1/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    expect(screen.getByText('son')).toBeInTheDocument()
+  })
+
+  it('records the run as wrong-only, so it cannot flatter the average', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+
+    const latest = sessionRepo.getAll()[0]
+    expect(latest?.mode).toBe('wrong-only')
+    expect(latest?.rightPairs).toHaveLength(1)
+  })
+
+  it('closes the loop — a word answered right drops out of the next set', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
+
+    // Back at the ready screen, the word is gone from every window.
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
+  })
+
+  it('hides Save while a subset is selected, and restores it on the way back', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /full list instead/i }))
+    expect(screen.getByRole('button', { name: /saved|save this list/i })).toBeInTheDocument()
+    expect(screen.getByText(/you'll hear/i)).toBeInTheDocument()
+  })
+
+  it('survives an edit that re-mints every pair id', async () => {
+    /*
+     * 006 F-2. ListEditor mints new ids for every pair on every save, so a
+     * record written before an edit and the list after it share no ids at all.
+     * Identity is content, so the missed set must be untouched by an edit to an
+     * UNRELATED word.
+     */
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+
+    // The same words, saved again under completely different pair ids.
+    listRepo.save({
+      ...seeded,
+      pairs: [
+        { id: 'brand-new-1', col1: 'daughter', col2: 'dochter' },
+        { id: 'brand-new-2', col1: 'son', col2: 'zoon' },
+      ],
+    })
+
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    expect(screen.getByRole('button', { name: /this week · 1/i })).toBeInTheDocument()
+  })
+
+  it('drops a word deleted from the list', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+    listRepo.save({ ...seeded, pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }] })
+
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('reviewing one drill', () => {
+  it('shows both halves of the answer sheet, and re-drills the misses', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    // A real drill, one right and one wrong.
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /wrong/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
+
+    await user.click(screen.getByRole('button', { name: /^menu$/i }))
+    await user.click(screen.getByRole('menuitem', { name: /review/i }))
+    await user.click(screen.getByRole('button', { name: /Lesson 3/ }))
+
+    expect(screen.getByRole('heading', { name: /wrong \(1\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /right \(1\)/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /practise these 1 missed word/i }))
+    expect(screen.getByText(/1 word you missed on/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.getByText(/card 1 of 1/i)).toBeInTheDocument()
+  })
+
+  it('reaches review from the home screen link too', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(screen.getByRole('button', { name: /see all/i }))
+    expect(screen.getByRole('heading', { name: /review/i })).toBeInTheDocument()
+  })
+})
+
+describe('the drill keyboard while the menu is open', () => {
+  it('does not mark the card when you type n with the menu up', async () => {
+    /*
+     * TestCard binds Y/N on `window` for the whole drill screen. The nav popover
+     * is a sibling of the card, not a descendant, so without the
+     * `[role="menu"]` check in TestCard, typing `n` here would silently mark the
+     * current card wrong underneath whatever the user is reading.
+     */
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^menu$/i }))
+    await user.keyboard('n')
+
+    // Still on the same card, still revealed, nothing marked.
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+    expect(screen.getByText(/✓ 0 · ✗ 0/)).toBeInTheDocument()
+  })
+
+  it('marks again once the menu is closed', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /^menu$/i }))
+    await user.keyboard('{Escape}')
+    await user.keyboard('n')
+
+    expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+  })
+})

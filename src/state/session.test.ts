@@ -284,3 +284,52 @@ describe('restart', () => {
     expect(restartWrongOnly(s, seededRng(1)).order).toHaveLength(0)
   })
 })
+
+describe('score() reports the right answers too', () => {
+  /*
+   * 006 F-1: `wrongPairs` alone cannot answer "what did I get right?", which is
+   * the question the review screen exists to answer. These pin the partition.
+   */
+  it('collects the pairs marked right', () => {
+    let s = createSession(pairs, noShuffle)
+    s = mark(reveal(s), 'right')
+    s = mark(reveal(s), 'wrong')
+    s = mark(reveal(s), 'right')
+    expect(score(s).rightPairs.map((p) => p.id)).toEqual(['1', '3'])
+  })
+
+  it('partitions the marked cards with wrongPairs, leaving nothing over', () => {
+    let s = createSession(pairs, noShuffle)
+    s = mark(reveal(s), 'right')
+    s = mark(reveal(s), 'wrong')
+    s = mark(reveal(s), 'wrong')
+    s = mark(reveal(s), 'right')
+
+    const { rightPairs, wrongPairs, total } = score(s)
+    expect(rightPairs.length + wrongPairs.length).toBe(total)
+    // Disjoint: no pair may be counted on both sides.
+    const ids = [...rightPairs, ...wrongPairs].map((p) => p.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('returns both arrays in list order, not in shuffle order', () => {
+    // The review screen reads these top to bottom, so they must match the list
+    // the user wrote rather than the order the drill happened to deal them.
+    let s = createSession(pairs, seededRng(7))
+    for (let i = 0; i < 4; i++) s = mark(reveal(s), 'right')
+    expect(score(s).rightPairs.map((p) => p.id)).toEqual(['1', '2', '3', '4'])
+  })
+
+  it('counts only what was marked, so quitting early is still meaningful', () => {
+    let s = createSession(pairs, noShuffle)
+    s = mark(reveal(s), 'right')
+    // Three cards never seen — they belong to neither side.
+    expect(score(s).rightPairs).toHaveLength(1)
+    expect(score(s).wrongPairs).toHaveLength(0)
+  })
+
+  it('is empty for a practice session, which marks nothing', () => {
+    const s = createSession(pairs, noShuffle, 'l1', 'practice')
+    expect(score(s).rightPairs).toEqual([])
+  })
+})

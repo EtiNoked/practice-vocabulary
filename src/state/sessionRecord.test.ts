@@ -69,3 +69,66 @@ describe('buildSessionRecord', () => {
     expect(a.id).not.toBe(b.id)
   })
 })
+
+describe('capturing the right answers (006 F-1)', () => {
+  it('captures the pairs answered correctly', () => {
+    const record = buildSessionRecord(list, full(), opts)!
+    expect(record.rightPairs).toHaveLength(1)
+    expect(record.rightPairs?.[0]?.col2).toBe('dochter')
+  })
+
+  it('partitions with wrongPairs over what was answered', () => {
+    const record = buildSessionRecord(list, full(), opts)!
+    expect((record.rightPairs?.length ?? 0) + record.wrongPairs.length).toBe(record.total)
+  })
+
+  it('OMITS the key entirely above the cap, rather than storing an empty array', () => {
+    /*
+     * `'rightPairs' in record`, not `toBeUndefined()` — the latter passes for a
+     * present-but-undefined key too, so it would prove nothing about the shape
+     * that actually reaches storage. Absent and empty are different things here:
+     * absent means "not recorded", empty means "you got none right".
+     */
+    const big: WordList = {
+      ...list,
+      pairs: Array.from({ length: 301 }, (_, i) => ({
+        id: `p${i}`,
+        col1: `en-${i}`,
+        col2: `nl-${i}`,
+      })),
+    }
+    let s = createSession(big.pairs, seededRng(1), big.id)
+    for (let i = 0; i < 301; i++) s = mark(s, 'right')
+
+    const record = buildSessionRecord(big, s, opts)!
+    expect(record.right).toBe(301)
+    expect('rightPairs' in record).toBe(false)
+  })
+
+  it('keeps the misses even when the right answers are dropped', () => {
+    // The misses are the valuable half — they are what a re-drill is built from.
+    const big: WordList = {
+      ...list,
+      pairs: Array.from({ length: 302 }, (_, i) => ({
+        id: `p${i}`,
+        col1: `en-${i}`,
+        col2: `nl-${i}`,
+      })),
+    }
+    let s = createSession(big.pairs, seededRng(1), big.id)
+    for (let i = 0; i < 301; i++) s = mark(s, 'right')
+    s = mark(s, 'wrong')
+
+    const record = buildSessionRecord(big, s, opts)!
+    expect('rightPairs' in record).toBe(false)
+    expect(record.wrongPairs).toHaveLength(1)
+  })
+
+  it('still records an empty array when nothing was right', () => {
+    let s = createSession(list.pairs, seededRng(1), list.id)
+    s = mark(s, 'wrong')
+    s = mark(s, 'wrong')
+    const record = buildSessionRecord(list, s, opts)!
+    expect(record.rightPairs).toEqual([])
+  })
+})

@@ -159,6 +159,63 @@ describe('sessions — append-only', () => {
     await assertFails(getDoc(doc(asBob(), `users/${ALICE}/sessions/s1`)))
     await assertFails(setDoc(doc(asBob(), `users/${ALICE}/sessions/s1`), aSession))
   })
+
+  /*
+   * 006 added `rightPairs`, roughly doubling what a record weighs. Sessions had
+   * no size cap at all — the lists collection has capped its pairs since 003, and
+   * a record cannot legitimately be larger than the list it came from.
+   *
+   * Both arrays are capped IF PRESENT rather than required: `rightPairs` is
+   * genuinely optional (absent on every pre-006 record and on any drill over the
+   * MAX_RIGHT_PAIRS cap), and requiring `wrongPairs` would reject writes this
+   * suite has always allowed without making anything safer.
+   */
+  const pairs = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `p${i}`, col1: `en${i}`, col2: `nl${i}` }))
+
+  it('accepts a record carrying its right answers', async () => {
+    await assertSucceeds(
+      setDoc(doc(asAlice(), `users/${ALICE}/sessions/s2`), {
+        ...aSession,
+        wrongPairs: pairs(2),
+        rightPairs: pairs(3),
+      }),
+    )
+  })
+
+  it('accepts a record with no rightPairs, as every pre-006 record has', async () => {
+    await assertSucceeds(
+      setDoc(doc(asAlice(), `users/${ALICE}/sessions/s3`), { ...aSession, wrongPairs: pairs(2) }),
+    )
+  })
+
+  it('REJECTS more than 500 wrong pairs', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), `users/${ALICE}/sessions/s4`), {
+        ...aSession,
+        wrongPairs: pairs(501),
+      }),
+    )
+  })
+
+  it('REJECTS more than 500 right pairs', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), `users/${ALICE}/sessions/s5`), {
+        ...aSession,
+        wrongPairs: pairs(1),
+        rightPairs: pairs(501),
+      }),
+    )
+  })
+
+  it('REJECTS pairs that are not a list', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), `users/${ALICE}/sessions/s6`), {
+        ...aSession,
+        wrongPairs: 'nope',
+      }),
+    )
+  })
 })
 
 describe('user document — field whitelist', () => {

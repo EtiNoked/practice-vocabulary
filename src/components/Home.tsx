@@ -10,6 +10,8 @@ interface Props {
   banner?: ReactNode
   /** Slot for the score history list. */
   history?: ReactNode
+  /** Optional route into the full review screen. Rendered only when supplied. */
+  onSeeAllHistory?: () => void
   /** Where the lists live, which changes what the empty state can promise. */
   scope?: 'device' | 'account'
   onNewList: () => void
@@ -24,6 +26,7 @@ export function Home({
   loading = false,
   banner,
   history,
+  onSeeAllHistory,
   scope = 'device',
   onNewList,
   ...listActions
@@ -54,7 +57,19 @@ export function Home({
 
       {history && (
         <div>
-          <h2 className="mb-2 font-semibold">Recent practice</h2>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="font-semibold">Recent practice</h2>
+            {/* The menu is the primary route to review; this is the discoverable one. */}
+            {onSeeAllHistory && (
+              <button
+                type="button"
+                onClick={onSeeAllHistory}
+                className="text-sm text-primary underline"
+              >
+                See all →
+              </button>
+            )}
+          </div>
           {history}
         </div>
       )}

@@ -40,11 +40,26 @@ service cloud.firestore {
           && request.resource.data.pairs.size() <= 500;
       }
 
+      function pairsWithinCap(data, field) {
+        // Capped IF PRESENT, never required. `rightPairs` is genuinely optional —
+        // absent on every record written before 006, and on any drill above the
+        // client's MAX_RIGHT_PAIRS cap — and requiring `wrongPairs` would reject
+        // writes that have always been legitimate without making anything safer.
+        return !(field in data.keys())
+          || (data[field] is list && data[field].size() <= 500);
+      }
+
       match /sessions/{sessionId} {
         allow read, delete: if isOwner(uid);
+        // The 500 cap matches the lists collection above: a record cannot
+        // legitimately be larger than the list it was drilled from. As there,
+        // this is about blast radius rather than malice — one client bug could
+        // otherwise write an unbounded document.
         allow create: if isOwner(uid)
           && request.resource.data.listId is string
-          && request.resource.data.finishedAt is number;
+          && request.resource.data.finishedAt is number
+          && pairsWithinCap(request.resource.data, 'wrongPairs')
+          && pairsWithinCap(request.resource.data, 'rightPairs');
 
         // History is a log, not a document. Enforcing append-only HERE rather
         // than in the UI means a client bug cannot rewrite the past.

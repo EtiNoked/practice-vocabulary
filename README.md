@@ -92,6 +92,37 @@ the option to shuffle and go again or drill only the ones you got wrong.
 
 Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 
+## Reviewing what you got wrong
+
+**Menu → Review** lists every finished drill, newest first, grouped under Today,
+Yesterday and dated headings, and filterable by list. Open one and you get the whole
+answer sheet: the words you missed, and the words you got right.
+
+Every practice — in Review, in **Recent practice** on the home screen, and on the drill's
+own page — is bordered by how it went: **green** for a clean sweep, **amber** from 70% up,
+**red** below that. Green means every card, not a percentage that rounded to 100, so
+199/200 reads amber and the fraction printed beside it explains why. The numbers are always
+there in text; a border colour on its own is no use to a colour-blind reader or a greyscale
+screenshot.
+
+From a list's start screen you can also drill **just the words you are still getting
+wrong**, over **Today**, **This week**, **This month** or **All time**. Each chip shows
+how many words it would drill.
+
+"Still getting wrong" is meant literally. A word counts only if the **most recent** time
+you saw it in that window, you missed it — answer it correctly later and it drops out on
+its own, so the set shrinks as you learn. Those runs are logged as *missed words only* and
+kept out of your full-run average, exactly as the wrong-only re-run already was.
+
+Two things worth knowing:
+
+- Words are matched **by what they say**, not by an internal id — so fixing a typo in one
+  word does not lose the practice history for the rest of the list. Change what a word
+  *says*, though, and it counts as a new word with a clean slate.
+- Drills finished **before this feature shipped** only recorded the words you got wrong,
+  never the ones you got right. History is append-only by design, so there is no backfill:
+  those drills show a line saying so rather than pretending you scored zero.
+
 ## If you hear nothing
 
 Speech uses your device's own voices, so a voice for the language being read has to
@@ -170,6 +201,20 @@ or none — one defined only in light silently keeps its light value in dark. An
 control names its foreground with a `--color-*-ink` token rather than a literal, because
 `--color-correct` is a dark green in light and a light green in dark, and white only works
 on one of them.
+
+Practice history is a **log, not a document**. A finished drill is written once and never
+updated — `allow update: if false` in [`firestore.rules`](firestore.rules) enforces that on
+the server, so no client bug can rewrite a past score. That is also why the right-answer
+snapshot added in 006 can never be backfilled onto an older record, and why the review
+screen explains the gap instead of inventing data to fill it.
+
+The one genuinely subtle rule in the codebase is that **`WordPair.id` is not a word
+identity**. The list editor re-mints every pair id on every save, so the same untouched
+word has a different id before and after any edit. Anything comparing words across drills
+goes through `wordKey` in [`src/state/missedWords.ts`](src/state/missedWords.ts), which
+keys on the normalised text; [`src/test/invariants.test.ts`](src/test/invariants.test.ts)
+fails the build if a second route appears. Getting this wrong produces no error at all —
+just a missed-words list that quietly empties itself weeks later.
 
 Adding a fourth language is a data change: one entry in
 [`src/lang/languages.ts`](src/lang/languages.ts) — a voice tag, a display name,

@@ -55,6 +55,7 @@ export interface FirestoreSdk {
   query: typeof import('firebase/firestore').query
   where: typeof import('firebase/firestore').where
   orderBy: typeof import('firebase/firestore').orderBy
+  limit: typeof import('firebase/firestore').limit
   writeBatch: typeof import('firebase/firestore').writeBatch
   serverTimestamp: typeof import('firebase/firestore').serverTimestamp
   terminate: typeof import('firebase/firestore').terminate
@@ -120,6 +121,7 @@ async function initialise(): Promise<FirebaseServices> {
       query: firestoreModule.query,
       where: firestoreModule.where,
       orderBy: firestoreModule.orderBy,
+      limit: firestoreModule.limit,
       writeBatch: firestoreModule.writeBatch,
       serverTimestamp: firestoreModule.serverTimestamp,
       terminate: firestoreModule.terminate,
