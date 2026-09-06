@@ -1,11 +1,19 @@
 import { useEffect } from 'react'
 import { LANG_NAMES } from '../lang/languages'
 import { currentPair, score } from '../state/session'
-import type { MarkResult, Session, WordList } from '../state/types'
+import type { DrillSubject } from '../state/drillRun'
+import type { MarkResult, Session } from '../state/types'
 import { speak } from '../speech/tts'
 
 interface Props {
-  list: WordList
+  /**
+   * What this run is OF: its name and its language pair.
+   *
+   * `DrillSubject`, not `WordList`, so a run spanning several lists can be drilled by
+   * this same card (011 D-8). A `WordList` still satisfies it, which is why widening
+   * this prop moved no call site.
+   */
+  subject: DrillSubject
   session: Session
   /** True when the device has no voice for the prompt language. */
   voiceMissing: boolean
@@ -26,7 +34,7 @@ interface Props {
  * no gesture in scope, which is why it renders a hint instead of speaking.
  */
 export function TestCard({
-  list,
+  subject,
   session,
   voiceMissing,
   resumed,
@@ -38,7 +46,7 @@ export function TestCard({
   const tally = score(session)
 
   const replay = () => {
-    if (pair) speak(pair.col2, list.col2Lang)
+    if (pair) speak(pair.col2, subject.col2Lang)
   }
 
   useEffect(() => {
@@ -95,7 +103,7 @@ export function TestCard({
         className="card p-6 text-center"
       >
         <p className="text-xs uppercase tracking-wide text-ink-faint">
-          Listen — {LANG_NAMES[list.col2Lang]}
+          Listen — {LANG_NAMES[subject.col2Lang]}
         </p>
 
         {voiceMissing && <p className="mt-3 text-word font-bold">{pair.col2}</p>}
@@ -104,7 +112,7 @@ export function TestCard({
           <div className="mt-4 flex flex-col gap-2">
             <p className="text-word font-bold">{pair.col2}</p>
             <p className="text-xs uppercase tracking-wide text-ink-faint">
-              {LANG_NAMES[list.col1Lang]}
+              {LANG_NAMES[subject.col1Lang]}
             </p>
             <p className="text-word font-bold text-correct">{pair.col1}</p>
           </div>

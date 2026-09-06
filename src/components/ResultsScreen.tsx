@@ -1,8 +1,16 @@
 import { score } from '../state/session'
-import type { Session, WordList } from '../state/types'
+import type { DrillSubject } from '../state/drillRun'
+import type { Session } from '../state/types'
 
 interface Props {
-  list: WordList
+  /**
+   * What this run is OF: its name and its language pair.
+   *
+   * `DrillSubject`, not `WordList`, so a run spanning several lists can be drilled by
+   * this same card (011 D-8). A `WordList` still satisfies it, which is why widening
+   * this prop moved no call site.
+   */
+  subject: DrillSubject
   session: Session
   onRestartShuffled: () => void
   onRestartWrongOnly: () => void
@@ -19,7 +27,7 @@ interface Props {
  * two would make it far too easy to reintroduce a "0%" on the study path.
  */
 export function ResultsScreen({
-  list,
+  subject,
   session,
   onRestartShuffled,
   onRestartWrongOnly,
@@ -28,7 +36,7 @@ export function ResultsScreen({
 }: Props) {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">{list.name}</h1>
+      <h1 className="text-2xl font-semibold">{subject.name}</h1>
       {session.mode === 'practice' ? (
         <PracticeDone
           session={session}

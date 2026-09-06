@@ -42,7 +42,7 @@ const setup = (session: Session) => {
   const onDone = vi.fn()
   render(
     <ResultsScreen
-      list={list}
+      subject={list}
       session={session}
       onRestartShuffled={onRestartShuffled}
       onRestartWrongOnly={onRestartWrongOnly}

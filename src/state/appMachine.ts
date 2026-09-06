@@ -14,6 +14,7 @@ import {
   toggleAnswers,
   type Rng,
 } from './session'
+import { runFromList, runListId, runPairs, type DrillRun } from './drillRun'
 import type { ReviewWindow } from './missedWords'
 import type { DrillMode, MarkResult, Session, WordList, WordPair } from './types'
 import { advance as advanceGame, answer as answerGame, isFinished as gameFinished, replay as replayGame, timeOut as timeOutGame } from '../game/game'
@@ -65,8 +66,19 @@ export type AppState =
        */
       missed?: { pairs: WordPair[]; source: MissedSource }
     }
-  | { screen: 'practising'; list: WordList; session: Session }
-  | { screen: 'results'; list: WordList; session: Session }
+  /**
+   * A drill in flight, and the run it is a run OF.
+   *
+   * A `DrillRun` rather than a `WordList` since 011: a test can span several lists, and
+   * there is then no honest single list to hold. A synthetic one was rejected on the
+   * grounds the ready screen already documents for its missed subset — it would share a
+   * real list's id, so anything saving by id would overwrite the real thing (011 D-7).
+   *
+   * The `ready` screen above deliberately keeps a real `WordList`: it needs `pairs`,
+   * "Save this list" and the missed chips, none of which a run has.
+   */
+  | { screen: 'practising'; run: DrillRun; session: Session }
+  | { screen: 'results'; run: DrillRun; session: Session }
   | { screen: 'review' }
   /**
    * The game's three screens (008).
@@ -194,21 +206,21 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
     case 'CONFIRM_LIST':
       return state.screen === 'editing' ? { screen: 'ready', list: action.list } : state
 
-    case 'START':
+    case 'START': {
       if (state.screen !== 'ready') return state
+      /*
+       * The subset when one is selected, otherwise the whole list — and either way as a
+       * RUN, through the same constructor the builder uses (011 D-9). One record-writing
+       * path downstream, not two: a second path for "the simple case" is how the simple
+       * case quietly stops matching the complicated one.
+       */
+      const run = runFromList(state.list, state.missed?.pairs ?? state.list.pairs)
       return {
         screen: 'practising',
-        list: state.list,
-        session: createSession(
-          // The subset when one is selected, otherwise the whole list. The list
-          // ID is kept either way, so the record files against the real list and
-          // the next missed set can read this drill back.
-          state.missed?.pairs ?? state.list.pairs,
-          rng,
-          state.list.id,
-          action.mode ?? 'test',
-        ),
+        run,
+        session: createSession(runPairs(run), rng, runListId(run), action.mode ?? 'test'),
       }
+    }
 
     /*
      * REVEAL and MARK are guarded to test mode, and NEXT/PREV to practice.
@@ -238,7 +250,7 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       if (state.screen !== 'practising' || state.session.mode !== 'test') return state
       const session = markSession(state.session, action.result)
       return isFinished(session)
-        ? { screen: 'results', list: state.list, session }
+        ? { screen: 'results', run: state.run, session }
         : { ...state, session }
     }
 
@@ -248,7 +260,7 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       // Past the last card is the end of the run — the same boundary MARK
       // already crosses via isFinished.
       return isFinished(session)
-        ? { screen: 'results', list: state.list, session }
+        ? { screen: 'results', run: state.run, session }
         : { ...state, session }
     }
 
@@ -258,13 +270,13 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
 
     case 'QUIT':
       if (state.screen !== 'practising') return state
-      return { screen: 'results', list: state.list, session: state.session }
+      return { screen: 'results', run: state.run, session: state.session }
 
     case 'RESTART_SHUFFLED':
       if (state.screen !== 'results') return state
       return {
         screen: 'practising',
-        list: state.list,
+        run: state.run,
         session: restartShuffled(state.session, rng),
       }
 
@@ -272,25 +284,30 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       if (state.screen !== 'results') return state
       return {
         screen: 'practising',
-        list: state.list,
+        run: state.run,
         session: restartWrongOnly(state.session, rng),
       }
 
     /*
-     * Built from `state.list.pairs`, NOT from the finished session's pairs.
+     * Built from `state.run.words`, NOT from the finished session's pairs.
      * After a wrong-only re-run the session holds only the pairs that were
      * missed, and switching mode there would silently drop every pair the user
      * got right.
+     *
+     * `run.words` is what `state.list.pairs` used to be — for a list run it IS the
+     * list's pairs — and for a pool run it is the drawn set, which is right: switching
+     * mode should study the fifteen words you were just tested on, not the two hundred
+     * they were drawn from.
      */
     case 'SWITCH_MODE':
       if (state.screen !== 'results') return state
       return {
         screen: 'practising',
-        list: state.list,
+        run: state.run,
         session: createSession(
-          state.list.pairs,
+          runPairs(state.run),
           rng,
-          state.list.id,
+          runListId(state.run),
           otherMode(state.session.mode),
         ),
       }

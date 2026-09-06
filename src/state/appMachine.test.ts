@@ -616,3 +616,58 @@ describe('the game screens (008)', () => {
     })
   })
 })
+
+describe('a drill carries a run, not a list (011 D-7, D-9)', () => {
+  it('starts the whole list as a run over its own words', () => {
+    const s = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.run.subject.name).toBe('Lesson 3')
+    expect(s.run.subject.col2Lang).toBe('nl')
+    expect(s.run.words.map((w) => w.id)).toEqual(['p1', 'p2'])
+    expect(s.run.words.every((w) => w.listId === 'a')).toBe(true)
+    // A list drill has no plan and nothing else to draw — same as before 011.
+    expect(s.run.plan).toBeUndefined()
+  })
+
+  it('starts a missed subset as a run over just those words', () => {
+    const s = at(
+      initialState,
+      { type: 'PRACTISE_MISSED', list, pairs: [{ id: 'missed-0', col1: 'son', col2: 'zoon' }], source: { kind: 'window', window: 'week' } },
+      { type: 'START' },
+    )
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.run.words.map((w) => w.col2)).toEqual(['zoon'])
+    expect(s.run.words[0]?.listId).toBe('a')
+  })
+
+  it('carries the run through to results, and back into every re-run', () => {
+    const started = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    const done = at(started, { type: 'MARK', result: 'wrong' }, { type: 'MARK', result: 'right' })
+    if (done.screen !== 'results') throw new Error('unreachable')
+    if (started.screen !== 'practising') throw new Error('unreachable')
+    expect(done.run).toBe(started.run)
+
+    const again = reduce(done, { type: 'RESTART_SHUFFLED' })
+    if (again.screen !== 'practising') throw new Error('unreachable')
+    expect(again.run).toBe(done.run)
+  })
+
+  it('SWITCH_MODE still covers the whole run after a wrong-only re-run', () => {
+    const done = at(
+      initialState,
+      { type: 'PRACTISE_LIST', list },
+      { type: 'START' },
+      { type: 'MARK', result: 'wrong' },
+      { type: 'MARK', result: 'right' },
+      { type: 'RESTART_WRONG_ONLY' },
+      { type: 'MARK', result: 'right' },
+    )
+    // The wrong-only re-run covered one word and finished.
+    if (done.screen !== 'results') throw new Error('unreachable')
+    const switched = reduce(done, { type: 'SWITCH_MODE' })
+    if (switched.screen !== 'practising') throw new Error('unreachable')
+    // BOTH words, not just the missed one — the bug this branch exists to prevent.
+    expect(switched.session.pairs).toHaveLength(2)
+    expect(switched.session.mode).toBe('practice')
+  })
+})

@@ -1,11 +1,19 @@
 import { useEffect } from 'react'
 import { LANG_NAMES } from '../lang/languages'
 import { currentPair } from '../state/session'
-import type { Session, WordList } from '../state/types'
+import type { DrillSubject } from '../state/drillRun'
+import type { Session } from '../state/types'
 import { speak } from '../speech/tts'
 
 interface Props {
-  list: WordList
+  /**
+   * What this run is OF: its name and its language pair.
+   *
+   * `DrillSubject`, not `WordList`, so a run spanning several lists can be drilled by
+   * this same card (011 D-8). A `WordList` still satisfies it, which is why widening
+   * this prop moved no call site.
+   */
+  subject: DrillSubject
   session: Session
   /** True when this card came back from storage rather than from a tap (FR-3). */
   resumed: boolean
@@ -38,7 +46,7 @@ interface Props {
  * Next/Previous for each one after.
  */
 export function StudyCard({
-  list,
+  subject,
   session,
   resumed,
   onNext,
@@ -51,7 +59,7 @@ export function StudyCard({
   const open = session.answersOpen
 
   const replay = () => {
-    if (pair) speak(pair.col2, list.col2Lang)
+    if (pair) speak(pair.col2, subject.col2Lang)
   }
 
   /*
@@ -103,12 +111,12 @@ export function StudyCard({
 
       <div aria-live="polite" className="card flex flex-col gap-2 p-6 text-center">
         <p className="text-xs uppercase tracking-wide text-ink-faint">
-          {LANG_NAMES[list.col2Lang]}
+          {LANG_NAMES[subject.col2Lang]}
         </p>
         <p className="text-word font-bold">{pair.col2}</p>
 
         <p className="mt-2 text-xs uppercase tracking-wide text-ink-faint">
-          {LANG_NAMES[list.col1Lang]}
+          {LANG_NAMES[subject.col1Lang]}
         </p>
         {/*
           Rendered either way, covered by a class rather than swapped out for a

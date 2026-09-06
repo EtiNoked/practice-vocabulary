@@ -1,3 +1,4 @@
+import type { DrillRun } from './drillRun'
 import type { LangCode } from '../lang/languages'
 import type { LangSource } from '../parse/types'
 
@@ -70,15 +71,19 @@ export interface Session {
 /**
  * An in-progress drill, parked in localStorage so a reload cannot lose it.
  *
- * The `list` is stored INSIDE the payload rather than referenced by id: a drill
- * has to survive its source list being deleted mid-run, exactly as the
- * in-memory pair snapshot already does (`session.ts`).
+ * The `run` is stored INSIDE the payload rather than referenced by id: a drill has to
+ * survive its source list being deleted mid-run, exactly as the in-memory pair snapshot
+ * already does (`session.ts`).
+ *
+ * A `DrillRun` since 011, where it used to be a `WordList` — a run can span several
+ * lists. `drillRepo.read` coerces an older payload rather than rejecting it, so the
+ * schema version stays at 1 and no drill in flight is lost.
  */
 export interface PersistedDrill {
   schemaVersion: number
   savedAt: number
   screen: 'practising'
-  list: WordList
+  run: DrillRun
   session: Session
   /**
    * Which kind of test run is in flight, mirroring `SessionRecord.mode`.
@@ -145,6 +150,23 @@ export interface SessionRecord {
    */
   rightPairs?: WordPair[]
   finishedAt: number
+  /**
+   * The run this record is one list's share of (011 D-3).
+   *
+   * A run can span several lists where `listId` above is one string. Rather than widen
+   * that field — and with it `collectMissed`, the review filter, the Firestore query and
+   * the security rules — a multi-list run splits into one record per contributing list,
+   * and they share this.
+   *
+   * ABSENT on a single-list drill, which is every record written before this feature and
+   * most of them after it. Absent means "this record IS the run" — never "unknown" —
+   * which is what makes `runId ?? id` a COMPLETE grouping rule rather than a fallback
+   * with a hole in it. `state/runGroup.ts` is the only place that rule is written.
+   *
+   * Additive and optional, so `sessionRepo.SCHEMA_VERSION` stays at 1. Bumping it would
+   * delete every user's history; `test/invariants.test.ts` fails the build if anyone does.
+   */
+  runId?: string
   /** A wrong-only re-run is real practice, but must not flatter the average. */
   mode: 'full' | 'wrong-only'
   /** True when the user quit before the last card. */

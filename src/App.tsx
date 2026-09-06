@@ -33,7 +33,7 @@ import {
   toDrillPairs,
   type ReviewWindow,
 } from './state/missedWords'
-import { buildSessionRecord } from './state/sessionRecord'
+import { buildRunRecords } from './state/sessionRecord'
 import { GameSetup } from './components/GameSetup'
 import { GameCloud } from './components/GameCloud'
 import { GameResults } from './components/GameResults'
@@ -53,7 +53,7 @@ function restore(): { state: AppState; runKind: SessionRecord['mode']; resumed: 
   const drill = drillRepo.load()
   if (!drill) return { state: initialState, runKind: 'full', resumed: false }
   return {
-    state: { screen: 'practising', list: drill.list, session: drill.session },
+    state: { screen: 'practising', run: drill.run, session: drill.session },
     runKind: drill.runKind,
     resumed: true,
   }
@@ -258,7 +258,7 @@ export default function App() {
     (next: AppState) => {
       if (next.screen !== 'practising') return
       const pair = currentPair(next.session)
-      if (pair) speak(pair.col2, next.list.col2Lang, voices)
+      if (pair) speak(pair.col2, next.run.subject.col2Lang, voices)
     },
     [voices],
   )
@@ -298,11 +298,19 @@ export default function App() {
        * only ever entered by MARK or QUIT.
        */
       if (state.screen === 'practising' && next.screen === 'results' && store) {
-        const record = buildSessionRecord(next.list, next.session, {
+        /*
+         * ONE RECORD PER CONTRIBUTING LIST (011 D-3). A plain list drill still produces
+         * exactly one, with no `runId`, so what a drill writes is unchanged.
+         *
+         * The results are ignored, as the single write always was: a failed record must
+         * not interrupt the results screen, and there is nothing useful to do about it.
+         */
+        for (const record of buildRunRecords(next.run, next.session, {
           mode: sessionMode,
           partial: action.type === 'QUIT',
-        })
-        if (record) void store.recordSession(record)
+        })) {
+          void store.recordSession(record)
+        }
       }
 
       /*
@@ -354,7 +362,7 @@ export default function App() {
        * behaviour rather than interrupt the drill (FR-6).
        */
       if (next.screen === 'practising') {
-        drillRepo.save({ list: next.list, session: next.session, runKind: nextRunKind })
+        drillRepo.save({ run: next.run, session: next.session, runKind: nextRunKind })
       } else {
         // Covers finishing, QUIT (which routes to results) and GO_HOME (FR-4).
         //
@@ -452,7 +460,11 @@ export default function App() {
   )
 
   const promptLang =
-    state.screen === 'practising' || state.screen === 'ready' ? state.list.col2Lang : null
+    state.screen === 'practising'
+      ? state.run.subject.col2Lang
+      : state.screen === 'ready'
+        ? state.list.col2Lang
+        : null
   const voiceMissing = ready && promptLang !== null && !hasVoiceFor(promptLang, voices)
 
   if (showWelcome) {
@@ -614,7 +626,7 @@ export default function App() {
       {state.screen === 'practising' &&
         (state.session.mode === 'practice' ? (
           <StudyCard
-            list={state.list}
+            subject={state.run.subject}
             session={state.session}
             resumed={resumed}
             onNext={() => act({ type: 'NEXT' })}
@@ -624,7 +636,7 @@ export default function App() {
           />
         ) : (
           <TestCard
-            list={state.list}
+            subject={state.run.subject}
             session={state.session}
             voiceMissing={voiceMissing}
             resumed={resumed}
@@ -636,7 +648,7 @@ export default function App() {
 
       {state.screen === 'results' && (
         <ResultsScreen
-          list={state.list}
+          subject={state.run.subject}
           session={state.session}
           onRestartShuffled={() => act({ type: 'RESTART_SHUFFLED' })}
           onRestartWrongOnly={() => act({ type: 'RESTART_WRONG_ONLY' })}
