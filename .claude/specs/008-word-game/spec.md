@@ -1,7 +1,8 @@
 # Spec: Word Game — hear it, grab it from the cloud, before the clock runs out
 
 **ID:** 008-word-game
-**Status:** DRAFT
+**Status:** IMPLEMENTED — `feature/word-game`, 7 commits, all gates green
+**Outstanding:** the on-device iPhone pass (tasks T7.4). See the note at the end.
 **Created:** 2026-09-06
 **Baseline:** `main` @ `84f258a` — 45 test files, 810 tests, all green
 **Re-baselined:** 2026-09-06 at execution. The plan was drafted against `69400fd`; main has since
@@ -228,3 +229,47 @@ Named so it is a decision rather than an omission.
   the net that proves the change was safe. The first follow-up, not this one.
 - **A game-history screen.** Records are written and feed the missed pool, but a "past games" view
   is not built. `ReviewScreen` stays drills-only this round.
+
+
+---
+
+## Implementation note (2026-09-06)
+
+Built on `feature/word-game`, cut from `main` @ `84f258a`, in seven commits following
+[tasks.md](tasks.md) phase by phase. Final state: **56 test files, 1085 tests**, plus
+**63 rules tests** against the emulator; typecheck, lint, build and the bundle guard all
+clean. Baseline was 45 files / 810 tests.
+
+Three things came out differently from the plan, each for a reason worth keeping:
+
+1. **Points are scored from the number on screen, not from a fresh clock reading.**
+   The plan said to read the clock at tap time. That is more precise and slightly wrong
+   for it: the display repaints every 100 ms, so a tap landing just after a whole-second
+   boundary the screen has not caught up with would award one point less than the digit
+   the user tapped under — the exact NFR-4 failure. Scoring from the displayed value
+   costs up to 100 ms of generosity and makes the mismatch unrepresentable.
+
+2. **`GameCloud` and the end-to-end test use `fireEvent`, not `userEvent`** — the only
+   place in this codebase that does. `userEvent` drives timers of its own, and against a
+   100 ms interval under fake timers the two wind each other until a click hangs. Every
+   interaction here is a plain click, so the realism `userEvent` buys is worth nothing
+   against the deadlock it costs. Plan risk R3 anticipated the difficulty and picked the
+   wrong remedy.
+
+3. **`gameRecord.ts` is exempt from the no-clock invariant**, with the exemption stated
+   in the guard and a second test pinning that `now` and `id` stay injectable. It mirrors
+   `sessionRecord.ts` exactly; holding two sibling files to different rules would make
+   the pair harder to read than either alone.
+
+### Still to do
+
+**T7.4, the on-device pass, has not been done** — in particular:
+
+> Play a full game on a real iPhone (Safari) and deliberately let two words time out.
+> Every subsequent word must still be audible.
+
+That is risk R1, and no test in this suite can stand in for it. The guard that exists —
+an invariant asserting `speak()` is never called from inside a `setTimeout` or
+`setInterval` in `GameCloud` — proves the shape of the code, not the behaviour of the
+platform. The dark-mode, reduced-motion and greyscale checks in T7.4 are likewise
+unverified beyond the token and glyph rules the suite enforces.
