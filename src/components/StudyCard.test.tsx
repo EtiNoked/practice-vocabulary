@@ -33,7 +33,7 @@ const setup = (over: { session?: Session; resumed?: boolean; answersOpen?: boole
   const session = over.answersOpen === undefined ? base : { ...base, answersOpen: over.answersOpen }
   render(
     <StudyCard
-      list={list}
+      subject={list}
       session={session}
       resumed={over.resumed ?? false}
       onNext={onNext}

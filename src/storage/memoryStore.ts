@@ -1,4 +1,5 @@
 import type { GameRecord } from '../game/types'
+import type { SavedTest } from '../state/testPlan'
 import type { SessionRecord, WordList } from '../state/types'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
 
@@ -18,6 +19,8 @@ export function createMemoryStore(initial: readonly WordList[] = []): ListStore 
   let sessionSubs: Array<{ listId: string | null; fn: (r: SessionRecord[]) => void }> = []
   let games: GameRecord[] = []
   let gameSubs: Array<(r: GameRecord[]) => void> = []
+  let tests: SavedTest[] = []
+  let testSubs: Array<(t: SavedTest[]) => void> = []
   let disposed = false
 
   function clone<T>(value: T): T {
@@ -32,6 +35,15 @@ export function createMemoryStore(initial: readonly WordList[] = []): ListStore 
       .filter((r) => listId === null || r.listId === listId)
       .sort((a, b) => b.finishedAt - a.finishedAt)
       .map(clone)
+
+  const sortedTests = (): SavedTest[] =>
+    [...tests].sort((a, b) => b.updatedAt - a.updatedAt).map(clone)
+
+  function emitTests(): void {
+    if (disposed) return
+    const snapshot = sortedTests()
+    testSubs.forEach((fn) => fn(clone(snapshot)))
+  }
 
   function emitLists(): void {
     if (disposed) return
@@ -115,11 +127,36 @@ export function createMemoryStore(initial: readonly WordList[] = []): ListStore 
       return { ok: true }
     },
 
+    subscribeTests(onChange, _onError): Unsubscribe {
+      void (_onError satisfies (e: StoreError) => void)
+      if (disposed) return () => {}
+      testSubs.push(onChange)
+      onChange(sortedTests())
+      return () => {
+        testSubs = testSubs.filter((fn) => fn !== onChange)
+      }
+    },
+
+    async saveTest(test: SavedTest): Promise<WriteResult> {
+      // Create-or-update by id, exactly as saveList is: the id is the identity.
+      tests = [...tests.filter((t) => t.id !== test.id), clone(test)]
+      emitTests()
+      return { ok: true }
+    },
+
+    async removeTest(id: string): Promise<WriteResult> {
+      if (!tests.some((t) => t.id === id)) return { ok: false, reason: 'missing' }
+      tests = tests.filter((t) => t.id !== id)
+      emitTests()
+      return { ok: true }
+    },
+
     async dispose(): Promise<void> {
       disposed = true
       listSubs = []
       sessionSubs = []
       gameSubs = []
+      testSubs = []
     },
   }
 }

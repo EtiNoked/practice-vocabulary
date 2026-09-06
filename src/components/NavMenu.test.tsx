@@ -8,6 +8,7 @@ const setup = (over: Partial<Parameters<typeof NavMenu>[0]> = {}) => {
   const onHome = vi.fn()
   const onReview = vi.fn()
   const onGame = vi.fn()
+  const onTest = vi.fn()
   render(
     <NavMenu
       screen={'home' as AppState['screen']}
@@ -15,10 +16,11 @@ const setup = (over: Partial<Parameters<typeof NavMenu>[0]> = {}) => {
       onHome={onHome}
       onReview={onReview}
       onGame={onGame}
+      onTest={onTest}
       {...over}
     />,
   )
-  return { onHome, onReview, onGame, user: userEvent.setup() }
+  return { onHome, onReview, onGame, onTest, user: userEvent.setup() }
 }
 
 const trigger = () => screen.getByRole('button', { name: /menu/i })
@@ -139,7 +141,7 @@ describe('leaving something unfinished', () => {
 describe('the game entry (008)', () => {
   it('offers a route into the game', async () => {
     const onGame = vi.fn()
-    render(<NavMenu screen="home" guard={null} onHome={() => {}} onReview={() => {}} onGame={onGame} />)
+    render(<NavMenu screen="home" guard={null} onHome={() => {}} onReview={() => {}} onGame={onGame} onTest={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Play a game' }))
     expect(onGame).toHaveBeenCalled()
@@ -148,7 +150,7 @@ describe('the game entry (008)', () => {
   it('marks where you already are on every game screen', async () => {
     for (const where of ['gameSetup', 'playing', 'gameResults'] as const) {
       const { unmount } = render(
-        <NavMenu screen={where} guard={null} onHome={() => {}} onReview={() => {}} onGame={() => {}} />,
+        <NavMenu screen={where} guard={null} onHome={() => {}} onReview={() => {}} onGame={() => {}} onTest={() => {}} />,
       )
       await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
       expect(screen.getByRole('menuitem', { name: 'Play a game' })).toHaveAttribute(
@@ -164,7 +166,7 @@ describe('the game entry (008)', () => {
     // "it won't be recorded" wording.
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const onHome = vi.fn()
-    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} />)
+    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} onTest={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Home' }))
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('scored so far'))
@@ -175,7 +177,7 @@ describe('the game entry (008)', () => {
   it('leaves the game when the warning is accepted', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const onHome = vi.fn()
-    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} />)
+    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} onTest={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Home' }))
     expect(onHome).toHaveBeenCalled()

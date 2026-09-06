@@ -9,6 +9,7 @@ interface Props {
   onHome: () => void
   onReview: () => void
   onGame: () => void
+  onTest: () => void
 }
 
 /**
@@ -38,7 +39,7 @@ const CONFIRM: Record<'drill' | 'edit' | 'game', string> = {
  * both rather than the intersection. The open/close behaviour here is copied on
  * purpose, and the reasons for each part of it are written out there.
  */
-export function NavMenu({ screen, guard, onHome, onReview, onGame }: Props) {
+export function NavMenu({ screen, guard, onHome, onReview, onGame, onTest }: Props) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -122,6 +123,7 @@ export function NavMenu({ screen, guard, onHome, onReview, onGame }: Props) {
         >
           {item('Home', screen === 'home', onHome)}
           {item('Review', screen === 'review' || screen === 'reviewDetail', onReview)}
+          {item('Build a test', screen === 'testSetup', onTest)}
           {item(
             'Play a game',
             screen === 'gameSetup' || screen === 'playing' || screen === 'gameResults',

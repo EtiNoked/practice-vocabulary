@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { groupRuns, runLabel, type RunGroup } from '../state/runGroup'
 import { bandBorder } from '../state/scoreBand'
 import type { SessionRecord } from '../state/types'
 
@@ -59,18 +60,27 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
 
   const options = useMemo(() => listOptions(records), [records])
 
-  const shown = useMemo(() => {
-    const matching = filter === ALL ? records : records.filter((r) => r.listId === filter)
-    return [...matching].sort((a, b) => b.finishedAt - a.finishedAt)
-  }, [records, filter])
+  /*
+   * FILTER FIRST, then group.
+   *
+   * A run spanning three lists writes three records (011 D-3). Filtered to one list, the
+   * user should see that list's share of it — which falls out of filtering first, with
+   * the run then grouping down to the single surviving record. Grouping first and
+   * filtering after would have to decide whether a run "belongs to" a list at all.
+   */
+  const shown = useMemo(
+    () => (filter === ALL ? records : records.filter((r) => r.listId === filter)),
+    [records, filter],
+  )
 
+  const runs = useMemo(() => groupRuns(shown), [shown])
 
-  const groups: Array<{ label: string; rows: SessionRecord[] }> = []
-  for (const record of shown) {
-    const label = dayLabel(record.finishedAt, now)
-    const last = groups[groups.length - 1]
-    if (last && last.label === label) last.rows.push(record)
-    else groups.push({ label, rows: [record] })
+  const days: Array<{ label: string; rows: RunGroup[] }> = []
+  for (const run of runs) {
+    const label = dayLabel(run.finishedAt, now)
+    const last = days[days.length - 1]
+    if (last && last.label === label) last.rows.push(run)
+    else days.push({ label, rows: [run] })
   }
 
   return (
@@ -114,13 +124,13 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
       ) : shown.length === 0 ? (
         <p className="text-ink-muted">No practice for this list yet.</p>
       ) : (
-        groups.map((group) => (
-          <div key={group.label}>
-            <h2 className="mb-2 font-semibold">{group.label}</h2>
+        days.map((day) => (
+          <div key={day.label}>
+            <h2 className="mb-2 font-semibold">{day.label}</h2>
             <ul className="flex flex-col gap-2">
-              {group.rows.map((record) => (
-                <li key={record.id}>
-                  <Row record={record} onOpen={onOpen} />
+              {day.rows.map((run) => (
+                <li key={run.id}>
+                  <Row run={run} onOpen={onOpen} />
                 </li>
               ))}
             </ul>
@@ -139,30 +149,74 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
   )
 }
 
-/** A button, not a clickable row: this is navigation, and a keyboard needs it. */
-function Row({
-  record,
-  onOpen,
+/** The score line a row shows, shared by a run and by one list's share of it. */
+function Score({
+  of,
 }: {
-  record: SessionRecord
-  onOpen: (recordId: string) => void
+  of: Pick<RunGroup, 'right' | 'total' | 'pct' | 'mode' | 'partial'>
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(record.id)}
-      /*
-        `border-2` plus the band overrides `.card`'s own 1px line: Tailwind's
-        utilities layer wins over the components layer, so the two do not fight.
-      */
-      className={`card flex w-full flex-wrap items-baseline justify-between gap-2 border-2 px-3 py-2 text-left ${bandBorder(record)}`}
-    >
-      <span className="font-medium">{record.listName}</span>
-      <span className="text-sm text-ink-muted">
-        {record.right} / {record.total} ({record.pct}%)
-        {record.mode === 'wrong-only' && ' · missed words only'}
-        {record.partial && ' · stopped early'}
-      </span>
-    </button>
+    <span className="text-sm text-ink-muted">
+      {of.right} / {of.total} ({of.pct}%)
+      {of.mode === 'wrong-only' && ' · missed words only'}
+      {of.partial && ' · stopped early'}
+    </span>
+  )
+}
+
+/**
+ * One run.
+ *
+ * A run of ONE record is a button, exactly as every row here has been since 006 —
+ * clicking it opens that drill's detail.
+ *
+ * A run spanning several lists is a summary with each list's share beneath it, and the
+ * shares are the buttons. That is not decoration: `ReviewDetail` shows one record, so a
+ * single button on a three-list run would have to pick one of them and silently drop the
+ * other two. Naming them is the honest version of the same click.
+ */
+function Row({ run, onOpen }: { run: RunGroup; onOpen: (recordId: string) => void }) {
+  const only = run.records.length === 1 ? run.records[0]! : null
+
+  if (only) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpen(only.id)}
+        /*
+          `border-2` plus the band overrides `.card`'s own 1px line: Tailwind's
+          utilities layer wins over the components layer, so the two do not fight.
+        */
+        className={`card flex w-full flex-wrap items-baseline justify-between gap-2 border-2 px-3 py-2 text-left ${bandBorder(run)}`}
+      >
+        <span className="font-medium">{runLabel(run)}</span>
+        <Score of={run} />
+      </button>
+    )
+  }
+
+  return (
+    <div className={`card border-2 px-3 py-2 ${bandBorder(run)}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-medium">{runLabel(run)}</span>
+        <Score of={run} />
+      </div>
+      <ul className="mt-2 flex flex-col gap-1">
+        {run.records.map((record) => (
+          <li key={record.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(record.id)}
+              className="flex w-full flex-wrap items-baseline justify-between gap-2 rounded bg-surface-sunken px-3 py-2 text-left text-sm"
+            >
+              <span>{record.listName}</span>
+              <span className="text-ink-muted">
+                {record.right} / {record.total}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

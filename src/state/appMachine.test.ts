@@ -1,6 +1,8 @@
 import { createGame, currentQuestion } from '../game/game'
 import type { GameSettings } from '../game/types'
 import { seededRng } from './session'
+import { runFromPool } from './drillRun'
+import type { PooledWord } from './wordPool'
 import { describe, expect, it } from 'vitest'
 import type { WordList } from './types'
 import { type AppAction, type AppState, initialState, reduce } from './appMachine'
@@ -614,5 +616,196 @@ describe('the game screens (008)', () => {
       expect(reduce(state, { type: 'REVEAL' })).toBe(state)
       expect(reduce(state, { type: 'TOGGLE_ANSWER' })).toBe(state)
     })
+  })
+})
+
+describe('a drill carries a run, not a list (011 D-7, D-9)', () => {
+  it('starts the whole list as a run over its own words', () => {
+    const s = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.run.subject.name).toBe('Lesson 3')
+    expect(s.run.subject.col2Lang).toBe('nl')
+    expect(s.run.words.map((w) => w.id)).toEqual(['p1', 'p2'])
+    expect(s.run.words.every((w) => w.listId === 'a')).toBe(true)
+    // A list drill has no plan and nothing else to draw — same as before 011.
+    expect(s.run.plan).toBeUndefined()
+  })
+
+  it('starts a missed subset as a run over just those words', () => {
+    const s = at(
+      initialState,
+      { type: 'PRACTISE_MISSED', list, pairs: [{ id: 'missed-0', col1: 'son', col2: 'zoon' }], source: { kind: 'window', window: 'week' } },
+      { type: 'START' },
+    )
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.run.words.map((w) => w.col2)).toEqual(['zoon'])
+    expect(s.run.words[0]?.listId).toBe('a')
+  })
+
+  it('carries the run through to results, and back into every re-run', () => {
+    const started = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    const done = at(started, { type: 'MARK', result: 'wrong' }, { type: 'MARK', result: 'right' })
+    if (done.screen !== 'results') throw new Error('unreachable')
+    if (started.screen !== 'practising') throw new Error('unreachable')
+    expect(done.run).toBe(started.run)
+
+    const again = reduce(done, { type: 'RESTART_SHUFFLED' })
+    if (again.screen !== 'practising') throw new Error('unreachable')
+    expect(again.run).toBe(done.run)
+  })
+
+  it('SWITCH_MODE still covers the whole run after a wrong-only re-run', () => {
+    const done = at(
+      initialState,
+      { type: 'PRACTISE_LIST', list },
+      { type: 'START' },
+      { type: 'MARK', result: 'wrong' },
+      { type: 'MARK', result: 'right' },
+      { type: 'RESTART_WRONG_ONLY' },
+      { type: 'MARK', result: 'right' },
+    )
+    // The wrong-only re-run covered one word and finished.
+    if (done.screen !== 'results') throw new Error('unreachable')
+    const switched = reduce(done, { type: 'SWITCH_MODE' })
+    if (switched.screen !== 'practising') throw new Error('unreachable')
+    // BOTH words, not just the missed one — the bug this branch exists to prevent.
+    expect(switched.session.pairs).toHaveLength(2)
+    expect(switched.session.mode).toBe('practice')
+  })
+})
+
+describe('building a test (011)', () => {
+  const pool: PooledWord[] = Array.from({ length: 30 }, (_, i) => ({
+    id: `w${i}`,
+    col1: `en${i}`,
+    col2: `nl${i}`,
+    listId: i % 2 === 0 ? 'A' : 'B',
+    listName: i % 2 === 0 ? 'Chapter 1' : 'Chapter 2',
+  }))
+  const testPlan = { spec: { listIds: ['A', 'B'], source: 'all' as const }, count: 10 }
+  const subject = { name: '2 lists', col1Lang: 'en' as const, col2Lang: 'nl' as const }
+  const poolRun = () => runFromPool(pool, testPlan, subject, seededRng(1))
+
+  const savedTest = {
+    id: 't1',
+    name: 'Weak verbs',
+    spec: { listIds: ['A'], source: 'missed' as const },
+    count: 15,
+    createdAt: 1,
+    updatedAt: 2,
+  }
+
+  it('opens the builder from anywhere, like the game does', () => {
+    for (const from of [initialState, { screen: 'review' } as AppState]) {
+      expect(reduce(from, { type: 'OPEN_TEST_SETUP' }).screen).toBe('testSetup')
+    }
+  })
+
+  it('opens the builder with nothing pre-filled', () => {
+    const s = reduce(initialState, { type: 'OPEN_TEST_SETUP' })
+    if (s.screen !== 'testSetup') throw new Error('unreachable')
+    expect(s.initial).toBeUndefined()
+  })
+
+  it('opens the builder pre-filled when editing a saved test', () => {
+    const s = reduce(initialState, { type: 'EDIT_TEST', test: savedTest })
+    if (s.screen !== 'testSetup') throw new Error('unreachable')
+    expect(s.initial).toBe(savedTest)
+  })
+
+  it('starts a run from the builder, in the mode asked for', () => {
+    const run = poolRun()
+    const s = at(initialState, { type: 'OPEN_TEST_SETUP' }, { type: 'START_RUN', run, mode: 'test' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.run).toBe(run)
+    expect(s.session.mode).toBe('test')
+    expect(s.session.pairs).toHaveLength(10)
+  })
+
+  it('starts a pool run in practice mode too (011 D-2)', () => {
+    const s = at(
+      initialState,
+      { type: 'OPEN_TEST_SETUP' },
+      { type: 'START_RUN', run: poolRun(), mode: 'practice' },
+    )
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('practice')
+  })
+
+  it('leaves the session with no single list when the run spans several', () => {
+    const s = at(
+      initialState,
+      { type: 'OPEN_TEST_SETUP' },
+      { type: 'START_RUN', run: poolRun(), mode: 'test' },
+    )
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.listId).toBe('')
+  })
+
+  it('starts a saved test straight from home, where the saved-tests list lives', () => {
+    const s = reduce({ screen: 'home' }, { type: 'START_RUN', run: poolRun(), mode: 'test' })
+    expect(s.screen).toBe('practising')
+  })
+
+  it('refuses to start on top of a drill or a game already running, by reference', () => {
+    const mid = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    expect(reduce(mid, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(mid)
+    const review: AppState = { screen: 'review' }
+    expect(reduce(review, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(review)
+  })
+})
+
+describe('a fresh draw (011 FR-26)', () => {
+  const pool: PooledWord[] = Array.from({ length: 30 }, (_, i) => ({
+    id: `w${i}`,
+    col1: `en${i}`,
+    col2: `nl${i}`,
+    listId: 'A',
+    listName: 'Chapter 1',
+  }))
+  const finished = (): AppState => {
+    const run = runFromPool(
+      pool,
+      { spec: { listIds: ['A'], source: 'all' }, count: 5 },
+      { name: 'Chapter 1', col1Lang: 'en', col2Lang: 'nl' },
+      seededRng(1),
+    )
+    let s = at(initialState, { type: 'OPEN_TEST_SETUP' }, { type: 'START_RUN', run, mode: 'test' })
+    for (let i = 0; i < 5; i++) s = reduce(s, { type: 'MARK', result: 'right' })
+    return s
+  }
+
+  it('draws a different five from the same pool', () => {
+    const done = finished()
+    if (done.screen !== 'results') throw new Error('unreachable')
+    const again = reduce(done, { type: 'RESTART_FRESH_DRAW' }, seededRng(99))
+    if (again.screen !== 'practising') throw new Error('unreachable')
+    expect(again.session.pairs).toHaveLength(5)
+    expect(again.run.words.map((w) => w.id)).not.toEqual(done.run.words.map((w) => w.id))
+    // The same pool, so the same count the user chose against still holds.
+    expect(again.run.pool).toBe(done.run.pool)
+  })
+
+  it('keeps the mode it was played in', () => {
+    const done = finished()
+    const again = reduce(done, { type: 'RESTART_FRESH_DRAW' }, seededRng(99))
+    if (again.screen !== 'practising') throw new Error('unreachable')
+    expect(again.session.mode).toBe('test')
+  })
+
+  it('is a no-op on a plain list drill, which has nothing else to draw', () => {
+    const done = at(
+      initialState,
+      { type: 'PRACTISE_LIST', list },
+      { type: 'START' },
+      { type: 'MARK', result: 'right' },
+      { type: 'MARK', result: 'right' },
+    )
+    expect(reduce(done, { type: 'RESTART_FRESH_DRAW' })).toBe(done)
+  })
+
+  it('ignores it anywhere but results, by reference', () => {
+    const home: AppState = { screen: 'home' }
+    expect(reduce(home, { type: 'RESTART_FRESH_DRAW' })).toBe(home)
   })
 })

@@ -13,7 +13,7 @@ import { ScoreHistory } from './components/ScoreHistory'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
-import type { SessionRecord, WordList } from './state/types'
+import type { DrillMode, SessionRecord, WordList } from './state/types'
 import { speak } from './speech/tts'
 import { useVoices } from './speech/useVoices'
 import { hasVoiceFor } from './speech/tts'
@@ -33,11 +33,15 @@ import {
   toDrillPairs,
   type ReviewWindow,
 } from './state/missedWords'
-import { buildSessionRecord } from './state/sessionRecord'
+import { buildRunRecords } from './state/sessionRecord'
 import { GameSetup } from './components/GameSetup'
 import { GameCloud } from './components/GameCloud'
 import { GameResults } from './components/GameResults'
 import { buildWordPool, poolSize, type PoolSpec } from './state/wordPool'
+import { canRedraw, poolSubject, runFromPool, type TestPlan } from './state/drillRun'
+import { TestSetup } from './components/TestSetup'
+import { SavedTests } from './components/SavedTests'
+import type { SavedTest } from './state/testPlan'
 import { createGame } from './game/game'
 import { buildGameRecord, gameMissSources } from './game/gameRecord'
 import type { GameRecord, GameSettings } from './game/types'
@@ -53,7 +57,7 @@ function restore(): { state: AppState; runKind: SessionRecord['mode']; resumed: 
   const drill = drillRepo.load()
   if (!drill) return { state: initialState, runKind: 'full', resumed: false }
   return {
-    state: { screen: 'practising', list: drill.list, session: drill.session },
+    state: { screen: 'practising', run: drill.run, session: drill.session },
     runKind: drill.runKind,
     resumed: true,
   }
@@ -72,6 +76,7 @@ export default function App() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [records, setRecords] = useState<SessionRecord[]>([])
   const [games, setGames] = useState<GameRecord[]>([])
+  const [tests, setTests] = useState<SavedTest[]>([])
   const [toast, setToast] = useState<string | null>(null)
   // Which kind of drill is currently running, so a wrong-only re-run can be
   // recorded as such and kept out of the plain average. Seeded from the restored
@@ -170,6 +175,14 @@ export default function App() {
     }
   }, [store])
 
+  useLayoutEffect(() => {
+    if (!store) return
+    const unsubscribe = store.subscribeTests(setTests, () => {})
+    return () => {
+      unsubscribe()
+    }
+  }, [store])
+
   /**
    * Derived, not stored: with no store we do not yet know whose data this is,
    * so the previous identity's lists must not stay on screen. Deriving avoids a
@@ -178,6 +191,7 @@ export default function App() {
   const visibleLists = useMemo(() => (store ? lists : []), [store, lists])
   const visibleRecords = useMemo(() => (store ? records : []), [store, records])
   const visibleGames = useMemo(() => (store ? games : []), [store, games])
+  const visibleTests = useMemo(() => (store ? tests : []), [store, tests])
 
   /**
    * Everything that can say a word was got right or wrong — drills AND games.
@@ -258,7 +272,7 @@ export default function App() {
     (next: AppState) => {
       if (next.screen !== 'practising') return
       const pair = currentPair(next.session)
-      if (pair) speak(pair.col2, next.list.col2Lang, voices)
+      if (pair) speak(pair.col2, next.run.subject.col2Lang, voices)
     },
     [voices],
   )
@@ -298,11 +312,19 @@ export default function App() {
        * only ever entered by MARK or QUIT.
        */
       if (state.screen === 'practising' && next.screen === 'results' && store) {
-        const record = buildSessionRecord(next.list, next.session, {
+        /*
+         * ONE RECORD PER CONTRIBUTING LIST (011 D-3). A plain list drill still produces
+         * exactly one, with no `runId`, so what a drill writes is unchanged.
+         *
+         * The results are ignored, as the single write always was: a failed record must
+         * not interrupt the results screen, and there is nothing useful to do about it.
+         */
+        for (const record of buildRunRecords(next.run, next.session, {
           mode: sessionMode,
           partial: action.type === 'QUIT',
-        })
-        if (record) void store.recordSession(record)
+        })) {
+          void store.recordSession(record)
+        }
       }
 
       /*
@@ -354,7 +376,7 @@ export default function App() {
        * behaviour rather than interrupt the drill (FR-6).
        */
       if (next.screen === 'practising') {
-        drillRepo.save({ list: next.list, session: next.session, runKind: nextRunKind })
+        drillRepo.save({ run: next.run, session: next.session, runKind: nextRunKind })
       } else {
         // Covers finishing, QUIT (which routes to results) and GO_HOME (FR-4).
         //
@@ -451,8 +473,64 @@ export default function App() {
     [visibleLists, missSources, act, voices],
   )
 
+  /**
+   * How many words a spec selects, for the builder's live count and the saved-tests list.
+   *
+   * ONE `now` for the whole render, not `Date.now()` per call: eight rows on the home
+   * screen must not disagree about which millisecond they were counted at, and the number
+   * a user is shown has to be the number they then get (011 NFR-4).
+   */
+  const testPoolSize = useCallback(
+    (spec: PoolSpec) => poolSize(visibleLists, spec, { records: missSources, now }),
+    [visibleLists, missSources, now],
+  )
+
+  /**
+   * Build a run from a plan and start it.
+   *
+   * The pool is built HERE rather than in the reducer, for the reason `startGame` is: it
+   * needs the live lists and every record, which a pure reducer does not have and must
+   * not acquire.
+   *
+   * The first word is spoken synchronously inside the tap that called this. Deferring it
+   * to an effect would put it outside the gesture, and iOS Safari drops that silently.
+   */
+  const startRun = useCallback(
+    (plan: TestPlan, mode: DrillMode, savedTestId?: string, name?: string) => {
+      const at = Date.now()
+      const pool = buildWordPool(visibleLists, plan.spec, {
+        records: missSources,
+        now: at,
+        idPrefix: 't',
+      })
+      const subject = poolSubject(visibleLists, plan.spec, name)
+      // No resolvable list means no language pair, and a run that cannot be spoken cannot
+      // be started. The screens disable their buttons long before this, so this is the
+      // belt to that pair of braces.
+      if (!subject || pool.length === 0) return
+      const run = runFromPool(pool, plan, subject, Math.random, savedTestId)
+      const first = run.words[0]
+      if (first) speak(first.col2, subject.col2Lang, voices)
+      act({ type: 'START_RUN', run, mode })
+    },
+    [visibleLists, missSources, act, voices],
+  )
+
+  const saveTest = useCallback(
+    async (test: SavedTest) => {
+      if (!store) return
+      const result = await store.saveTest(test)
+      if (!result.ok) setToast(writeFailureMessage(result.reason))
+    },
+    [store],
+  )
+
   const promptLang =
-    state.screen === 'practising' || state.screen === 'ready' ? state.list.col2Lang : null
+    state.screen === 'practising'
+      ? state.run.subject.col2Lang
+      : state.screen === 'ready'
+        ? state.list.col2Lang
+        : null
   const voiceMissing = ready && promptLang !== null && !hasVoiceFor(promptLang, voices)
 
   if (showWelcome) {
@@ -511,6 +589,7 @@ export default function App() {
           onHome={() => act({ type: 'GO_HOME' })}
           onReview={() => act({ type: 'OPEN_REVIEW' })}
           onGame={() => act({ type: 'OPEN_GAME' })}
+          onTest={() => act({ type: 'OPEN_TEST_SETUP' })}
         />
         {authAvailable ? (
           <AccountMenu
@@ -544,6 +623,31 @@ export default function App() {
           onSeeAllHistory={() => act({ type: 'OPEN_REVIEW' })}
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPlayGame={() => act({ type: 'OPEN_GAME' })}
+          onBuildTest={() => act({ type: 'OPEN_TEST_SETUP' })}
+          savedTests={
+            <SavedTests
+              tests={visibleTests}
+              lists={visibleLists}
+              count={testPoolSize}
+              loading={store === null}
+              onRun={(test, mode) =>
+                startRun({ spec: test.spec, count: test.count }, mode, test.id, test.name)
+              }
+              onEdit={(test) => act({ type: 'EDIT_TEST', test })}
+              onRename={(test) => {
+                const name = window.prompt('New name', test.name)
+                if (name === null || name.trim() === '') return
+                void saveTest({ ...test, name: name.trim(), updatedAt: Date.now() })
+              }}
+              onDelete={(test) => {
+                if (!window.confirm(`Delete “${test.name}”?`)) return
+                if (!store) return
+                void store.removeTest(test.id).then((result) => {
+                  if (!result.ok) setToast(writeFailureMessage(result.reason))
+                })
+              }}
+            />
+          }
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
           onRename={async (list) => {
@@ -614,7 +718,7 @@ export default function App() {
       {state.screen === 'practising' &&
         (state.session.mode === 'practice' ? (
           <StudyCard
-            list={state.list}
+            subject={state.run.subject}
             session={state.session}
             resumed={resumed}
             onNext={() => act({ type: 'NEXT' })}
@@ -624,7 +728,7 @@ export default function App() {
           />
         ) : (
           <TestCard
-            list={state.list}
+            subject={state.run.subject}
             session={state.session}
             voiceMissing={voiceMissing}
             resumed={resumed}
@@ -636,12 +740,49 @@ export default function App() {
 
       {state.screen === 'results' && (
         <ResultsScreen
-          list={state.list}
+          subject={state.run.subject}
           session={state.session}
+          freshDraw={
+            canRedraw(state.run)
+              ? {
+                  count: state.run.words.length,
+                  onDraw: () => act({ type: 'RESTART_FRESH_DRAW' }),
+                }
+              : null
+          }
           onRestartShuffled={() => act({ type: 'RESTART_SHUFFLED' })}
           onRestartWrongOnly={() => act({ type: 'RESTART_WRONG_ONLY' })}
           onSwitchMode={() => act({ type: 'SWITCH_MODE' })}
           onDone={() => act({ type: 'GO_HOME' })}
+        />
+      )}
+
+      {state.screen === 'testSetup' && (
+        <TestSetup
+          lists={visibleLists}
+          loading={store === null}
+          count={testPoolSize}
+          {...(state.initial !== undefined ? { initial: state.initial } : {})}
+          onStart={(plan, mode, savedTestId) => {
+            const saved = savedTestId ? visibleTests.find((t) => t.id === savedTestId) : undefined
+            startRun(plan, mode, savedTestId, saved?.name)
+          }}
+          onSave={(plan, name) => {
+            const existing =
+              state.initial && 'id' in state.initial ? state.initial : null
+            const at = Date.now()
+            void saveTest({
+              id: existing?.id ?? `${at}-${Math.random().toString(36).slice(2, 10)}`,
+              name,
+              spec: plan.spec,
+              count: plan.count,
+              createdAt: existing?.createdAt ?? at,
+              updatedAt: at,
+            })
+            act({ type: 'GO_HOME' })
+          }}
+          onBack={() => act({ type: 'GO_HOME' })}
+          onNewList={() => act({ type: 'NEW_LIST' })}
         />
       )}
 

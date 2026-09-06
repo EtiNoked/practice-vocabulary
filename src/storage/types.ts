@@ -1,4 +1,5 @@
 import type { GameRecord } from '../game/types'
+import type { SavedTest } from '../state/testPlan'
 import type { SessionRecord, WordList } from '../state/types'
 
 /**
@@ -79,6 +80,23 @@ export interface ListStore {
   ): Unsubscribe
 
   recordGame(record: GameRecord): Promise<WriteResult>
+
+  /**
+   * Saved tests, newest-updated first.
+   *
+   * A DOCUMENT collection, unlike `sessions` and `games` above: `saveTest` is create-or-
+   * update and `removeTest` exists at all, because a saved test is a definition the user
+   * edits rather than a log entry nothing may rewrite. The security rules draw the same
+   * line — this is the one collection here that permits `update`.
+   */
+  subscribeTests(
+    onChange: (tests: SavedTest[]) => void,
+    onError: (error: StoreError) => void,
+  ): Unsubscribe
+
+  saveTest(test: SavedTest): Promise<WriteResult>
+
+  removeTest(id: string): Promise<WriteResult>
 
   /**
    * Detach every listener and release cached data. Called on sign-out and when

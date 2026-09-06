@@ -92,6 +92,28 @@ service cloud.firestore {
         // A log, not a document — the same rule sessions keep, for the same reason.
         allow update: if false;
       }
+
+      /*
+       * Saved tests (011). The one collection here that is a DOCUMENT rather than a log.
+       *
+       * `allow update` is TRUE, deliberately, where sessions and games forbid it. A saved
+       * test is a definition the user edits — rename it, add a list, change the cap — and
+       * refusing updates would mean every edit created a second test. History is the
+       * opposite: nothing may rewrite what happened.
+       *
+       * The caps are about blast radius, as everywhere else here: with no server to stop
+       * it, one client bug could write an unbounded document. `listIds` is validated as a
+       * list and by length rather than element by element, so a later change to the spec's
+       * shape does not need a rules change to go with it.
+       */
+      match /tests/{testId} {
+        allow read, delete: if isOwner(uid);
+
+        allow create, update: if isOwner(uid)
+          && isNonEmptyString(request.resource.data.name, 200)
+          && request.resource.data.spec.listIds is list
+          && request.resource.data.spec.listIds.size() <= 20;
+      }
     }
 
     // No catch-all match at the root. Anything not named above is denied, which

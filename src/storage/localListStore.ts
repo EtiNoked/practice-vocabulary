@@ -1,8 +1,10 @@
 import type { GameRecord } from '../game/types'
+import type { SavedTest } from '../state/testPlan'
 import type { SessionRecord, WordList } from '../state/types'
 import { gameRepo } from './gameRepo'
 import { listRepo } from './listRepo'
 import { sessionRepo } from './sessionRepo'
+import { testRepo } from './testRepo'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
 
 /**
@@ -21,6 +23,7 @@ export function createLocalListStore(): ListStore {
   let listSubs: Array<(lists: WordList[]) => void> = []
   let sessionSubs: Array<{ listId: string | null; fn: (r: SessionRecord[]) => void }> = []
   let gameSubs: Array<(r: GameRecord[]) => void> = []
+  let testSubs: Array<(t: SavedTest[]) => void> = []
   let disposed = false
 
   function emitLists(): void {
@@ -37,6 +40,12 @@ export function createLocalListStore(): ListStore {
   function emitGames(): void {
     if (disposed) return
     gameSubs.forEach((fn) => fn(gameRepo.getAll()))
+  }
+
+  function emitTests(): void {
+    if (disposed) return
+    const tests = testRepo.getAll()
+    testSubs.forEach((fn) => fn(tests))
   }
 
   /** Emit only when the write actually landed — a failed write changed nothing. */
@@ -110,6 +119,23 @@ export function createLocalListStore(): ListStore {
       return afterWrite(gameRepo.add(record), emitGames)
     },
 
+    subscribeTests(onChange, _onError): Unsubscribe {
+      void (_onError satisfies (e: StoreError) => void)
+      testSubs.push(onChange)
+      onChange(testRepo.getAll())
+      return () => {
+        testSubs = testSubs.filter((fn) => fn !== onChange)
+      }
+    },
+
+    async saveTest(test: SavedTest): Promise<WriteResult> {
+      return afterWrite(testRepo.save(test), emitTests)
+    },
+
+    async removeTest(id: string): Promise<WriteResult> {
+      return afterWrite(testRepo.remove(id), emitTests)
+    },
+
     /**
      * Detaches listeners ONLY.
      *
@@ -121,6 +147,7 @@ export function createLocalListStore(): ListStore {
       listSubs = []
       sessionSubs = []
       gameSubs = []
+      testSubs = []
     },
   }
 }

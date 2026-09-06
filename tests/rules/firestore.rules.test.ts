@@ -38,6 +38,14 @@ const aGame = {
   partial: false,
 }
 
+const aTest = {
+  name: 'Weak verbs',
+  spec: { listIds: ['l1', 'l2'], source: 'missed' },
+  count: 15,
+  createdAt: 1,
+  updatedAt: 2,
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: 'demo-practice-vocabulary',
@@ -343,5 +351,71 @@ describe('games — what the rules refuse', () => {
 
   it('REJECTS results that is not a list', async () => {
     await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, results: 'lots' }))
+  })
+})
+
+describe('tests — a document, not a log', () => {
+  it('lets the owner create, read, update and delete their own saved test', async () => {
+    const ref = doc(asAlice(), 'users/alice/tests/t1')
+    await assertSucceeds(setDoc(ref, aTest))
+    await assertSucceeds(getDoc(ref))
+    // The one thing sessions and games forbid: a saved test is meant to be edited.
+    await assertSucceeds(updateDoc(ref, { name: 'Weak verbs, harder', updatedAt: 3 }))
+    await assertSucceeds(deleteDoc(ref))
+  })
+
+  it('lets the owner list their own tests', async () => {
+    await assertSucceeds(getDocs(collection(asAlice(), 'users/alice/tests')))
+  })
+})
+
+describe('tests — what the rules refuse', () => {
+  it('refuses another signed-in user everything', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users/alice/tests/t1'), aTest)
+    })
+    const bob = asBob()
+    await assertFails(getDoc(doc(bob, 'users/alice/tests/t1')))
+    await assertFails(setDoc(doc(bob, 'users/alice/tests/t2'), aTest))
+    await assertFails(updateDoc(doc(bob, 'users/alice/tests/t1'), { name: 'mine now' }))
+    await assertFails(deleteDoc(doc(bob, 'users/alice/tests/t1')))
+  })
+
+  it('refuses an unauthenticated client', async () => {
+    await assertFails(setDoc(doc(asAnon(), 'users/alice/tests/t1'), aTest))
+    await assertFails(getDoc(doc(asAnon(), 'users/alice/tests/t1')))
+  })
+
+  it('refuses a nameless test', async () => {
+    await assertFails(setDoc(doc(asAlice(), 'users/alice/tests/t1'), { ...aTest, name: '' }))
+  })
+
+  it('refuses a name beyond the cap', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), 'users/alice/tests/t1'), { ...aTest, name: 'x'.repeat(201) }),
+    )
+  })
+
+  it('refuses a spec whose listIds is not a list', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), 'users/alice/tests/t1'), {
+        ...aTest,
+        spec: { listIds: 'l1', source: 'all' },
+      }),
+    )
+  })
+
+  it('refuses a spec naming more lists than anyone has', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), 'users/alice/tests/t1'), {
+        ...aTest,
+        spec: { listIds: Array.from({ length: 21 }, (_, i) => `l${i}`), source: 'all' },
+      }),
+    )
+  })
+
+  it('refuses an update that empties the name', async () => {
+    await assertSucceeds(setDoc(doc(asAlice(), 'users/alice/tests/t1'), aTest))
+    await assertFails(updateDoc(doc(asAlice(), 'users/alice/tests/t1'), { name: '' }))
   })
 })

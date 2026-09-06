@@ -30,7 +30,7 @@ const setup = (voiceMissing = false, resumed = false) => {
   const session = createSession(list.pairs, noShuffle, list.id)
   const utils = render(
     <TestCard
-      list={list}
+      subject={list}
       session={session}
       voiceMissing={voiceMissing}
       resumed={resumed}
@@ -95,7 +95,7 @@ describe('the revealed state', () => {
     const session = { ...createSession(list.pairs, noShuffle, list.id), revealed: true }
     render(
       <TestCard
-        list={list}
+        subject={list}
         session={session}
         voiceMissing={false}
         resumed={false}

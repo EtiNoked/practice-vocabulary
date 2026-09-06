@@ -20,16 +20,37 @@ async function deleteCollection(
 }
 
 /**
+ * Every collection a user owns.
+ *
+ * A LIST, not four inline calls, because this is the thing that goes wrong: 008 added the
+ * `games` collection and did not add it here, so for three commits "delete my account"
+ * reported success while leaving every game record in Firestore under a uid that could
+ * never authenticate again — unreachable under `isOwner(uid)`, and therefore undeletable
+ * by anyone, ever.
+ *
+ * It failed silently because nothing connects the two files. `test/invariants.test.ts`
+ * now does: it reads the collection paths out of `firestoreListStore.ts` and fails the
+ * build if one of them is missing from this array. Add a collection there, and this stops
+ * compiling clean until it is named here too.
+ */
+const OWNED_COLLECTIONS = ['lists', 'sessions', 'games', 'tests'] as const
+
+/**
  * Remove everything the user owns, then the user document itself.
  *
  * Deliberately client-side: Cloud Functions require the paid Blaze plan, so
  * there is no server-side path (plan.md R6). Safe to re-run — deleting an
  * already-deleted document is not an error, which is what makes recovery from
  * a partial failure just "press it again".
+ *
+ * Sequential rather than concurrent, and the user document strictly LAST: the rules only
+ * permit `isOwner(uid)`, so removing the account's own document first would strand
+ * anything still under it, permanently.
  */
 export async function purgeUserData(services: FirebaseServices, uid: string): Promise<void> {
-  await deleteCollection(services, `users/${uid}/lists`)
-  await deleteCollection(services, `users/${uid}/sessions`)
+  for (const collection of OWNED_COLLECTIONS) {
+    await deleteCollection(services, `users/${uid}/${collection}`)
+  }
   await services.fs.deleteDoc(services.fs.doc(services.db, 'users', uid))
 }
 

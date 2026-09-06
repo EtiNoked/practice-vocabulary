@@ -126,3 +126,46 @@ describe('each practice wears its score', () => {
     expect(row()).toHaveClass('border-2')
   })
 })
+
+describe('a run over several lists is one run (011 D-3)', () => {
+  const run = (runId: string, parts: Array<Partial<SessionRecord>>): SessionRecord[] =>
+    parts.map((p) => rec({ runId, ...p }))
+
+  it('shows one row for a test that spanned three lists', () => {
+    render(
+      <ScoreHistory
+        records={run('r7', [
+          { id: 'a', listId: 'A', listName: 'Chapter 1', right: 4, wrong: 1, total: 5, pct: 80 },
+          { id: 'b', listId: 'B', listName: 'Chapter 2', right: 5, wrong: 1, total: 6, pct: 83 },
+          { id: 'c', listId: 'C', listName: 'Chapter 3', right: 2, wrong: 2, total: 4, pct: 50 },
+        ])}
+      />,
+    )
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByText(/3 lists/)).toBeInTheDocument()
+    // The run's own total, not any one list's share.
+    expect(screen.getByText(/11 \/ 15 \(73%\)/)).toBeInTheDocument()
+  })
+
+  it('counts that run ONCE in the average', () => {
+    render(
+      <ScoreHistory
+        records={[
+          ...run('r1', [
+            { listId: 'A', right: 0, wrong: 10, total: 10, pct: 0, finishedAt: Date.UTC(2026, 8, 3) },
+            { listId: 'B', right: 0, wrong: 10, total: 10, pct: 0, finishedAt: Date.UTC(2026, 8, 3) },
+            { listId: 'C', right: 0, wrong: 10, total: 10, pct: 0, finishedAt: Date.UTC(2026, 8, 3) },
+          ]),
+          rec({ right: 10, wrong: 0, total: 10, pct: 100, finishedAt: Date.UTC(2026, 8, 2) }),
+        ]}
+      />,
+    )
+    // Two runs: one at 0%, one at 100%. Counting the split run three times would say 25%.
+    expect(screen.getByText(/averaging 50% over your last 2 full runs/i)).toBeInTheDocument()
+  })
+
+  it('still names a single-list run by its list', () => {
+    render(<ScoreHistory records={[rec({ listName: 'Lesson 3' })]} />)
+    expect(screen.getByText('Lesson 3')).toBeInTheDocument()
+  })
+})

@@ -1,3 +1,4 @@
+import { runFromList, type DrillRun } from '../state/drillRun'
 import { isFinished } from '../state/session'
 import type {
   DrillMode,
@@ -28,7 +29,7 @@ export const TTL_MS = 24 * 60 * 60 * 1000
 
 /** What a caller gets back, ready to spread into the practising state. */
 export interface RestoredDrill {
-  list: WordList
+  run: DrillRun
   session: Session
   runKind: SessionRecord['mode']
 }
@@ -39,6 +40,29 @@ function isWordList(value: unknown): value is WordList {
   if (typeof value !== 'object' || value === null) return false
   const l = value as Record<string, unknown>
   return typeof l.id === 'string' && typeof l.name === 'string' && Array.isArray(l.pairs)
+}
+
+/**
+ * The run, structurally.
+ *
+ * Checks only what a screen would immediately dereference — a subject to name and speak,
+ * and the two word arrays. `plan` is genuinely optional and `pool` may be empty, so
+ * neither is required. Same depth as `isWordList` above, and for the same reason: this
+ * guards against corruption, not against a hostile payload.
+ */
+function isDrillRun(value: unknown): value is DrillRun {
+  if (typeof value !== 'object' || value === null) return false
+  const r = value as Record<string, unknown>
+  const subject = r.subject as Record<string, unknown> | undefined
+  return (
+    typeof subject === 'object' &&
+    subject !== null &&
+    typeof subject.name === 'string' &&
+    typeof subject.col1Lang === 'string' &&
+    typeof subject.col2Lang === 'string' &&
+    Array.isArray(r.pool) &&
+    Array.isArray(r.words)
+  )
 }
 
 function isSession(value: unknown): value is Session {
@@ -81,13 +105,35 @@ function read(now: number): RestoredDrill | null {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null) return null
-    const payload = parsed as Partial<PersistedDrill>
+    /*
+     * `list` is named explicitly because it is no longer part of `PersistedDrill` — it is
+     * what a pre-011 build wrote, and the only reason this reader still knows the word.
+     * Typing it here rather than casting at the use site keeps the coercion below honest.
+     */
+    const payload = parsed as Partial<PersistedDrill> & { list?: unknown }
 
     if (payload.schemaVersion !== SCHEMA_VERSION) return null
     if (typeof payload.savedAt !== 'number' || !Number.isFinite(payload.savedAt)) return null
     if (now - payload.savedAt > TTL_MS) return null
-    if (!isWordList(payload.list)) return null
     if (!isSession(payload.session)) return null
+
+    /*
+     * A drill parked by a build older than 011 carries `list` and no `run`.
+     *
+     * COERCED, not rejected. Rejecting would end every drill in flight the moment this
+     * shipped, to gain a shape we can construct ourselves from what is already there —
+     * the same trade-off 009 made for `answersOpen` and 002 for `runKind`.
+     *
+     * Built from `session.pairs` rather than `list.pairs`: a wrong-only re-run is
+     * drilling fewer words than its list holds, and the run has to be of what is
+     * actually on screen.
+     */
+    const run = isDrillRun(payload.run)
+      ? payload.run
+      : isWordList(payload.list)
+        ? runFromList(payload.list, payload.session.pairs)
+        : null
+    if (!run) return null
 
     // A finished drill is not a resumable one: restoring it would land the user
     // on a card that does not exist. Only reachable from a stale key written by
@@ -95,7 +141,7 @@ function read(now: number): RestoredDrill | null {
     if (isFinished(payload.session)) return null
 
     return {
-      list: payload.list,
+      run,
       session: {
         ...payload.session,
         /*
@@ -134,7 +180,7 @@ export const drillRepo = {
       schemaVersion: SCHEMA_VERSION,
       savedAt: now,
       screen: 'practising',
-      list: drill.list,
+      run: drill.run,
       session: drill.session,
       runKind: drill.runKind,
     }

@@ -28,7 +28,21 @@ const food: WordList = {
     { id: 'f2', col1: 'cheese', col2: 'kaas' },
     { id: 'f3', col1: 'apple', col2: 'appel' },
     { id: 'f4', col1: 'milk', col2: 'melk' },
-    { id: 'f5', col1: 'water', col2: 'water' },
+    /*
+     * NOT 'water'/'water', which is what this was and which made this whole file flaky
+     * about one run in six.
+     *
+     * Three assertions in "which side is heard" below rest on the two columns sharing no
+     * text — they check that the spoken word is a col2 and is nowhere on screen. A pair
+     * whose sides are spelled the same makes both true and false at once, and only when
+     * the shuffle happens to deal it first, so the suite failed at random with a message
+     * that pointed at the game rather than at the fixture.
+     *
+     * The same-text case is still covered where it belongs and can be pinned: the unit
+     * suites for `questions`, `game` and `wordPool` all carry a 'water/water' pair
+     * against an injected rng.
+     */
+    { id: 'f5', col1: 'egg', col2: 'ei' },
     { id: 'f6', col1: 'sugar', col2: 'suiker' },
   ],
   createdAt: 1,

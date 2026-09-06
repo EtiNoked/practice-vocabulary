@@ -188,3 +188,124 @@ describe('speech never escapes a user gesture (008 NFR-2)', () => {
     expect(sources['../components/GameCloud.tsx'] ?? '').toContain('Next word')
   })
 })
+
+describe('the drill spine stays pure (011 NFR-3)', () => {
+  /**
+   * `drillRun.ts` deals a round and `runGroup.ts` folds history. Both are read by screens
+   * that must agree with each other about one instant and one draw, which is only
+   * possible while `now` and `rng` arrive as parameters.
+   */
+  const spine = () =>
+    appSources().filter(
+      ([path]) =>
+        (path.endsWith('state/drillRun.ts') || path.endsWith('state/runGroup.ts')) &&
+        !path.includes('.test.'),
+    )
+
+  it('covers something — a filter that matches nothing passes vacuously', () => {
+    expect(spine()).toHaveLength(2)
+  })
+
+  it('reads no clock and draws no randomness of its own', () => {
+    const offenders = spine()
+      .filter(([, src]) => /Date\.now\(\)|new Date\(\)|Math\.random\(\)/.test(src))
+      .map(([path]) => path)
+    expect(offenders).toEqual([])
+  })
+
+  it('still exports the API it promises', () => {
+    // A cheap positive check beside the negative one, so the guard above cannot pass
+    // because a file was renamed out from under it.
+    const run = sources['../state/drillRun.ts'] ?? ''
+    expect(run).toContain('export function runFromList')
+    expect(run).toContain('export function runFromPool')
+    expect(sources['../state/runGroup.ts'] ?? '').toContain('export function groupRuns')
+  })
+})
+
+describe('saved tests stay append-compatible too (011)', () => {
+  it('never bumps the test schema version to add an optional field', () => {
+    /*
+     * testRepo.read() returns [] on a version mismatch, so bumping this DELETES every
+     * user's saved tests — silently, with no error and no way back. The same trap
+     * sessionRepo and gameRepo are guarded against above, for the same reason.
+     */
+    expect(sources['../storage/testRepo.ts'] ?? '').toContain('SCHEMA_VERSION = 1')
+  })
+})
+
+describe('there is exactly one grouping rule (011 D-4)', () => {
+  /*
+   * A run over three lists writes three records sharing a `runId`. Any reader of
+   * `records` that folds them differently — or forgets to fold them — counts that run
+   * three times, in an average that still looks entirely plausible. There is no error, no
+   * failing test in the offending file, and no symptom a user could report precisely.
+   *
+   * So `runId` is written in exactly one place and read in exactly one place, and every
+   * screen goes through `groupRuns`.
+   */
+  it('touches runId in exactly two places — one writes it, one reads it', () => {
+    const touching = appSources()
+      .filter(([path]) => !path.includes('.test.'))
+      // `types.ts` declares the field and spells the rule out in its doc comment, which
+      // is the one place that SHOULD mention it without implementing it.
+      .filter(([path]) => !path.endsWith('state/types.ts'))
+      .filter(([, src]) => /\.runId\b|runId\s*\?\?/.test(src))
+      .map(([path]) => path)
+      .sort()
+
+    // `sessionRecord.ts` decides the value; `runGroup.ts` is the only thing that reads
+    // one back.
+    expect(touching).toEqual(['../state/runGroup.ts', '../state/sessionRecord.ts'])
+  })
+
+  it('lets no component reach for runId directly', () => {
+    // The specific mistake this guards: a screen folding history its own way. It would
+    // look right, pass its own tests, and quietly count one run several times.
+    const offenders = appSources()
+      .filter(([path]) => path.includes('/components/') && !path.includes('.test.'))
+      .filter(([, src]) => /runId/.test(src))
+      .map(([path]) => path)
+    expect(offenders).toEqual([])
+  })
+
+  it('routes both history surfaces through groupRuns', () => {
+    for (const path of ['../components/ScoreHistory.tsx', '../components/ReviewScreen.tsx']) {
+      expect(sources[path] ?? '').toContain('groupRuns')
+    }
+  })
+})
+
+describe('deleting an account deletes everything (011 D-14)', () => {
+  /*
+   * THE GUARD THAT WAS MISSING, and this is not hypothetical: 008 added the `games`
+   * collection to firestoreListStore and did not add it to purgeUserData. Nothing failed.
+   * "Delete my account" went on reporting success while leaving every game record in
+   * Firestore under a uid that could never authenticate again — and since the rules only
+   * permit isOwner(uid), nobody could ever reach it to delete it.
+   *
+   * Two files, no connection between them, and no test that spanned both. This is that
+   * test: every collection the store writes to must be one the purge deletes.
+   */
+  const collections = (src: string, pattern: RegExp): string[] => {
+    const found = new Set<string>()
+    for (const match of src.matchAll(pattern)) found.add(match[1]!)
+    return [...found].sort()
+  }
+
+  it('purges every collection the store writes to', () => {
+    const store = sources['../storage/firestoreListStore.ts'] ?? ''
+    expect(store).toBeTruthy()
+    // `users/${uid}/lists` and friends.
+    const written = collections(store, /users\/\$\{uid\}\/(\w+)`/g)
+    expect(written.length).toBeGreaterThan(2)
+
+    const purge = sources['../auth/deleteAccount.ts'] ?? ''
+    expect(purge).toBeTruthy()
+    // The OWNED_COLLECTIONS array, whatever it happens to be called.
+    const purged = collections(purge, /'(\w+)'/g)
+
+    const missed = written.filter((name) => !purged.includes(name))
+    expect(missed).toEqual([])
+  })
+})

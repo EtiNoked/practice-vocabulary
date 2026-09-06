@@ -1,4 +1,5 @@
 import type { GameRecord } from '../game/types'
+import type { SavedTest } from '../state/testPlan'
 import type { SessionRecord, WordList } from '../state/types'
 import type { FirebaseServices } from '../auth/firebase'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
@@ -67,6 +68,7 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
   const listsPath = `users/${uid}/lists`
   const sessionsPath = `users/${uid}/sessions`
   const gamesPath = `users/${uid}/games`
+  const testsPath = `users/${uid}/tests`
 
   /** Track every listener so dispose() can detach all of them. A leaked
    * onSnapshot keeps firing after sign-out and would write one user's data
@@ -183,6 +185,35 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
         // stripUndefined is mandatory: Firestore THROWS on an undefined field value, and
         // `results` is legitimately absent on a record whose detail was shed.
         await fs.setDoc(fs.doc(db, gamesPath, record.id), stripUndefined(record))
+      }),
+
+    subscribeTests(onChange, onError): Unsubscribe {
+      if (disposed) return () => {}
+      /*
+       * Ordered by `updatedAt`, not `finishedAt`: a saved test is a document that gets
+       * edited, not a log entry with a moment. Unbounded, unlike the two history
+       * subscriptions — `MAX_TESTS` is 50 and they are a few hundred bytes each.
+       */
+      const q = fs.query(fs.collection(db, testsPath), fs.orderBy('updatedAt', 'desc'))
+      return track(
+        fs.onSnapshot(
+          q,
+          (snap) => onChange(snap.docs.map((d) => ({ ...d.data(), id: d.id }) as SavedTest)),
+          (error) => onError(toStoreError(error)),
+        ),
+      )
+    },
+
+    saveTest: (test) =>
+      write(async () => {
+        // The client-generated id IS the document id, exactly as it is for a list — which
+        // is what makes saving the same test twice one document rather than two.
+        await fs.setDoc(fs.doc(db, testsPath, test.id), stripUndefined(test))
+      }),
+
+    removeTest: (id) =>
+      write(async () => {
+        await fs.deleteDoc(fs.doc(db, testsPath, id))
       }),
 
     async dispose(): Promise<void> {

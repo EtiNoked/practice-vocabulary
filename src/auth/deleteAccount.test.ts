@@ -73,13 +73,26 @@ function fakeServices(options: {
 }
 
 describe('purgeUserData', () => {
-  it('deletes lists, then sessions, then the user document', async () => {
+  /*
+   * EVERY collection, then the user document.
+   *
+   * This assertion used to name lists and sessions only, and it was true and incomplete:
+   * 008 added `games` and did not add it here, so a deleted account left every game
+   * record behind under a uid that could never authenticate again — unreachable, and
+   * therefore undeletable by anyone. 011 adds `tests` and closes both.
+   *
+   * The ORDER is not negotiable either: the rules only permit `isOwner(uid)`, so deleting
+   * the user document first would strand whatever is left permanently.
+   */
+  it('deletes every collection, then the user document', async () => {
     const { services, log } = fakeServices({ listDocs: 2, sessionDocs: 3 })
     await purgeUserData(services, 'u1')
 
     expect(log.filter((l) => l.startsWith('read:') || l.startsWith('delete:'))).toEqual([
       'read:users/u1/lists',
       'read:users/u1/sessions',
+      'read:users/u1/games',
+      'read:users/u1/tests',
       'delete:users/u1',
     ])
   })
