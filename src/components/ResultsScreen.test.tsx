@@ -146,3 +146,39 @@ describe('after a practice run', () => {
     expect(screen.getByRole('heading', { name: 'Lesson 3' })).toBeInTheDocument()
   })
 })
+
+describe('another draw from the same pool (011 FR-26)', () => {
+  const withDraw = (session: Session, freshDraw: { count: number; onDraw: () => void } | null) => {
+    render(
+      <ResultsScreen
+        subject={list}
+        session={session}
+        freshDraw={freshDraw}
+        onRestartShuffled={vi.fn()}
+        onRestartWrongOnly={vi.fn()}
+        onSwitchMode={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    )
+    return userEvent.setup()
+  }
+
+  it('is absent on a plain list drill — there is no other sample to draw', () => {
+    withDraw(finishedTest(), null)
+    expect(screen.queryByRole('button', { name: /freshly drawn/i })).not.toBeInTheDocument()
+  })
+
+  it('says how many it would deal, and fires', async () => {
+    const onDraw = vi.fn()
+    const user = withDraw(finishedTest(), { count: 15, onDraw })
+    await user.click(screen.getByRole('button', { name: /another 15, freshly drawn/i }))
+    expect(onDraw).toHaveBeenCalled()
+  })
+
+  it('is offered after a practice run too, and still shows no score', () => {
+    withDraw(finishedPractice(), { count: 12, onDraw: vi.fn() })
+    expect(screen.getByRole('button', { name: /another 12/i })).toBeInTheDocument()
+    // The rule the practice panel exists to protect: never a 0 / 0 on a study run.
+    expect(screen.queryByText(/0%/)).not.toBeInTheDocument()
+  })
+})

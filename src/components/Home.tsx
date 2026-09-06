@@ -20,6 +20,10 @@ interface Props {
    * directly, and the same rule `onSeeAllHistory` follows.
    */
   onPlayGame?: () => void
+  /** Same rule as `onPlayGame`: optional, and the button appears only when supplied. */
+  onBuildTest?: () => void
+  /** Slot for the saved-tests list. Rendered only when supplied, for the same reason. */
+  savedTests?: ReactNode
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
   onRename: (list: WordList) => void
@@ -35,6 +39,8 @@ export function Home({
   scope = 'device',
   onNewList,
   onPlayGame,
+  onBuildTest,
+  savedTests,
   ...listActions
 }: Props) {
   return (
@@ -56,6 +62,11 @@ export function Home({
         >
           New list
         </button>
+        {onBuildTest && (
+          <button type="button" onClick={onBuildTest} className="btn btn-quiet btn-lg">
+            Build a test
+          </button>
+        )}
         {onPlayGame && (
           <button type="button" onClick={onPlayGame} className="btn btn-quiet btn-lg">
             Play a game
@@ -67,6 +78,13 @@ export function Home({
         <h2 className="mb-2 font-semibold">Saved lists</h2>
         <SavedLists lists={lists} loading={loading} scope={scope} {...listActions} />
       </div>
+
+      {savedTests && (
+        <div>
+          <h2 className="mb-2 font-semibold">Saved tests</h2>
+          {savedTests}
+        </div>
+      )}
 
       {history && (
         <div>

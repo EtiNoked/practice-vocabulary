@@ -363,8 +363,16 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
     case 'EDIT_TEST':
       return { screen: 'testSetup', initial: action.test }
 
+    /*
+     * Legal from the builder AND from home, because a saved test is run from the home
+     * screen's list — guarding this to `testSetup` alone made that button a silent no-op,
+     * which is precisely what the end-to-end test caught.
+     *
+     * Named screens rather than "anywhere": the point of the guard is that a run cannot
+     * start on top of a drill or a game already in flight.
+     */
     case 'START_RUN':
-      if (state.screen !== 'testSetup') return state
+      if (state.screen !== 'testSetup' && state.screen !== 'home') return state
       return {
         screen: 'practising',
         run: action.run,

@@ -742,9 +742,16 @@ describe('building a test (011)', () => {
     expect(s.session.listId).toBe('')
   })
 
-  it('ignores START_RUN anywhere but the builder, by reference', () => {
-    const home: AppState = { screen: 'home' }
-    expect(reduce(home, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(home)
+  it('starts a saved test straight from home, where the saved-tests list lives', () => {
+    const s = reduce({ screen: 'home' }, { type: 'START_RUN', run: poolRun(), mode: 'test' })
+    expect(s.screen).toBe('practising')
+  })
+
+  it('refuses to start on top of a drill or a game already running, by reference', () => {
+    const mid = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    expect(reduce(mid, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(mid)
+    const review: AppState = { screen: 'review' }
+    expect(reduce(review, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(review)
   })
 })
 

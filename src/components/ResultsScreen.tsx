@@ -14,6 +14,15 @@ interface Props {
   session: Session
   onRestartShuffled: () => void
   onRestartWrongOnly: () => void
+  /**
+   * A fresh draw of the same size from the same pool, or absent when there is none.
+   *
+   * Passed as `null` rather than disabled: a list drill has no other sample to draw, and
+   * a permanently dead button on every drill in the app would invite the question an
+   * absent one never raises. `freshDraw` is how many words it would deal, so the label
+   * can say it.
+   */
+  freshDraw?: { count: number; onDraw: () => void } | null
   /** Run the same list again in the other mode (FR-15). */
   onSwitchMode: () => void
   onDone: () => void
@@ -31,6 +40,7 @@ export function ResultsScreen({
   session,
   onRestartShuffled,
   onRestartWrongOnly,
+  freshDraw = null,
   onSwitchMode,
   onDone,
 }: Props) {
@@ -41,6 +51,7 @@ export function ResultsScreen({
         <PracticeDone
           session={session}
           onRestart={onRestartShuffled}
+          freshDraw={freshDraw}
           onSwitchMode={onSwitchMode}
           onDone={onDone}
         />
@@ -49,6 +60,7 @@ export function ResultsScreen({
           session={session}
           onRestartShuffled={onRestartShuffled}
           onRestartWrongOnly={onRestartWrongOnly}
+          freshDraw={freshDraw}
           onSwitchMode={onSwitchMode}
           onDone={onDone}
         />
@@ -67,11 +79,13 @@ export function ResultsScreen({
 function PracticeDone({
   session,
   onRestart,
+  freshDraw,
   onSwitchMode,
   onDone,
 }: {
   session: Session
   onRestart: () => void
+  freshDraw: { count: number; onDraw: () => void } | null
   onSwitchMode: () => void
   onDone: () => void
 }) {
@@ -86,6 +100,7 @@ function PracticeDone({
         <button type="button" onClick={onRestart} className="btn btn-primary btn-lg">
           Practice again
         </button>
+        {freshDraw && <FreshDraw {...freshDraw} />}
         <button type="button" onClick={onSwitchMode} className="btn btn-lg bg-ink text-ground">
           Test yourself
         </button>
@@ -101,17 +116,42 @@ function PracticeDone({
   )
 }
 
+/**
+ * "Another 15" — a different sample of the same size from the same pool.
+ *
+ * NOT the same thing as the button above it, and the labels have to keep them apart:
+ * "Shuffle & restart" re-runs the very same words in a new order, this one draws words the
+ * user may not have seen. That distinction is the whole of the ask's "re-do the practice,
+ * or regenerate this test".
+ *
+ * Re-samples the pool SNAPSHOT, so the number chosen at setup still holds even if another
+ * tab has since edited a list (011 D-6, following 008 D-9).
+ */
+function FreshDraw({ count, onDraw }: { count: number; onDraw: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onDraw}
+      className="min-h-11 rounded border border-line-strong"
+    >
+      Another {count}, freshly drawn
+    </button>
+  )
+}
+
 /** 001's panel, unchanged (FR-14), plus the one new way out into practice. */
 function TestDone({
   session,
   onRestartShuffled,
   onRestartWrongOnly,
+  freshDraw,
   onSwitchMode,
   onDone,
 }: {
   session: Session
   onRestartShuffled: () => void
   onRestartWrongOnly: () => void
+  freshDraw: { count: number; onDraw: () => void } | null
   onSwitchMode: () => void
   onDone: () => void
 }) {
@@ -147,6 +187,7 @@ function TestDone({
         <button type="button" onClick={onRestartShuffled} className="btn btn-primary btn-lg">
           Shuffle &amp; restart
         </button>
+        {freshDraw && <FreshDraw {...freshDraw} />}
         <button
           type="button"
           onClick={onRestartWrongOnly}
