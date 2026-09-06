@@ -407,10 +407,17 @@ export default function App() {
         <NavMenu
           screen={state.screen}
           guard={
-            state.screen === 'practising' ? 'drill' : state.screen === 'editing' ? 'edit' : null
+            state.screen === 'practising'
+              ? 'drill'
+              : state.screen === 'playing'
+                ? 'game'
+                : state.screen === 'editing'
+                  ? 'edit'
+                  : null
           }
           onHome={() => act({ type: 'GO_HOME' })}
           onReview={() => act({ type: 'OPEN_REVIEW' })}
+          onGame={() => act({ type: 'OPEN_GAME' })}
         />
         {authAvailable ? (
           <AccountMenu

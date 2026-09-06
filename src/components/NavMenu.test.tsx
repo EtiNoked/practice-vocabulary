@@ -7,16 +7,18 @@ import type { AppState } from '../state/appMachine'
 const setup = (over: Partial<Parameters<typeof NavMenu>[0]> = {}) => {
   const onHome = vi.fn()
   const onReview = vi.fn()
+  const onGame = vi.fn()
   render(
     <NavMenu
       screen={'home' as AppState['screen']}
       guard={null}
       onHome={onHome}
       onReview={onReview}
+      onGame={onGame}
       {...over}
     />,
   )
-  return { onHome, onReview, user: userEvent.setup() }
+  return { onHome, onReview, onGame, user: userEvent.setup() }
 }
 
 const trigger = () => screen.getByRole('button', { name: /menu/i })
@@ -131,5 +133,52 @@ describe('leaving something unfinished', () => {
     await user.click(screen.getByRole('menuitem', { name: /home/i }))
     expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/have not saved/i))
     expect(onHome).toHaveBeenCalled()
+  })
+})
+
+describe('the game entry (008)', () => {
+  it('offers a route into the game', async () => {
+    const onGame = vi.fn()
+    render(<NavMenu screen="home" guard={null} onHome={() => {}} onReview={() => {}} onGame={onGame} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Play a game' }))
+    expect(onGame).toHaveBeenCalled()
+  })
+
+  it('marks where you already are on every game screen', async () => {
+    for (const where of ['gameSetup', 'playing', 'gameResults'] as const) {
+      const { unmount } = render(
+        <NavMenu screen={where} guard={null} onHome={() => {}} onReview={() => {}} onGame={() => {}} />,
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+      expect(screen.getByRole('menuitem', { name: 'Play a game' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
+      unmount()
+    }
+  })
+
+  it('warns before abandoning a game, and says what is actually kept', async () => {
+    // A quit game IS recorded for what it asked, so this must not borrow the drill's
+    // "it won't be recorded" wording.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const onHome = vi.fn()
+    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Home' }))
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('scored so far'))
+    expect(onHome).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('leaves the game when the warning is accepted', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const onHome = vi.fn()
+    render(<NavMenu screen="playing" guard="game" onHome={onHome} onReview={() => {}} onGame={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Home' }))
+    expect(onHome).toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 })

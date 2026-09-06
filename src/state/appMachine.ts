@@ -16,6 +16,8 @@ import {
 } from './session'
 import type { ReviewWindow } from './missedWords'
 import type { DrillMode, MarkResult, Session, WordList, WordPair } from './types'
+import { advance as advanceGame, answer as answerGame, isFinished as gameFinished, replay as replayGame, timeOut as timeOutGame } from '../game/game'
+import type { Game, GameSettings } from '../game/types'
 
 /**
  * Where a missed-words subset came from, so the ready screen can say it in
@@ -66,6 +68,25 @@ export type AppState =
   | { screen: 'practising'; list: WordList; session: Session }
   | { screen: 'results'; list: WordList; session: Session }
   | { screen: 'review' }
+  /**
+   * The game's three screens (008).
+   *
+   * Beside the drill's, not inside them. A game has questions with options, a clock and
+   * points where a Session has cards and marks — folding them together would mean a
+   * union every existing consumer has to narrow, or optional fields meaningless half the
+   * time (008 D-7).
+   */
+  | {
+      screen: 'gameSetup'
+      /**
+       * Pre-fills the form after "New game", so the previous round's settings are the
+       * starting point rather than a blank slate (008 FR-27). The FORM's own state lives
+       * in the component (008 D-11); this is only its seed.
+       */
+      initial?: GameSettings
+    }
+  | { screen: 'playing'; game: Game }
+  | { screen: 'gameResults'; game: Game }
   /** Holds the record ID, never the record: a copy goes stale on the next emit. */
   | { screen: 'reviewDetail'; recordId: string }
 
@@ -96,6 +117,21 @@ export type AppAction =
   /** Drop the subset and go back to the whole list, staying on ready. */
   | { type: 'PRACTISE_FULL' }
   | { type: 'GO_HOME' }
+  | { type: 'OPEN_GAME' }
+  /**
+   * Carries a FINISHED Game, not settings.
+   *
+   * Building one needs the live lists and every record, which a pure reducer does not
+   * have and must not acquire — the same reason PRACTISE_MISSED carries finished pairs.
+   */
+  | { type: 'START_GAME'; game: Game }
+  | { type: 'ANSWER'; choiceId: string; remainingMs: number }
+  | { type: 'TIME_OUT' }
+  | { type: 'ADVANCE' }
+  /** Same settings, same pool, a fresh draw. Pure — the pool is already in the state. */
+  | { type: 'REPLAY_GAME' }
+  | { type: 'NEW_GAME' }
+  | { type: 'QUIT_GAME' }
 
 export const initialState: AppState = { screen: 'home' }
 
@@ -258,6 +294,49 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
           otherMode(state.session.mode),
         ),
       }
+
+    case 'OPEN_GAME':
+      // Legal from anywhere, the drill included — NavMenu owns the "you will lose this"
+      // confirm, for the same reason OPEN_REVIEW does: a pure reducer must not open a
+      // dialog.
+      return { screen: 'gameSetup' }
+
+    case 'START_GAME':
+      return state.screen === 'gameSetup' ? { screen: 'playing', game: action.game } : state
+
+    case 'ANSWER':
+      if (state.screen !== 'playing') return state
+      return { ...state, game: answerGame(state.game, action.choiceId, action.remainingMs) }
+
+    case 'TIME_OUT':
+      if (state.screen !== 'playing') return state
+      return { ...state, game: timeOutGame(state.game) }
+
+    case 'ADVANCE': {
+      if (state.screen !== 'playing') return state
+      const game = advanceGame(state.game)
+      // Past the last question is the end of the round — the same boundary MARK and
+      // NEXT already cross via isFinished.
+      return gameFinished(game) ? { screen: 'gameResults', game } : { ...state, game }
+    }
+
+    case 'QUIT_GAME':
+      return state.screen === 'playing' ? { screen: 'gameResults', game: state.game } : state
+
+    /*
+     * Pure, unlike START_GAME, and that is the whole value of carrying the pool inside
+     * the Game: a replay needs no lists and no records, so it cannot accidentally draw
+     * from a pool the user was never shown a count for (008 D-9).
+     */
+    case 'REPLAY_GAME':
+      return state.screen === 'gameResults'
+        ? { screen: 'playing', game: replayGame(state.game, rng) }
+        : state
+
+    case 'NEW_GAME':
+      return state.screen === 'gameResults'
+        ? { screen: 'gameSetup', initial: state.game.settings }
+        : state
 
     case 'GO_HOME':
       return { screen: 'home' }

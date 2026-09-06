@@ -1,6 +1,9 @@
+import { createGame, currentQuestion } from '../game/game'
+import type { GameSettings } from '../game/types'
+import { seededRng } from './session'
 import { describe, expect, it } from 'vitest'
 import type { WordList } from './types'
-import { type AppState, initialState, reduce } from './appMachine'
+import { type AppAction, type AppState, initialState, reduce } from './appMachine'
 
 const list: WordList = {
   id: 'a',
@@ -458,5 +461,158 @@ describe('practising the words you missed', () => {
     )
     if (s.screen !== 'ready') throw new Error('unreachable')
     expect(s.missed).toBeUndefined()
+  })
+})
+
+describe('the game screens (008)', () => {
+  const pool = [
+    'bread/brood',
+    'cheese/kaas',
+    'apple/appel',
+    'money/geld',
+    'water/water',
+    'milk/melk',
+    'sugar/suiker',
+  ].map((s, i) => ({
+    id: `w${i}`,
+    col1: s.split('/')[0]!,
+    col2: s.split('/')[1]!,
+    listId: 'l1',
+    listName: 'Food',
+  }))
+
+  const settings: GameSettings = {
+    spec: { listIds: ['l1'], source: 'all' },
+    count: 3,
+    col1Lang: 'en',
+    col2Lang: 'nl',
+  }
+
+  const freshGame = (seed = 1) => createGame(settings, pool, seededRng(seed))
+  const playing = (seed = 1): AppState => ({ screen: 'playing', game: freshGame(seed) })
+
+  /** Answer the question on screen correctly. */
+  const answerRight = (state: AppState) => {
+    if (state.screen !== 'playing') throw new Error('not playing')
+    return reduce(state, {
+      type: 'ANSWER',
+      choiceId: currentQuestion(state.game)!.word.id,
+      remainingMs: 7000,
+    })
+  }
+
+  describe('getting in and out', () => {
+    it('opens setup from home', () => {
+      expect(reduce({ screen: 'home' }, { type: 'OPEN_GAME' })).toEqual({ screen: 'gameSetup' })
+    })
+
+    it('opens setup from anywhere, the drill included — NavMenu owns the confirm', () => {
+      const mid = reduce({ screen: 'ready', list }, { type: 'START' })
+      expect(reduce(mid, { type: 'OPEN_GAME' }).screen).toBe('gameSetup')
+    })
+
+    it('starts a game from setup', () => {
+      const game = freshGame()
+      expect(reduce({ screen: 'gameSetup' }, { type: 'START_GAME', game })).toEqual({
+        screen: 'playing',
+        game,
+      })
+    })
+
+    it('goes home from any game screen', () => {
+      expect(reduce(playing(), { type: 'GO_HOME' })).toEqual({ screen: 'home' })
+    })
+  })
+
+  describe('answering', () => {
+    it('records an answer without advancing — the screen owns the verdict pause', () => {
+      const next = answerRight(playing())
+      expect(next.screen === 'playing' && next.game.index).toBe(0)
+      expect(next.screen === 'playing' && next.game.answers).toHaveLength(1)
+    })
+
+    it('banks the clock as points', () => {
+      const next = answerRight(playing())
+      expect(next.screen === 'playing' && next.game.answers[0]?.points).toBe(7)
+    })
+
+    it('records a timeout', () => {
+      const next = reduce(playing(), { type: 'TIME_OUT' })
+      expect(next.screen === 'playing' && next.game.verdict?.kind).toBe('timeout')
+    })
+
+    it('advances to the next question and clears the verdict', () => {
+      const next = reduce(answerRight(playing()), { type: 'ADVANCE' })
+      expect(next.screen === 'playing' && next.game.index).toBe(1)
+      expect(next.screen === 'playing' && next.game.verdict).toBeNull()
+    })
+
+    it('lands on results after the last question', () => {
+      let state = playing()
+      for (let i = 0; i < 3; i++) state = reduce(answerRight(state), { type: 'ADVANCE' })
+      expect(state.screen).toBe('gameResults')
+    })
+  })
+
+  describe('quitting', () => {
+    it('routes to results holding what was answered so far', () => {
+      const partial = reduce(answerRight(playing()), { type: 'ADVANCE' })
+      const quit = reduce(partial, { type: 'QUIT_GAME' })
+      expect(quit.screen).toBe('gameResults')
+      expect(quit.screen === 'gameResults' && quit.game.answers).toHaveLength(1)
+    })
+  })
+
+  describe('playing again', () => {
+    it('re-draws from the same pool under the same settings', () => {
+      let state = playing()
+      for (let i = 0; i < 3; i++) state = reduce(answerRight(state), { type: 'ADVANCE' })
+      const again = reduce(state, { type: 'REPLAY_GAME' }, seededRng(99))
+      expect(again.screen).toBe('playing')
+      expect(again.screen === 'playing' && again.game.settings).toEqual(settings)
+      expect(again.screen === 'playing' && again.game.pool).toEqual(pool)
+      expect(again.screen === 'playing' && again.game.answers).toEqual([])
+    })
+
+    it('draws a different round under a different rng', () => {
+      const done: AppState = { screen: 'gameResults', game: freshGame(1) }
+      const a = reduce(done, { type: 'REPLAY_GAME' }, seededRng(3))
+      const b = reduce(done, { type: 'REPLAY_GAME' }, seededRng(400))
+      const ids = (s: AppState) =>
+        s.screen === 'playing' ? s.game.questions.map((q) => q.word.id) : []
+      expect(ids(a)).not.toEqual(ids(b))
+    })
+
+    it('returns to setup with the previous settings pre-filled (008 FR-27)', () => {
+      const done: AppState = { screen: 'gameResults', game: freshGame() }
+      expect(reduce(done, { type: 'NEW_GAME' })).toEqual({ screen: 'gameSetup', initial: settings })
+    })
+  })
+
+  describe('illegal transitions are no-ops BY REFERENCE, as everywhere else here', () => {
+    const cases: Array<[string, AppState, AppAction]> = [
+      ['START_GAME off setup', { screen: 'home' }, { type: 'START_GAME', game: freshGame() }],
+      ['ANSWER off playing', { screen: 'home' }, { type: 'ANSWER', choiceId: 'w0', remainingMs: 1 }],
+      ['TIME_OUT off playing', { screen: 'home' }, { type: 'TIME_OUT' }],
+      ['ADVANCE off playing', { screen: 'home' }, { type: 'ADVANCE' }],
+      ['QUIT_GAME off playing', { screen: 'home' }, { type: 'QUIT_GAME' }],
+      ['REPLAY_GAME off results', { screen: 'home' }, { type: 'REPLAY_GAME' }],
+      ['NEW_GAME off results', { screen: 'home' }, { type: 'NEW_GAME' }],
+      ['ANSWER on the results screen', { screen: 'gameResults', game: freshGame() },
+        { type: 'ANSWER', choiceId: 'w0', remainingMs: 1 }],
+    ]
+
+    for (const [name, state, action] of cases) {
+      it(`ignores ${name}`, () => {
+        expect(reduce(state, action)).toBe(state)
+      })
+    }
+
+    it('leaves the drill’s own actions alone on a game screen', () => {
+      const state = playing()
+      expect(reduce(state, { type: 'MARK', result: 'right' })).toBe(state)
+      expect(reduce(state, { type: 'REVEAL' })).toBe(state)
+      expect(reduce(state, { type: 'TOGGLE_ANSWER' })).toBe(state)
+    })
   })
 })
