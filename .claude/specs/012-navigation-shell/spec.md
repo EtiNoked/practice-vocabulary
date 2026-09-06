@@ -1,7 +1,8 @@
 # Spec: A navigation shell — a brief at the front, four sections behind it
 
 **ID:** 012-navigation-shell
-**Status:** PLANNED
+**Status:** IMPLEMENTED — `feature/navigation-shell`, 4 commits, all gates green (1377 tests)
+**Outstanding:** the on-device iPhone pass (tasks T18). See the note at the end.
 **Created:** 2026-09-06
 **Baseline:** `main` @ `bdf73d4` — 64 test files, **1265 tests, all green**
 **Feature Type:** Refactor of the shell — no new stored data, no new engine, no new dependency
@@ -185,3 +186,47 @@ Numbered so the plan and the tasks can cite them instead of re-arguing them.
 | **`START_RUN` silently no-ops from the new screen.** | D-9, plus a reducer test asserting `START_RUN` from `tests` produces a `practising` state — the assertion that would have caught it in 011. |
 | **Per-list practice counts double-count multi-list runs.** | D-5 and D-6: filter-then-group, and the existing invariant extended to name the new surface. |
 | **The brief goes stale or contradicts a section.** | It is derived at render from the same `visibleRecords` / `visibleGames` / `visibleLists` the sections read, against the same `now`. Nothing is cached (NFR-4). |
+
+
+---
+
+## What shipped, and what did not
+
+Everything in the functional requirements above is built and covered. Two things went
+differently from the plan, and both are recorded here rather than only in a commit
+message.
+
+**`ScoreHistory` was retired, not just unplugged.** The plan removed Home's history slot
+without saying what became of the component behind it — which turned out to be the only
+place the **rolling average** was computed. Its ten-row log is fully subsumed by
+`ReviewScreen` (day-grouped, filterable, openable, and uncapped), and every one of its
+tests had a counterpart there already; the average had none. So `trend` moved to
+`state/scoreTrend.ts` with its cases intact and now reads on the brief, and the component
+and its file are gone. Deleting it silently would have dropped a real feature.
+
+**`GameHistory` does use `bandBorder`.** § F of the plan claimed a `GameRecord` could not
+satisfy `scoreBand`'s shape. That was wrong: `GameResults` has adapted its own numbers
+into `bandBorder({ right, total, pct })` since 008, and the log follows it — so a good
+round wears the same colour on the results screen, in the game log and in the practice
+history, rather than a fourth threshold nobody would keep in step.
+
+Two guards were added beyond the plan's § K, both verified red against a deliberately
+broken copy before being kept:
+
+- an inline `<svg>` may appear in `icons.tsx` and in exactly two other files, each named
+  with the reason it cannot live there (`GameCloud`'s countdown ring is a moving part
+  whose stroke is set inline precisely because reduced-motion would freeze a CSS-animated
+  one; `WelcomeScreen`'s Google mark must keep Google's exact hexes);
+- no icon library may be imported at all.
+
+The existing `runId` guard earned its keep during the work: it went red on a **doc
+comment** in `GameHistory.tsx` that merely mentioned the field. The comment was reworded.
+Loosening the guard to permit comments would have been the easy call and the wrong one.
+
+### Outstanding — the device pass (T18)
+
+Not done, and not doable from here. On a real iPhone, in both themes: the four cards at
+thumb size, the menu's icons at label weight, a list's practice line as a tap target, the
+game log at 375px, and no horizontal scroll anywhere. Icons are the specific risk — jsdom
+does not lay out SVG at all, so every icon test in the suite passes unconditionally on
+shape and weight.

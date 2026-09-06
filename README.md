@@ -21,6 +21,27 @@ on a screen of its own, asked once per browser session rather than as a banner a
 lists on every visit. Continuing as a guest is a first-class answer, not a way of putting
 the question off.
 
+## Finding your way around
+
+The home screen is a **brief**: how your last practice and last game went, how you have
+been averaging lately, and four places to go.
+
+| | What is there |
+|---|---|
+| **My lists** | Your word lists, and **New list** |
+| **My tests** | Tests you have saved, and **Build a test** |
+| **My games** | Rounds you have played, and **Play a game** |
+| **My practices** | Every finished drill, grouped by day and filterable by list |
+
+The same four are in the **menu** in the top corner, with an icon each, from every screen
+in the app. Whichever section you are inside — the list editor, the test builder, a game —
+the menu marks it, and leaving something unfinished asks first and says exactly what you
+would lose.
+
+Each list also shows how it has been going: *"5 practices · last 80%"* under its name,
+which opens **My practices** already filtered to that list. A test that spanned three
+lists counts as **one** practice for each of them, not three.
+
 ## Accounts
 
 | | Signed out | Signed in |
@@ -111,8 +132,8 @@ Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 
 ## Building a test
 
-A drill covers one list. **Build a test** — from the home screen or the menu — covers as
-many as you like, and lets you say how much of them you want.
+A drill covers one list. **My tests → Build a test** covers as many as you like, and lets
+you say how much of them you want.
 
 Pick your lists, choose **All words** or **Words I got wrong**, and set a length: **10**,
 **15**, **20**, type a number, or **All**. The words are drawn at random. The screen keeps
@@ -138,8 +159,8 @@ still means what it meant even if a list changed in another tab meanwhile.
 
 ### Saving a test
 
-**Save this test** gives it a name and puts it on the home screen under **Saved tests**,
-with its setup written out — *"3 lists · words I got wrong · 15 of 34"*.
+**Save this test** gives it a name and puts it under **My tests**, with its setup written
+out — *"3 lists · words I got wrong · 15 of 34"*.
 
 A saved test is a **definition, not a snapshot**. It stores which lists, which words and
 how many — never the words themselves. Run it next month and it asks about your mistakes
@@ -153,19 +174,18 @@ become a different test.
 ### In your history
 
 A test over three lists is filed against each of those lists, so its misses turn up in the
-right list's *words you missed* chips. But it is still **one test**: Recent practice and
-Review show it as a single row with its own score, and it counts once towards your
-average. In Review, each list's share sits underneath, and opening one shows that list's
-answer sheet.
+right list's *words you missed* chips. But it is still **one test**: My practices shows it
+as a single row with its own score, and it counts once towards the average on your home
+screen. Each list's share sits underneath, and opening one shows that list's answer
+sheet.
 
 ## Reviewing what you got wrong
 
-**Menu → Review** lists every finished drill, newest first, grouped under Today,
-Yesterday and dated headings, and filterable by list. Open one and you get the whole
-answer sheet: the words you missed, and the words you got right.
+**My practices** lists every finished drill, newest first, grouped under Today, Yesterday
+and dated headings, and filterable by list. Open one and you get the whole answer sheet:
+the words you missed, and the words you got right.
 
-Every practice — in Review, in **Recent practice** on the home screen, and on the drill's
-own page — is bordered by how it went: **green** for a clean sweep, **amber** from 70% up,
+Every practice — there and on the drill's own page — is bordered by how it went: **green** for a clean sweep, **amber** from 70% up,
 **red** below that. Green means every card, not a percentage that rounded to 100, so
 199/200 reads amber and the fraction printed beside it explains why. The numbers are always
 there in text; a border colour on its own is no use to a colour-blind reader or a greyscale
@@ -191,7 +211,7 @@ Two things worth knowing:
 
 ## Playing a game
 
-**Play a game** — from the home screen or the menu — is the drill's faster, noisier
+**My games → Play a game** is the drill's faster, noisier
 sibling. You hear a word and grab its meaning from a cloud of ten before a ten-second
 clock runs out, and the clock *is* the score: tap while it reads 7 and you bank 7. Wrong
 scores nothing, and says so three ways at once — the tile you tapped, the tile you should
