@@ -43,7 +43,7 @@ numbered so the plan and tasks can cite it instead of re-arguing it.
 
 | # | Decision | Why |
 |---|---|---|
-| **D-1** | **A fresh cloud of six per question** — the answer plus five distractors drawn from the pool. Not one big cloud of all N words. | *(user)* A shrinking cloud makes the last question a coin flip; a fixed cloud of 20 is unscannable on a phone in ten seconds. Six keeps difficulty flat from first word to last. |
+| **D-1** | **A fresh cloud per question** — the answer plus distractors drawn from the pool, `min(CLOUD_SIZE, what the pool can distinctly supply)`. Not one big cloud of all N words. | *(user)* A cloud that shrinks as words are used makes the last question a coin flip. A fresh one keeps difficulty flat from first word to last. **CLOUD_SIZE is 10** (raised from 6 in session): a blind guess drops from ~17% to ~10%, at the cost of nearly twice as much to read inside the same ten seconds. |
 | **D-2** | **Chips 10 / 15 / 20, plus a number box**, every option capped at the pool size. | *(user)* Chips for the common case, the box for "all 34 of them". A chip whose count exceeds the pool is disabled with the reason shown, never hidden. |
 | **D-3** | **A finished game is recorded, and its misses feed the same "words you got wrong" pool the drill fills.** | *(user)* A game that teaches the rest of the app nothing is a toy. Costs a `GameRecord` type, a `games` collection, Firestore rules and rules tests. |
 | **D-4** | **One shot per word. A wrong tap scores nothing and the game moves on — but says so, unmistakably.** | *(user, verbatim: "one shot, next word - but get a signal that you got it wrong")* Matches "the moment the user picks a word, it stops". The signal is FR-19. |
@@ -98,7 +98,7 @@ numbered so the plan and tasks can cite it instead of re-arguing it.
 
 **Acceptance criteria**
 
-- [ ] The word is spoken in `col2Lang`; six tiles show `col1` text — one right, five distractors.
+- [ ] The word is spoken in `col2Lang`; up to ten words show `col1` text — one right, the rest distractors.
 - [ ] A countdown runs 10 → 0. The number on screen is the number of points a correct tap scores.
 - [ ] A correct tap stops the clock, banks the points, and moves on.
 - [ ] A wrong tap scores nothing, is unmistakably signalled, and moves on.
@@ -143,7 +143,7 @@ numbered so the plan and tasks can cite it instead of re-arguing it.
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FR-11 | Game words are sampled from the pool **without replacement** — no word is asked twice. | HIGH |
-| FR-12 | Each question shows `min(6, pool)` tiles: the answer plus distractors sampled from the pool. | HIGH |
+| FR-12 | Each question shows `min(CLOUD_SIZE, pool)` words: the answer plus distractors sampled from the pool. Never padded to reach the ceiling. | HIGH |
 | FR-13 | Distractors are distinct from the answer and from each other **by displayed text**, not merely by id — two senses of "bank" must never appear as two tiles. | HIGH |
 | FR-14 | Tile order is randomised per question; the answer is not biased to a position. | HIGH |
 | FR-15 | The prompt is spoken in `col2Lang` on arrival at each question. | HIGH |

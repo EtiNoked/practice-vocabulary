@@ -143,7 +143,7 @@ Two things worth knowing:
 ## Playing a game
 
 **Play a game** — from the home screen or the menu — is the drill's faster, noisier
-sibling. You hear a word and grab its meaning from a cloud of six before a ten-second
+sibling. You hear a word and grab its meaning from a cloud of ten before a ten-second
 clock runs out, and the clock *is* the score: tap while it reads 7 and you bank 7. Wrong
 scores nothing, and says so three ways at once — the tile you tapped, the tile you should
 have tapped, and a line naming the answer.

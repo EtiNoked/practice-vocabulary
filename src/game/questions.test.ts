@@ -143,7 +143,11 @@ describe('the answer is not biased to a position (008 FR-14)', () => {
         positions.add(q.options.findIndex((o) => o.id === q.word.id))
       }
     }
-    expect([...positions].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5])
+    // Built from CLOUD_SIZE, not typed out: a hardcoded list here would fail for the
+    // right reason but the wrong one the next time the cloud changes size.
+    expect([...positions].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: CLOUD_SIZE }, (_, i) => i),
+    )
   })
 
   it('never leaves the answer unfound', () => {

@@ -3,7 +3,7 @@
 ## What it is
 
 Pick some lists — or just the words you keep getting wrong across them — say how many words you
-want, and play. You hear a word, and grab its meaning from a cloud of six before a ten-second
+want, and play. You hear a word, and grab its meaning from a cloud of ten before a ten-second
 clock runs out. The clock **is** the score: tap at 7 and you bank 7.
 
 ## In one picture
@@ -13,7 +13,7 @@ flowchart LR
     A["Pick lists<br/><i>same language pair</i>"] --> C
     B["All words<br/>or just my misses"] --> C
     C["Pool<br/>dedupe · live count"] --> D["10 / 15 / 20<br/>or type a number"]
-    D --> E["Hear a word<br/>tap it from six<br/>⏱ 10 → 0"]
+    D --> E["Hear a word<br/>tap it from ten<br/>⏱ 10 → 0"]
     E --> F["Correct · Points<br/>Play again ⟲ · New game"]
     F -->|misses feed back| B
 ```
@@ -22,7 +22,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **D-1 Six tiles, fresh each question** | Not one big cloud. Constant difficulty, scannable on a phone. |
+| **D-1 Ten words, fresh each question** | Not one big cloud. Constant difficulty; shrinks to the pool when it has fewer. |
 | **D-2 Chips 10/15/20 + a number box** | Both, capped at the pool. |
 | **D-3 Games are recorded and feed the mistake pool** | A game teaches the rest of the app, or it is a toy. |
 | **D-4 One shot per word** | Wrong scores nothing and moves on — loudly. |
@@ -100,7 +100,7 @@ drift.
 ## Constants
 
 ```
-QUESTION_MS 10_000 · MAX_POINTS 10 · CLOUD_SIZE 6 · MIN_POOL 4
+QUESTION_MS 10_000 · MAX_POINTS 10 · CLOUD_SIZE 10 · MIN_POOL 4
 MAX_GAME_WORDS 50 · COUNT_CHIPS [10,15,20] · VERDICT_MS 800 · MAX_GAME_RECORDS 100
 ```
 

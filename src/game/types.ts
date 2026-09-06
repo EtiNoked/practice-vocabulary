@@ -13,13 +13,20 @@ export const QUESTION_MS = 10_000
 export const MAX_POINTS = 10
 
 /**
- * Tiles per question: the answer plus five distractors (008 D-1).
+ * Words per cloud: the answer plus distractors — or the whole pool, when it has fewer.
  *
- * Not the whole pool. A cloud that shrinks as words are used makes the last question a
- * coin flip, and a fixed cloud of twenty is unscannable on a phone inside ten seconds.
- * Six holds the guess rate near 17% from the first word to the last.
+ * A CEILING, not a promise. `buildQuestions` fills the cloud to `min(CLOUD_SIZE, what
+ * the pool can distinctly supply)`, so a small pool simply yields a smaller cloud and
+ * an easier question. It never pads to reach this number: a short cloud is an easy
+ * question, a repeated word is a broken one.
+ *
+ * Ten rather than six drops a blind guess from ~17% to ~10%, so the score reflects
+ * knowing rather than luck. The cost is real and lands entirely on the clock: ten words
+ * is nearly twice as much to read inside the same ten seconds, and on a narrow phone
+ * that is several more rows to scan. If a round starts feeling like a search rather
+ * than a recall, this is the number to move.
  */
-export const CLOUD_SIZE = 6
+export const CLOUD_SIZE = 10
 
 /** Below this a cloud is a coin toss rather than a question. */
 export const MIN_POOL = 4
