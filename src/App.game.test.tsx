@@ -91,10 +91,29 @@ beforeEach(() => {
   })
 })
 
-afterEach(() => {
-  // Unmount FIRST. Swapping back to real timers while GameCloud is still mounted lets
-  // its pending 100ms interval fire for real, outside act() — which shows up as an
-  // "update not wrapped in act" warning on whichever test happens to be last.
+afterEach(async () => {
+  /*
+   * Unmount inside act(), and BEFORE restoring real timers.
+   *
+   * A test that ends with the countdown still running leaves a queued React update
+   * behind. Swapping the clock back underneath it lets that update land outside act(),
+   * which surfaces as an "update not wrapped in act" warning on whichever test happened
+   * to run last — intermittently, which is worse than always: a warning that appears
+   * one run in three is a warning people learn to ignore.
+   */
+  /*
+   * The flush is the load-bearing part, and what it is waiting for is the store write.
+   *
+   * Recording a finished game is fire-and-forget (`void store.recordGame(...)`), so its
+   * subscription re-emit — and the setState on App that follows — lands a microtask
+   * after the click that caused it. A test that ends on that click leaves the update in
+   * flight, and it arrives outside act(). It showed up intermittently, on whichever run
+   * happened to be slow enough, which is worse than always: a warning that appears one
+   * run in three is one people learn to scroll past.
+   */
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
   cleanup()
   vi.useRealTimers()
 })
@@ -347,5 +366,116 @@ describe('a game is not a drill', () => {
 
     // Nothing is parked: a timed round has no honest resume.
     expect(drillRepo.load()).toBeNull()
+  })
+})
+
+describe('which side is heard, and which side is answered (008 D-5)', () => {
+  /*
+   * The app's standing promise, made in words on the drill's ready screen: you HEAR
+   * col2 and ANSWER in col1. The game has to keep it, and two ways of breaking it are
+   * silent — speaking the answer instead of the prompt (which gives the game away), and
+   * speaking the right text under the wrong language tag (right words, wrong accent,
+   * and on a real device often no voice at all).
+   *
+   * The fixtures below share no text between the two columns, so an assertion can tell
+   * the sides apart without ambiguity.
+   */
+  const col1s = food.pairs.map((p) => p.col1)
+  const col2s = food.pairs.map((p) => p.col2)
+
+  const startFullGame = () => {
+    listRepo.save(food)
+    openGame()
+    click(screen.getByRole('button', { name: /Food/ }))
+    click(screen.getByRole('button', { name: 'All 6' }))
+    click(screen.getByRole('button', { name: 'Start game' }))
+  }
+
+  it('speaks a col2 word, never a col1 word', () => {
+    startFullGame()
+    expect(col2s).toContain(spoken()[0]!.text)
+    expect(col1s).not.toContain(spoken()[0]!.text)
+  })
+
+  it('tags every utterance with the list’s col2 language', () => {
+    startFullGame()
+    expect(spoken()[0]).toMatchObject({ lang: 'nl-NL' })
+  })
+
+  it('keeps that true for EVERY word of a whole round, not just the first', async () => {
+    startFullGame()
+    for (;;) {
+      const cloud = tiles()
+      if (cloud.length === 0) break
+      click(cloud[0]!)
+      await wait(VERDICT_MS)
+    }
+    expect(spoken().length).toBeGreaterThan(1)
+    for (const call of spoken()) {
+      expect(col2s).toContain(call.text)
+      expect(call.lang).toBe('nl-NL')
+    }
+  })
+
+  it('puts col1 in the cloud and never shows the word being spoken', () => {
+    startFullGame()
+    const shown = tiles().map((t) => t.textContent)
+    for (const word of shown) expect(col1s).toContain(word)
+    // The prompt must not be readable anywhere on the screen.
+    expect(shown).not.toContain(spoken()[0]!.text)
+    expect(screen.queryByText(spoken()[0]!.text)).not.toBeInTheDocument()
+  })
+
+  it('re-speaks the same col2 word on "Hear it again", in the same language', () => {
+    startFullGame()
+    const first = spoken()[0]!
+    click(screen.getByRole('button', { name: 'Hear it again' }))
+    expect(spoken().at(-1)).toMatchObject({ text: first.text, lang: 'nl-NL' })
+  })
+
+  it('follows the LIST’s own languages, not a hardcoded pair', () => {
+    /*
+     * A French→Dutch list: col1 is French, col2 is Dutch. If anything anywhere assumed
+     * "col1 is English", this is where it shows up.
+     */
+    const frnl: WordList = {
+      ...food,
+      id: 'frnl',
+      name: 'Bilingual',
+      col1Lang: 'fr',
+      col2Lang: 'nl',
+      pairs: [
+        { id: 'b1', col1: 'pain', col2: 'brood' },
+        { id: 'b2', col1: 'fromage', col2: 'kaas' },
+        { id: 'b3', col1: 'pomme', col2: 'appel' },
+        { id: 'b4', col1: 'lait', col2: 'melk' },
+      ],
+    }
+    listRepo.save(frnl)
+    openGame()
+    click(screen.getByRole('button', { name: /Bilingual/ }))
+    click(screen.getByRole('button', { name: 'All 4' }))
+    click(screen.getByRole('button', { name: 'Start game' }))
+
+    // Spoken in DUTCH (col2), and the cloud is French (col1).
+    expect(spoken()[0]).toMatchObject({ lang: 'nl-NL' })
+    expect(frnl.pairs.map((p) => p.col2)).toContain(spoken()[0]!.text)
+    for (const word of tiles().map((t) => t.textContent)) {
+      expect(frnl.pairs.map((p) => p.col1)).toContain(word)
+    }
+  })
+
+  it('promises on the setup screen exactly what the game then does', () => {
+    listRepo.save(food)
+    openGame()
+    click(screen.getByRole('button', { name: /Food/ }))
+    // "You'll hear Dutch and pick the English" — col2 heard, col1 answered.
+    expect(screen.getByRole('status')).toHaveTextContent(/hear Dutch/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/pick the English/i)
+
+    click(screen.getByRole('button', { name: 'All 6' }))
+    click(screen.getByRole('button', { name: 'Start game' }))
+    expect(spoken()[0]).toMatchObject({ lang: 'nl-NL' })
+    expect(col1s).toContain(tiles()[0]!.textContent)
   })
 })

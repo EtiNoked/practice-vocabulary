@@ -92,9 +92,22 @@ beforeEach(() =>
   // clue what is waiting on what.
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] }),
 )
-afterEach(() => {
-  // Unmount FIRST — see the note in App.game.test.tsx: real timers restored under a
-  // mounted component let its pending interval fire outside act().
+afterEach(async () => {
+  // Unmount inside act(), before restoring real timers — see the note in
+  // App.game.test.tsx for why this is not just tidiness.
+  /*
+   * The flush is the load-bearing part, and what it is waiting for is the store write.
+   *
+   * Recording a finished game is fire-and-forget (`void store.recordGame(...)`), so its
+   * subscription re-emit — and the setState on App that follows — lands a microtask
+   * after the click that caused it. A test that ends on that click leaves the update in
+   * flight, and it arrives outside act(). It showed up intermittently, on whichever run
+   * happened to be slow enough, which is worse than always: a warning that appears one
+   * run in three is one people learn to scroll past.
+   */
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
   cleanup()
   vi.useRealTimers()
   vi.restoreAllMocks()
