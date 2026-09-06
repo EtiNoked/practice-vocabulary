@@ -1,4 +1,4 @@
-import type { MarkResult, SessionRecord, WordList, WordPair } from './types'
+import type { MarkResult, WordList, WordPair } from './types'
 
 /**
  * Which slice of history a missed-words drill is built from.
@@ -72,6 +72,30 @@ export function wordKey(pair: Pick<WordPair, 'col1' | 'col2'>): string {
   return fold(pair.col1) + SEP + fold(pair.col2)
 }
 
+/**
+ * The shape `collectMissed` actually reads.
+ *
+ * `SessionRecord` satisfies this structurally, so widening the parameter to it was a
+ * TYPE-ONLY change with no call-site churn — and it is what lets a finished GAME be read
+ * by this same still-missed engine (008 D-3). A game spans several lists and has no
+ * `SessionRecord` shape to offer, so it projects itself into one of these per contributing
+ * list (`gameMissSources`) and arrives here indistinguishable from a drill.
+ *
+ * The alternative was a second implementation of "still missed" for games. There is
+ * exactly one in this codebase, deliberately: the rule is subtle enough (see the
+ * OLDEST-FIRST sort below) that a second copy would drift within a release.
+ *
+ * Do NOT narrow this back to `SessionRecord`. Every real call site passes one, so the
+ * app would go on compiling and only the game would quietly lose its history.
+ */
+export interface MissSource {
+  listId: string
+  finishedAt: number
+  wrongPairs: WordPair[]
+  /** Absent means "predates right-answer recording" — see `SessionRecord.rightPairs`. */
+  rightPairs?: WordPair[]
+}
+
 export interface MissedWord {
   pair: WordPair
   /** Times marked wrong within the window. */
@@ -105,7 +129,7 @@ export interface MissedSet {
  * every chip on a screen can be computed against one agreed millisecond.
  */
 export function collectMissed(
-  records: readonly SessionRecord[],
+  records: readonly MissSource[],
   options: {
     listId: string
     window: ReviewWindow
@@ -136,7 +160,7 @@ export function collectMissed(
   }
   const seen = new Map<string, Entry>()
 
-  const visit = (record: SessionRecord, pair: WordPair, result: MarkResult) => {
+  const visit = (record: MissSource, pair: WordPair, result: MarkResult) => {
     const key = wordKey(pair)
     const entry = seen.get(key) ?? { pair, misses: 0, attempts: 0, last: result, lastMissedAt: 0 }
     // Keep the freshest spelling: a later drill saw a later version of the word.
@@ -219,7 +243,7 @@ export function toDrillPairs(words: readonly MissedWord[]): WordPair[] {
 
 /** How many words each window would drill. One pass per window. */
 export function missedCounts(
-  records: readonly SessionRecord[],
+  records: readonly MissSource[],
   options: { listId: string; now: number; list?: WordList | null },
 ): Record<ReviewWindow, number> {
   return Object.fromEntries(

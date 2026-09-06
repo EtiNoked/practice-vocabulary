@@ -13,6 +13,7 @@ import {
   reveal,
   score,
   seededRng,
+  shuffle,
   toggleAnswers,
 } from './session'
 
@@ -393,5 +394,44 @@ describe('score() reports the right answers too', () => {
   it('is empty for a practice session, which marks nothing', () => {
     const s = createSession(pairs, noShuffle, 'l1', 'practice')
     expect(score(s).rightPairs).toEqual([])
+  })
+})
+
+describe('shuffle is shared (008 T1.2)', () => {
+  /*
+   * Exported for `src/game/questions.ts`, which needs the same Fisher-Yates over the
+   * same injected Rng. One shuffle in this codebase, not two: a second one would be a
+   * second place for an off-by-one in the swap to hide, and the bug it produces — a
+   * mildly non-uniform draw — is invisible without exactly this kind of test.
+   */
+  it('permutes without adding, dropping or duplicating', () => {
+    const input = ['a', 'b', 'c', 'd', 'e', 'f']
+    const out = shuffle(input, seededRng(7))
+    expect([...out].sort()).toEqual([...input].sort())
+  })
+
+  it('never mutates its input', () => {
+    const input = ['a', 'b', 'c']
+    const copy = [...input]
+    shuffle(input, seededRng(1))
+    expect(input).toEqual(copy)
+  })
+
+  it('is deterministic under a seeded rng, so every caller can pin its draw', () => {
+    expect(shuffle(['a', 'b', 'c', 'd'], seededRng(42))).toEqual(
+      shuffle(['a', 'b', 'c', 'd'], seededRng(42)),
+    )
+  })
+
+  it('reaches every position — no element is pinned by an off-by-one in the swap', () => {
+    const seen = new Map<string, Set<number>>()
+    for (let seed = 0; seed < 200; seed++) {
+      shuffle(['a', 'b', 'c', 'd'], seededRng(seed)).forEach((item, i) => {
+        const at = seen.get(item) ?? new Set<number>()
+        at.add(i)
+        seen.set(item, at)
+      })
+    }
+    for (const positions of seen.values()) expect(positions.size).toBe(4)
   })
 })
