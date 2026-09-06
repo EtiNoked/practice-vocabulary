@@ -65,6 +65,33 @@ service cloud.firestore {
         // than in the UI means a client bug cannot rewrite the past.
         allow update: if false;
       }
+
+      /*
+       * Games (008). Their own collection, never `sessions`: a game spans several
+       * lists where a session covers one, and an auto-marked score must not enter the
+       * same average as a self-marked one.
+       *
+       * The caps are about blast radius, as everywhere else here — with no server to
+       * stop it, one client bug could write an unbounded document. `results` is capped
+       * at MAX_GAME_WORDS (50) with headroom, and is optional because a record whose
+       * detail was shed under local storage pressure is still worth syncing for its
+       * score.
+       */
+      match /games/{gameId} {
+        allow read, delete: if isOwner(uid);
+
+        allow create: if isOwner(uid)
+          && request.resource.data.finishedAt is number
+          && request.resource.data.listIds is list
+          && request.resource.data.listIds.size() <= 20
+          && request.resource.data.asked is number
+          && (!('results' in request.resource.data.keys())
+              || (request.resource.data.results is list
+                  && request.resource.data.results.size() <= 100));
+
+        // A log, not a document — the same rule sessions keep, for the same reason.
+        allow update: if false;
+      }
     }
 
     // No catch-all match at the root. Anything not named above is denied, which

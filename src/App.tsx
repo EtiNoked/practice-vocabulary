@@ -34,6 +34,13 @@ import {
   type ReviewWindow,
 } from './state/missedWords'
 import { buildSessionRecord } from './state/sessionRecord'
+import { GameSetup } from './components/GameSetup'
+import { GameCloud } from './components/GameCloud'
+import { GameResults } from './components/GameResults'
+import { buildWordPool, poolSize, type PoolSpec } from './state/wordPool'
+import { createGame } from './game/game'
+import { buildGameRecord, gameMissSources } from './game/gameRecord'
+import type { GameRecord, GameSettings } from './game/types'
 
 /**
  * Pick up a drill parked by a previous page load.
@@ -64,6 +71,7 @@ export default function App() {
   const [lists, setLists] = useState<WordList[]>([])
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [records, setRecords] = useState<SessionRecord[]>([])
+  const [games, setGames] = useState<GameRecord[]>([])
   const [toast, setToast] = useState<string | null>(null)
   // Which kind of drill is currently running, so a wrong-only re-run can be
   // recorded as such and kept out of the plain average. Seeded from the restored
@@ -154,6 +162,14 @@ export default function App() {
     }
   }, [store])
 
+  useLayoutEffect(() => {
+    if (!store) return
+    const unsubscribe = store.subscribeGames(setGames, () => {})
+    return () => {
+      unsubscribe()
+    }
+  }, [store])
+
   /**
    * Derived, not stored: with no store we do not yet know whose data this is,
    * so the previous identity's lists must not stay on screen. Deriving avoids a
@@ -161,6 +177,19 @@ export default function App() {
    */
   const visibleLists = useMemo(() => (store ? lists : []), [store, lists])
   const visibleRecords = useMemo(() => (store ? records : []), [store, records])
+  const visibleGames = useMemo(() => (store ? games : []), [store, games])
+
+  /**
+   * Everything that can say a word was got right or wrong — drills AND games.
+   *
+   * A game splits into one neutral source per contributing list, so 006's engine reads
+   * both without knowing the difference (008 D-3). This is what makes a game's misses
+   * turn up in the ready screen's "words you missed" chips.
+   */
+  const missSources = useMemo(
+    () => [...visibleRecords, ...visibleGames.flatMap(gameMissSources)],
+    [visibleRecords, visibleGames],
+  )
 
   /**
    * The list as it stands NOW, for a screen that is holding a snapshot of it.
@@ -197,15 +226,15 @@ export default function App() {
     if (!readyList) return null
     const list = liveList(readyList)
     return {
-      counts: missedCounts(visibleRecords, { listId: readyList.id, now, list }),
-      degraded: collectMissed(visibleRecords, {
+      counts: missedCounts(missSources, { listId: readyList.id, now, list }),
+      degraded: collectMissed(missSources, {
         listId: readyList.id,
         window: 'all',
         now,
         list,
       }).degraded,
     }
-  }, [readyList, visibleRecords, liveList, now])
+  }, [readyList, missSources, liveList, now])
 
   const persist = useCallback(
     async (list: WordList) => {
@@ -277,6 +306,18 @@ export default function App() {
       }
 
       /*
+       * Record a finished game.
+       *
+       * Beside the drill's branch above and for the same reasons: the reducer is pure,
+       * and the write belongs to whoever owns the store. `partial` is true when the
+       * user quit, mirroring SessionRecord.partial.
+       */
+      if (state.screen === 'playing' && next.screen === 'gameResults' && store) {
+        const record = buildGameRecord(next.game, { partial: action.type === 'QUIT_GAME' })
+        if (record) void store.recordGame(record)
+      }
+
+      /*
        * Computed as a local FIRST and only then stored, because the value is
        * needed twice in this same call — once for setState and once for the
        * persisted payload below. Reading `sessionMode` back after
@@ -316,6 +357,11 @@ export default function App() {
         drillRepo.save({ list: next.list, session: next.session, runKind: nextRunKind })
       } else {
         // Covers finishing, QUIT (which routes to results) and GO_HOME (FR-4).
+        //
+        // Every GAME screen lands here too, which is deliberate rather than incidental:
+        // starting a game abandons a parked drill exactly as going home does, and a
+        // game itself is never parked (008 D-8) — there is no honest answer to how much
+        // of the ten seconds was left, and no gesture to re-speak the word on restore.
         drillRepo.clear()
       }
 
@@ -329,15 +375,29 @@ export default function App() {
         action.type === 'PREV' ||
         action.type === 'SWITCH_MODE'
       if (advances) speakCurrent(next)
+
+      /*
+       * "Play again" deals a fresh round, so its first word has to be spoken — and from
+       * inside the tap that dispatched this, for the reason every other speak() call in
+       * this file is where it is.
+       *
+       * Only REPLAY_GAME: START_GAME already spoke in `startGame` (which needs the pool
+       * anyway), and every later word is spoken by GameCloud from the tap that answered
+       * the one before it.
+       */
+      if (action.type === 'REPLAY_GAME' && next.screen === 'playing') {
+        const first = next.game.questions[0]
+        if (first) speak(first.word.col2, next.game.settings.col2Lang, voices)
+      }
     },
-    [state, speakCurrent, store, sessionMode],
+    [state, speakCurrent, store, sessionMode, voices],
   )
 
   const pickWindow = useCallback(
     (window: ReviewWindow) => {
       if (state.screen !== 'ready') return
       const list = liveList(state.list)
-      const set = collectMissed(visibleRecords, {
+      const set = collectMissed(missSources, {
         listId: state.list.id,
         window,
         // The SAME `now` the chips were counted against. Reading the clock again
@@ -355,7 +415,40 @@ export default function App() {
         source: { kind: 'window', window },
       })
     },
-    [state, visibleRecords, liveList, act, now],
+    [state, missSources, liveList, act, now],
+  )
+
+  /**
+   * How many words a spec selects, for the setup screen's live count.
+   *
+   * Closed over the records here so `GameSetup` never touches storage — it is handed a
+   * number and renders it.
+   */
+  const gamePoolSize = useCallback(
+    (spec: PoolSpec) => poolSize(visibleLists, spec, { records: missSources, now: Date.now() }),
+    [visibleLists, missSources],
+  )
+
+  /**
+   * Build the round and start it.
+   *
+   * The first word is spoken HERE, synchronously inside the Start tap that called this.
+   * Deferring it to an effect would put it outside the gesture, and iOS Safari drops
+   * that silently (008 NFR-2).
+   */
+  const startGame = useCallback(
+    (settings: GameSettings) => {
+      const pool = buildWordPool(visibleLists, settings.spec, {
+        records: missSources,
+        now: Date.now(),
+        idPrefix: 'g',
+      })
+      const game = createGame(settings, pool, Math.random)
+      const first = game.questions[0]
+      if (first) speak(first.word.col2, settings.col2Lang, voices)
+      act({ type: 'START_GAME', game })
+    },
+    [visibleLists, missSources, act, voices],
   )
 
   const promptLang =
@@ -407,10 +500,17 @@ export default function App() {
         <NavMenu
           screen={state.screen}
           guard={
-            state.screen === 'practising' ? 'drill' : state.screen === 'editing' ? 'edit' : null
+            state.screen === 'practising'
+              ? 'drill'
+              : state.screen === 'playing'
+                ? 'game'
+                : state.screen === 'editing'
+                  ? 'edit'
+                  : null
           }
           onHome={() => act({ type: 'GO_HOME' })}
           onReview={() => act({ type: 'OPEN_REVIEW' })}
+          onGame={() => act({ type: 'OPEN_GAME' })}
         />
         {authAvailable ? (
           <AccountMenu
@@ -443,6 +543,7 @@ export default function App() {
           history={<ScoreHistory records={visibleRecords} />}
           onSeeAllHistory={() => act({ type: 'OPEN_REVIEW' })}
           onNewList={() => act({ type: 'NEW_LIST' })}
+          onPlayGame={() => act({ type: 'OPEN_GAME' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
           onRename={async (list) => {
@@ -540,6 +641,42 @@ export default function App() {
           onRestartShuffled={() => act({ type: 'RESTART_SHUFFLED' })}
           onRestartWrongOnly={() => act({ type: 'RESTART_WRONG_ONLY' })}
           onSwitchMode={() => act({ type: 'SWITCH_MODE' })}
+          onDone={() => act({ type: 'GO_HOME' })}
+        />
+      )}
+
+      {state.screen === 'gameSetup' && (
+        <GameSetup
+          lists={visibleLists}
+          loading={store === null}
+          count={gamePoolSize}
+          {...(state.initial !== undefined ? { initial: state.initial } : {})}
+          onStart={startGame}
+          onBack={() => act({ type: 'GO_HOME' })}
+          onNewList={() => act({ type: 'NEW_LIST' })}
+        />
+      )}
+
+      {state.screen === 'playing' && (
+        <GameCloud
+          game={state.game}
+          // Bound to the game's own language, not the drill's.
+          speak={(text) => speak(text, state.game.settings.col2Lang, voices)}
+          onAnswer={(choiceId, remaining) =>
+            act({ type: 'ANSWER', choiceId, remainingMs: remaining })
+          }
+          onTimeOut={() => act({ type: 'TIME_OUT' })}
+          onAdvance={() => act({ type: 'ADVANCE' })}
+          onQuit={() => act({ type: 'QUIT_GAME' })}
+        />
+      )}
+
+      {state.screen === 'gameResults' && (
+        <GameResults
+          game={state.game}
+          partial={state.game.answers.length < state.game.questions.length}
+          onReplay={() => act({ type: 'REPLAY_GAME' })}
+          onNewGame={() => act({ type: 'NEW_GAME' })}
           onDone={() => act({ type: 'GO_HOME' })}
         />
       )}

@@ -5,9 +5,10 @@ interface Props {
   /** Which screen is showing, so the menu can mark where you already are. */
   screen: AppState['screen']
   /** What leaving would cost, if anything. */
-  guard: 'drill' | 'edit' | null
+  guard: 'drill' | 'edit' | 'game' | null
   onHome: () => void
   onReview: () => void
+  onGame: () => void
 }
 
 /**
@@ -16,10 +17,16 @@ interface Props {
  * "Are you sure?" tells a user nothing they did not already know. Both of these
  * say what specifically disappears, which is the only part worth reading.
  */
-const CONFIRM: Record<'drill' | 'edit', string> = {
+const CONFIRM: Record<'drill' | 'edit' | 'game', string> = {
   drill:
     "You're in the middle of a drill. Leaving will end it and it won't be recorded. Leave anyway?",
   edit: 'You have a list open. Leaving will discard anything you have not saved. Leave anyway?',
+  /*
+   * Says "scored so far" rather than "won't be recorded", because a quit game IS
+   * recorded — for the questions it asked (008 FR-30). Reusing the drill's sentence
+   * here would be a small lie about what the button does.
+   */
+  game: "You're in the middle of a game. Leaving will end it and keep only what you've scored so far. Leave anyway?",
 }
 
 /**
@@ -31,7 +38,7 @@ const CONFIRM: Record<'drill' | 'edit', string> = {
  * both rather than the intersection. The open/close behaviour here is copied on
  * purpose, and the reasons for each part of it are written out there.
  */
-export function NavMenu({ screen, guard, onHome, onReview }: Props) {
+export function NavMenu({ screen, guard, onHome, onReview, onGame }: Props) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -115,6 +122,11 @@ export function NavMenu({ screen, guard, onHome, onReview }: Props) {
         >
           {item('Home', screen === 'home', onHome)}
           {item('Review', screen === 'review' || screen === 'reviewDetail', onReview)}
+          {item(
+            'Play a game',
+            screen === 'gameSetup' || screen === 'playing' || screen === 'gameResults',
+            onGame,
+          )}
         </div>
       )}
     </div>

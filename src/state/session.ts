@@ -20,8 +20,15 @@ export function seededRng(seed: number): Rng {
 
 export const randomRng: Rng = Math.random
 
-/** Fisher-Yates. Returns a new array; never mutates the input. */
-function shuffle<T>(items: readonly T[], rng: Rng): T[] {
+/**
+ * Fisher-Yates. Returns a new array; never mutates the input.
+ *
+ * Exported because the game engine (`src/game/questions.ts`) needs the same draw over
+ * the same injected Rng. Do not re-privatise it, and do not write a second one: a
+ * duplicate is a second place for a swap-index bug to hide, and the symptom — a subtly
+ * non-uniform shuffle — is invisible without a test written specifically to look for it.
+ */
+export function shuffle<T>(items: readonly T[], rng: Rng): T[] {
   const out = [...items]
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))

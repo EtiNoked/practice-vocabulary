@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { collectMissed, missedCounts, toDrillPairs, wordKey } from './missedWords'
+import type { MissSource } from './missedWords'
 import type { SessionRecord, WordList, WordPair } from './types'
 
 const DAY = 86_400_000
@@ -295,5 +296,38 @@ describe('missedCounts', () => {
       month: 0,
       all: 0,
     })
+  })
+})
+
+describe('MissSource — the structural minimum collectMissed actually reads (008 D-3)', () => {
+  /*
+   * These two tests exist to pin a TYPE, so they are deliberately thin on
+   * assertions: the point is that the file compiles at all. `collectMissed` reads
+   * four fields, and 008 needs a game's results — which are not SessionRecords and
+   * never will be — to flow through the same still-missed engine as a drill's.
+   *
+   * Narrowing the parameter back to SessionRecord fails `npm run typecheck` here,
+   * which is the only place that would catch it: every real call site passes a
+   * SessionRecord and would go on compiling perfectly well.
+   */
+  const source: MissSource = {
+    listId: 'l1',
+    finishedAt: NOW - DAY,
+    wrongPairs: [pair('x1', 'daughter', 'dochter')],
+    rightPairs: [pair('x2', 'son', 'zoon')],
+  }
+
+  it('accepts a bare miss source that is not a SessionRecord', () => {
+    const set = collectMissed([source], { listId: 'l1', window: 'all', now: NOW, list })
+    expect(set.words.map((w) => w.pair.col1)).toEqual(['daughter'])
+  })
+
+  it('accepts one in missedCounts too', () => {
+    expect(missedCounts([source], { listId: 'l1', now: NOW, list }).all).toBe(1)
+  })
+
+  it('is satisfied structurally by SessionRecord, so no call site had to change', () => {
+    const record: MissSource = rec(NOW - DAY, [pair('p1', 'daughter', 'dochter')], [])
+    expect(record.listId).toBe('l1')
   })
 })
