@@ -1,7 +1,8 @@
 # Spec: Build a test — several lists, only what you miss, capped, and kept
 
 **ID:** 011-test-builder
-**Status:** PLANNED
+**Status:** IMPLEMENTED — `feature/test-builder`, 6 commits, all gates green
+**Outstanding:** the on-device iPhone pass (tasks T30). See the note at the end.
 **Created:** 2026-09-06
 **Baseline:** `main` @ `5aaae6b` — 56 test files, **1085 tests, all green**
 **Feature Type:** New capability — one new screen, one new stored kind, and a generalisation of the drill
@@ -307,3 +308,82 @@ Named so each is a decision rather than an omission.
 - **A per-run detail screen for a multi-list test.** `ReviewDetail` shows one record — one list's
   share. Showing a whole run's detail in one place is a screen, and the grouped row plus the
   per-list detail already answers "what did I get wrong".
+
+---
+
+## Implementation note (2026-09-06)
+
+Built on `feature/test-builder`, cut from `main` @ `5aaae6b`, in six commits following
+[tasks.md](tasks.md) phase by phase. Final state: **65 test files, 1265 tests**, plus
+**72 rules tests** against the emulator; typecheck, lint, build and the bundle guard all
+clean (86.8 KB eager JS against a 150 KB budget). Baseline was 56 files / 1085 tests.
+
+The Phase 2 checkpoint held: at the end of Task 10 every one of the original 1085 tests
+was green through the new spine, with no behaviour changed and no existing test edited.
+Task 10's one sanctioned exception — relabelling `ReviewScreen`'s rows — turned out not to
+be needed either.
+
+Six things came out differently from the plan, each for a reason worth keeping:
+
+1. **`START_RUN` is legal from `home` as well as `testSetup`.** The plan guarded it to the
+   builder, which made **Test** on a saved-test row a silent no-op — the button dispatched
+   an action the reducer dropped by reference. Only the end-to-end test could catch it, and
+   did; no unit suite would have. It is still refused on top of a running drill or game.
+
+2. **A group of one keeps the percentage its record was written with**, rather than
+   recomputing it from the counts. Recomputing makes D-4's promise nearly-literal instead
+   of literal, and introduces a second source of truth for a number that has been stored
+   since 001. The two agree for every record this app has ever written; they differ only
+   where a stored `pct` disagrees with its own counts, and there the stored value is the
+   one the user has been looking at.
+
+3. **`PoolPicker` is a hook plus a component, in two files.** The plan had the component
+   own the selection and report it upward through `onChange`; both screens need to *read*
+   the draft, and a component owning it privately would have had to report back through an
+   effect, one render late. The two files are then forced by lint: a `.tsx` exporting both
+   a component and a hook breaks fast refresh, which would remount the setup screen and
+   discard a half-made selection.
+
+4. **`ReviewScreen` shows a multi-list run as a summary with each list's share beneath it**,
+   and the shares are the buttons. The plan left the click target unstated; `ReviewDetail`
+   shows one record, so a single button on a three-list run would have had to pick one and
+   silently drop the rest.
+
+5. **Two helpers the plan did not name**: `runListId` (so a multi-list run stores `''` for
+   `Session.listId` rather than quietly naming whichever list came first) and `isRunnable`
+   (one word, where the game needs four).
+
+6. **A pre-existing flake was fixed on the way past.** `App.game.test.tsx`'s `food` fixture
+   contained `water`/`water` — one pair whose columns are spelled identically — inside a
+   describe block whose three assertions rest on the columns sharing no text. It failed
+   about one run in six, **on `main`**, with a message pointing at the game rather than at
+   the fixture (confirmed by running the suite eight times on a pristine `main` worktree:
+   four failures). Now `egg`/`ei`. The same-text case is still covered in the unit suites
+   for `questions`, `game` and `wordPool`, where the rng is injected and it can be pinned.
+
+### The deletion bug
+
+FR-39 is fixed and the guard is in place. `purgeUserData` now deletes `lists`, `sessions`,
+**`games`** and `tests` before the user document, and the invariant reads the collection
+paths out of `firestoreListStore.ts` and fails the build if one is missing from that array.
+Removing `'games'` again — reproducing exactly what 008 shipped — turns it red.
+
+All four new invariants were deliberately broken once and watched fail, then restored. A
+guard nobody has seen fail is a guard nobody knows works.
+
+### Still to do
+
+**T30, the on-device pass, has not been done.** In particular:
+
+> Build a test over two lists on a real iPhone (Safari), start it in **Test**, and confirm
+> the first word is audible. Then **Another N** from the results screen — the first word of
+> the new draw must be audible too, and it descends from a different tap.
+
+No test in this suite can stand in for it. Both new start buttons and the fresh-draw button
+call `speak()` synchronously inside their own handler, which is the right shape, but jsdom
+cannot fail the way iOS Safari fails — silently, on one platform. The dark-mode and
+200%-text checks in T30 are likewise unverified beyond the token and glyph rules the suite
+enforces.
+
+008 shipped with its equivalent step outstanding. This one is outstanding for the same
+reason and should not stay that way twice.

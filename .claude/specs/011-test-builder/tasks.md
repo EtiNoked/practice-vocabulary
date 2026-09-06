@@ -2,6 +2,7 @@
 
 **Baseline:** `main` @ `5aaae6b` — **1085 tests across 56 files, all green**
 **Branch:** `feature/test-builder`, cut from `main`
+**Status:** Tasks 1–29 DONE. **Task 30 (the device pass) OUTSTANDING** — see spec.md.
 **Total:** 30 tasks across 7 phases
 **Legend:** `[P]` = parallelisable with its siblings · every task ends in a runnable VALIDATE
 
