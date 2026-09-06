@@ -1,3 +1,4 @@
+import { bandBorder } from '../state/scoreBand'
 import type { SessionRecord } from '../state/types'
 
 interface Props {
@@ -49,7 +50,14 @@ export function ScoreHistory({ records }: Props) {
         {records.slice(0, 10).map((record) => (
           <li
             key={record.id}
-            className="flex flex-wrap items-baseline justify-between gap-2 rounded border border-line px-3 py-2 text-sm"
+            /*
+              The score's colour, on the run itself.
+
+              `border-2` on every row, banded or not, so a run with no score
+              cannot sit a pixel narrower than its neighbours. Colour is never
+              the only carrier — the numbers are right there beside it.
+            */
+            className={`flex flex-wrap items-baseline justify-between gap-2 rounded border-2 px-3 py-2 text-sm ${bandBorder(record)}`}
           >
             <span className="font-medium">{record.listName}</span>
             <span className="text-ink-muted">

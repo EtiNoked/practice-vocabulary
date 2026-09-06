@@ -162,3 +162,18 @@ describe('a record that is no longer there', () => {
     expect(onBack).toHaveBeenCalled()
   })
 })
+
+describe('the score wears its band', () => {
+  // Via the percentage span, not a slash — the date line has slashes too.
+  const scoreLine = (pct: number) => screen.getByText(`(${pct}%)`).closest('p')!
+
+  it('agrees with the row the screen was opened from', () => {
+    setup({ record: rec({ right: 2, total: 2, pct: 100 }) })
+    expect(scoreLine(100)).toHaveClass('border-correct')
+  })
+
+  it('bands a poor run red', () => {
+    setup({ record: rec({ right: 1, total: 10, pct: 10 }) })
+    expect(scoreLine(10)).toHaveClass('border-incorrect')
+  })
+})

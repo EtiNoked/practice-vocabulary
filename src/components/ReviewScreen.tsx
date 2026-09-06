@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { bandBorder } from '../state/scoreBand'
 import type { SessionRecord } from '../state/types'
 
 interface Props {
@@ -150,7 +151,11 @@ function Row({
     <button
       type="button"
       onClick={() => onOpen(record.id)}
-      className="card flex w-full flex-wrap items-baseline justify-between gap-2 px-3 py-2 text-left"
+      /*
+        `border-2` plus the band overrides `.card`'s own 1px line: Tailwind's
+        utilities layer wins over the components layer, so the two do not fight.
+      */
+      className={`card flex w-full flex-wrap items-baseline justify-between gap-2 border-2 px-3 py-2 text-left ${bandBorder(record)}`}
     >
       <span className="font-medium">{record.listName}</span>
       <span className="text-sm text-ink-muted">

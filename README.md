@@ -92,20 +92,18 @@ the option to shuffle and go again or drill only the ones you got wrong.
 
 Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 
-Each saved list wears its last score as a coloured border: **green** for a clean sweep,
-**amber** from 70% up, **red** below that, and no colour at all until you have drilled it.
-The score is printed beside the name too — a border colour on its own is no use to a
-colour-blind reader or a greyscale screenshot.
-
-The colour comes from your most recent **full** run. Wrong-only re-runs and drills you
-stopped early are ignored, because a deliberately harder subset would otherwise turn a list
-red for the crime of practising its weak spots.
-
 ## Reviewing what you got wrong
 
 **Menu → Review** lists every finished drill, newest first, grouped under Today,
 Yesterday and dated headings, and filterable by list. Open one and you get the whole
 answer sheet: the words you missed, and the words you got right.
+
+Every practice — in Review, in **Recent practice** on the home screen, and on the drill's
+own page — is bordered by how it went: **green** for a clean sweep, **amber** from 70% up,
+**red** below that. Green means every card, not a percentage that rounded to 100, so
+199/200 reads amber and the fraction printed beside it explains why. The numbers are always
+there in text; a border colour on its own is no use to a colour-blind reader or a greyscale
+screenshot.
 
 From a list's start screen you can also drill **just the words you are still getting
 wrong**, over **Today**, **This week**, **This month** or **All time**. Each chip shows

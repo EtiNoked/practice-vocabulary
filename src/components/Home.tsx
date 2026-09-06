@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { SessionRecord, WordList } from '../state/types'
+import type { WordList } from '../state/types'
 import { SavedLists } from './SavedLists'
 
 interface Props {
@@ -14,8 +14,6 @@ interface Props {
   onSeeAllHistory?: () => void
   /** Where the lists live, which changes what the empty state can promise. */
   scope?: 'device' | 'account'
-  /** Most recent comparable run per list id, for the standing on each row. */
-  scores?: Map<string, SessionRecord>
   onNewList: () => void
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
@@ -30,7 +28,6 @@ export function Home({
   history,
   onSeeAllHistory,
   scope = 'device',
-  scores,
   onNewList,
   ...listActions
 }: Props) {
@@ -55,13 +52,7 @@ export function Home({
 
       <div>
         <h2 className="mb-2 font-semibold">Saved lists</h2>
-        <SavedLists
-          lists={lists}
-          loading={loading}
-          scope={scope}
-          {...(scores ? { scores } : {})}
-          {...listActions}
-        />
+        <SavedLists lists={lists} loading={loading} scope={scope} {...listActions} />
       </div>
 
       {history && (

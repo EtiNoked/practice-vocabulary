@@ -82,3 +82,47 @@ describe('trend', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(10)
   })
 })
+
+describe('each practice wears its score', () => {
+  const row = () => screen.getByText('Lesson 3').closest('li')!
+
+  it('goes green on a clean sweep', () => {
+    render(<ScoreHistory records={[rec({ right: 10, total: 10, pct: 100 })]} />)
+    expect(row()).toHaveClass('border-correct')
+  })
+
+  it('goes amber from 70 up', () => {
+    render(<ScoreHistory records={[rec({ right: 7, total: 10, pct: 70 })]} />)
+    expect(row()).toHaveClass('border-accent')
+  })
+
+  it('goes red below 70', () => {
+    render(<ScoreHistory records={[rec({ right: 6, total: 10, pct: 60 })]} />)
+    expect(row()).toHaveClass('border-incorrect')
+  })
+
+  it('does not show a rounded-up 100% as green', () => {
+    render(<ScoreHistory records={[rec({ right: 199, total: 200, pct: 100 })]} />)
+    expect(row()).toHaveClass('border-accent')
+  })
+
+  it('colours a wrong-only run on its own score, and still labels it', () => {
+    render(
+      <ScoreHistory records={[rec({ right: 0, total: 3, pct: 0, mode: 'wrong-only' })]} />,
+    )
+    expect(row()).toHaveClass('border-incorrect')
+    expect(screen.getByText(/missed words only/i)).toBeInTheDocument()
+  })
+
+  it('keeps the score in text, so the colour is never the only signal', () => {
+    // Colour-blind readers, forced-colours mode and greyscale screenshots all
+    // lose the border and keep this.
+    render(<ScoreHistory records={[rec({ right: 6, total: 10, pct: 60 })]} />)
+    expect(screen.getByText(/6 \/ 10 \(60%\)/)).toBeInTheDocument()
+  })
+
+  it('gives every row the same border width, banded or not', () => {
+    render(<ScoreHistory records={[rec()]} />)
+    expect(row()).toHaveClass('border-2')
+  })
+})

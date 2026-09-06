@@ -1,3 +1,4 @@
+import { bandBorder } from '../state/scoreBand'
 import type { SessionRecord, WordList, WordPair } from '../state/types'
 
 interface Props {
@@ -51,7 +52,8 @@ export function ReviewDetail({ record, list, onPractiseMisses, onBack }: Props) 
         </p>
       </header>
 
-      <p className="text-3xl font-bold">
+      {/* Banded like the row this screen was opened from, so the two agree. */}
+      <p className={`rounded-lg border-2 px-3 py-2 text-3xl font-bold ${bandBorder(record)}`}>
         {record.right} / {record.total}{' '}
         <span className="text-2xl font-normal text-ink-muted">({record.pct}%)</span>
       </p>

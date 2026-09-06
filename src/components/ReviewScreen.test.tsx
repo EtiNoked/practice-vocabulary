@@ -171,3 +171,30 @@ describe('filtering by list', () => {
     expect(screen.queryByRole('option', { name: 'Old name' })).not.toBeInTheDocument()
   })
 })
+
+describe('each practice wears its score', () => {
+  const row = () => screen.getByRole('button', { name: /Lesson 3/ })
+
+  it('bands the row by how the run went', () => {
+    setup([rec({ right: 10, total: 10, pct: 100 })])
+    expect(row()).toHaveClass('border-correct')
+  })
+
+  it('bands a middling run amber', () => {
+    setup([rec({ right: 8, total: 10, pct: 80 })])
+    expect(row()).toHaveClass('border-accent')
+  })
+
+  it('bands a poor run red', () => {
+    setup([rec({ right: 2, total: 10, pct: 20 })])
+    expect(row()).toHaveClass('border-incorrect')
+  })
+
+  it('overrides the card border rather than sitting beside it', () => {
+    // `.card` brings its own 1px line; the utility has to win or the band is
+    // drawn under it and never seen.
+    setup([rec({ right: 2, total: 10, pct: 20 })])
+    expect(row()).toHaveClass('border-2')
+    expect(row()).toHaveClass('card')
+  })
+})
