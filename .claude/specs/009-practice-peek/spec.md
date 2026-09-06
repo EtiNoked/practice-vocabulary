@@ -1,9 +1,13 @@
 # Spec: Practice hides the answer, and an eye gives it back
 
 **ID:** 009-practice-peek
-**Status:** DRAFT
+**Status:** IMPLEMENTED — `1ba11b0`, then merged with `origin/main` in `e394821`
 **Created:** 2026-09-06
 **Baseline:** `main` @ `d24ec53` — **38 test files, 604 tests, all green**
+**After merging origin/main** (which brought 006-practice-review and the language-guess fix):
+**45 files, 810 tests, all green**. The 604 above is the tree this was built and validated
+against, and the line numbers throughout these documents are that tree's — kept as written
+rather than rewritten after the fact.
 **Feature Type:** Enhancement — one new piece of session state, one new control, one CSS primitive
 **Complexity:** Low-Medium. Nine source files, none of them deeply. The interesting parts are
 the *lifetime* of the new state and the fact that a blurred word is still in the DOM.
