@@ -15,6 +15,11 @@ interface Props {
   /** Where the lists live, which changes what the empty state can promise. */
   scope?: 'device' | 'account'
   onNewList: () => void
+  /**
+   * Optional, and the button renders only when supplied — several tests render Home
+   * directly, and the same rule `onSeeAllHistory` follows.
+   */
+  onPlayGame?: () => void
   onPractise: (list: WordList) => void
   onEdit: (list: WordList) => void
   onRename: (list: WordList) => void
@@ -29,6 +34,7 @@ export function Home({
   onSeeAllHistory,
   scope = 'device',
   onNewList,
+  onPlayGame,
   ...listActions
 }: Props) {
   return (
@@ -42,13 +48,20 @@ export function Home({
 
       {banner}
 
-      <button
-        type="button"
-        onClick={onNewList}
-        className="btn btn-primary btn-lg"
-      >
-        New list
-      </button>
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={onNewList}
+          className="btn btn-primary btn-lg"
+        >
+          New list
+        </button>
+        {onPlayGame && (
+          <button type="button" onClick={onPlayGame} className="btn btn-quiet btn-lg">
+            Play a game
+          </button>
+        )}
+      </div>
 
       <div>
         <h2 className="mb-2 font-semibold">Saved lists</h2>

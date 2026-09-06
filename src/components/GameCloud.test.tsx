@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GameCloud } from './GameCloud'
@@ -93,6 +93,9 @@ beforeEach(() =>
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] }),
 )
 afterEach(() => {
+  // Unmount FIRST — see the note in App.game.test.tsx: real timers restored under a
+  // mounted component let its pending interval fire outside act().
+  cleanup()
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
