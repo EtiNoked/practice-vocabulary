@@ -68,8 +68,21 @@ const SEP = '\u0000'
  * would key the same word two ways on two phones.
  */
 export function wordKey(pair: Pick<WordPair, 'col1' | 'col2'>): string {
-  const fold = (value: string) => value.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ')
-  return fold(pair.col1) + SEP + fold(pair.col2)
+  return foldText(pair.col1) + SEP + foldText(pair.col2)
+}
+
+/**
+ * One side of `wordKey`, on its own.
+ *
+ * Exported for the game's distractor rule, which has to compare what two tiles SAY
+ * rather than what they mean: two senses of "bank" are two different words with one
+ * display string, and showing both as options is a question with two right-looking
+ * answers. That comparison must fold exactly as `wordKey` does or the two rules disagree
+ * about the same pair of words — hence one function, used by both, rather than a second
+ * normaliser written at the call site.
+ */
+export function foldText(value: string): string {
+  return value.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 /**
