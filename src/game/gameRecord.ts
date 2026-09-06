@@ -98,3 +98,21 @@ export function gameMissSources(record: GameRecord): MissSource[] {
     ...pairs,
   }))
 }
+
+/**
+ * What a finished round is called.
+ *
+ * Beside the record rather than inside a component because two surfaces name rounds — the
+ * game log and the home brief — and two independent answers to "what is a two-list game
+ * called" would drift apart with nothing to catch it.
+ *
+ * The rule is `runLabel`'s, deliberately: one list by name, otherwise a count, so the game
+ * log and the practice log read the same way.
+ *
+ * DISTINCT names, because `listNames` mirrors `listIds` positionally and two chapters of
+ * the same book can share a name.
+ */
+export function gameLabel(record: GameRecord): string {
+  const unique = [...new Set(record.listNames)]
+  return unique.length === 1 ? unique[0]! : `${unique.length} lists`
+}
