@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GameCloud } from './GameCloud'
@@ -339,5 +339,56 @@ describe('moving between questions', () => {
     // A full ten immediately — never one frame of the previous question's clock.
     expect(screen.getByText('10')).toBeInTheDocument()
     expect(screen.getByText('2 / 4')).toBeInTheDocument()
+  })
+})
+
+describe('the cloud (008 D-1)', () => {
+  const cloud = () => screen.getByRole('group', { name: /choose the meaning/i })
+  const words = () => within(cloud()).getAllByRole('button')
+
+  it('holds every option and nothing else', () => {
+    const { game } = setup()
+    expect(words().map((w) => w.textContent)).toEqual(
+      currentQuestion(game)!.options.map((o) => o.col1),
+    )
+  })
+
+  it('gives EVERY word the same size', () => {
+    setup()
+    /*
+     * The point of the cloud, and the one way it departs from what a word cloud
+     * normally is. Size in a real word cloud encodes frequency; here there is nothing
+     * for it to encode, so any variation would be read as a hint — the biggest word
+     * looks like the important one. This fails the moment someone "improves" the
+     * cloud by scaling its words.
+     */
+    const SIZE = /^text-(?:xs|sm|base|lg|xl|\d+xl|word)$/
+    const sizeOf = (el: HTMLElement) => el.className.split(/\s+/).filter((c) => SIZE.test(c))
+
+    // Every word carries exactly one size class, and it is the same one for all of them.
+    expect(words().every((w) => sizeOf(w).length === 1)).toBe(true)
+    expect(new Set(words().map((w) => sizeOf(w)[0])).size).toBe(1)
+  })
+
+  it('keeps every word a 44px touch target, though it is not a .btn', () => {
+    setup()
+    // The rule lives in `.btn`, and these are bare words — so it has to be explicit.
+    expect(words().every((w) => w.className.includes('min-h-11'))).toBe(true)
+  })
+
+  it('colours and staggers by position, so a redraw cannot reshuffle the cloud', async () => {
+    // This component re-renders ten times a second to move the countdown. Anything
+    // random here would twitch and re-colour under the player's thumb.
+    setup()
+    const before = words().map((w) => w.className)
+    await wait(2500)
+    expect(words().map((w) => w.className)).toEqual(before)
+  })
+
+  it('uses no raw palette colour — the cloud is tokens like everything else', () => {
+    setup()
+    for (const word of words()) {
+      expect(word.className).not.toMatch(/text-(red|blue|green|purple|orange|teal|pink)-\d/)
+    }
   })
 })

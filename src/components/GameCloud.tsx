@@ -27,6 +27,19 @@ function useLatest<T>(value: T) {
   return ref
 }
 
+/**
+ * The cloud's colours, cycled by position.
+ *
+ * Only tokens with verified contrast in BOTH themes, and deliberately NOT `correct`,
+ * `incorrect` or `accent`: the first two are reserved for the verdict — a cloud already
+ * wearing red and green has nothing left to say "wrong" with — and orange fails the
+ * text-contrast threshold against the page in light mode.
+ */
+const CLOUD_TONES = ['text-ink', 'text-primary', 'text-ink-muted'] as const
+
+/** A small vertical stagger, so the words sit like a cloud rather than a line of type. */
+const CLOUD_LIFT = ['-translate-y-1', 'translate-y-1', '', 'translate-y-2', '-translate-y-2', 'translate-y-0.5'] as const
+
 const RING_RADIUS = 28
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS
 
@@ -205,29 +218,52 @@ export function GameCloud({ game, speak, onAnswer, onTimeOut, onAdvance, onQuit 
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        {question.options.map((option) => {
+      {/*
+        A CLOUD, not a grid: bare words scattered across the middle of the screen
+        rather than six bordered boxes in two columns.
+
+        EVERY WORD THE SAME SIZE, deliberately, and it is the one place this departs
+        from what a word cloud normally is. Size in a real word cloud encodes frequency;
+        here there is nothing for it to encode, and any variation at all would be read
+        as a hint — the biggest word looks like the important one. Uniform size keeps
+        all six options equally weighted, which is the whole point of the question.
+
+        Colour and vertical nudge are picked by INDEX, never randomly. This component
+        re-renders ten times a second to redraw the countdown, so anything random here
+        would make the cloud twitch and re-colour itself under the player's thumb.
+      */}
+      <div
+        role="group"
+        aria-label="Choose the meaning"
+        className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 py-2"
+      >
+        {question.options.map((option, i) => {
           const isAnswer = option.id === question.word.id
           const isChoice = verdict?.kind === 'wrong' && verdict.chose.id === option.id
           /*
            * Three independent channels for a wrong answer, never colour alone: the
-           * tapped tile turns red WITH a cross, the right one turns green with a tick,
+           * word tapped turns red WITH a cross, the right one turns green with a tick,
            * and the line below says it in words.
            */
           const tone = !frozen
-            ? 'btn-quiet'
+            ? CLOUD_TONES[i % CLOUD_TONES.length]
             : isAnswer
-              ? 'bg-correct text-correct-ink'
+              ? 'text-correct'
               : isChoice
-                ? 'bg-incorrect text-incorrect-ink'
-                : 'btn-quiet opacity-50'
+                ? 'text-incorrect'
+                : 'text-ink-faint'
           return (
             <button
               key={option.id}
               type="button"
               disabled={frozen}
               onClick={() => pick(option.id)}
-              className={`btn ${tone} min-h-14 whitespace-normal text-center`}
+              /*
+               * `min-h-11` by hand because this is not a `.btn` — the 44px rule is
+               * baked into that class and a bare word has to carry it explicitly.
+               * `break-words` so one very long entry cannot push the cloud sideways.
+               */
+              className={`min-h-11 max-w-full break-words rounded-md px-2 text-2xl font-semibold transition-colors ${tone} ${CLOUD_LIFT[i % CLOUD_LIFT.length]}`}
             >
               {frozen && isAnswer && <span aria-hidden="true">✓ </span>}
               {frozen && isChoice && <span aria-hidden="true">✗ </span>}

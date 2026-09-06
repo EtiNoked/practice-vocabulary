@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listRepo } from './storage/listRepo'
 import { gameRepo } from './storage/gameRepo'
@@ -66,11 +66,17 @@ const wait = async (ms: number) => {
 
 const spoken = () => speechCalls.filter((c) => c.type === 'speak')
 
-/** The tiles are the buttons inside the cloud grid; the answer is the one that matches. */
-const tiles = () =>
-  screen
-    .getAllByRole('button')
-    .filter((b) => b.className.includes('min-h-14'))
+/**
+ * The words in the cloud.
+ *
+ * Found through the cloud's own `role="group"` rather than by a class name — a layout
+ * class is not a contract, and the previous version of this helper broke the moment the
+ * cloud stopped being a grid.
+ */
+const tiles = () => {
+  const cloud = screen.queryByRole('group', { name: /choose the meaning/i })
+  return cloud ? within(cloud).getAllByRole('button') : []
+}
 
 const openGame = () => {
   renderApp()
