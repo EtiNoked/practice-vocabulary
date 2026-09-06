@@ -14,7 +14,15 @@ import {
   toggleAnswers,
   type Rng,
 } from './session'
-import { runFromList, runListId, runPairs, type DrillRun } from './drillRun'
+import {
+  redraw,
+  runFromList,
+  runListId,
+  runPairs,
+  type DrillRun,
+  type TestPlan,
+} from './drillRun'
+import type { SavedTest } from './testPlan'
 import type { ReviewWindow } from './missedWords'
 import type { DrillMode, MarkResult, Session, WordList, WordPair } from './types'
 import { advance as advanceGame, answer as answerGame, isFinished as gameFinished, replay as replayGame, timeOut as timeOutGame } from '../game/game'
@@ -88,6 +96,24 @@ export type AppState =
    * union every existing consumer has to narrow, or optional fields meaningless half the
    * time (008 D-7).
    */
+  /**
+   * The test builder (011).
+   *
+   * Beside the game's setup screen and shaped like it, down to the pre-fill: the two
+   * screens ask the same question — which words, and how many — and only differ in what
+   * happens afterwards.
+   */
+  | {
+      screen: 'testSetup'
+      /**
+       * Pre-fills the builder: a saved test being edited, or a plan being reused.
+       *
+       * The FORM's own state lives in the component (008 D-11); this is only its seed. A
+       * `SavedTest` carries an id, which is what tells the screen it is editing rather
+       * than creating.
+       */
+      initial?: SavedTest | TestPlan
+    }
   | {
       screen: 'gameSetup'
       /**
@@ -129,6 +155,20 @@ export type AppAction =
   /** Drop the subset and go back to the whole list, staying on ready. */
   | { type: 'PRACTISE_FULL' }
   | { type: 'GO_HOME' }
+  /** Open the test builder, empty. */
+  | { type: 'OPEN_TEST_SETUP' }
+  /** Open the test builder on an existing saved test. */
+  | { type: 'EDIT_TEST'; test: SavedTest }
+  /**
+   * Start a run built in the builder.
+   *
+   * Carries a FINISHED run, not a plan. Building one needs the live lists and every
+   * record, which a pure reducer does not have and must not acquire — the same reason
+   * START_GAME carries a built game and PRACTISE_MISSED carries finished pairs.
+   */
+  | { type: 'START_RUN'; run: DrillRun; mode: DrillMode }
+  /** From results: the same settings over a freshly drawn set. Pure — the pool is in state. */
+  | { type: 'RESTART_FRESH_DRAW' }
   | { type: 'OPEN_GAME' }
   /**
    * Carries a FINISHED Game, not settings.
@@ -311,6 +351,50 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
           otherMode(state.session.mode),
         ),
       }
+
+    /*
+     * Legal from anywhere, the drill included — NavMenu owns the "you will lose this"
+     * confirm, for the same reason OPEN_REVIEW and OPEN_GAME do: a pure reducer must not
+     * open a dialog.
+     */
+    case 'OPEN_TEST_SETUP':
+      return { screen: 'testSetup' }
+
+    case 'EDIT_TEST':
+      return { screen: 'testSetup', initial: action.test }
+
+    case 'START_RUN':
+      if (state.screen !== 'testSetup') return state
+      return {
+        screen: 'practising',
+        run: action.run,
+        session: createSession(
+          runPairs(action.run),
+          rng,
+          runListId(action.run),
+          action.mode,
+        ),
+      }
+
+    /*
+     * A fresh sample of the same size, from the SAME pool snapshot (011 D-6).
+     *
+     * Pure, exactly as REPLAY_GAME is, and for the same reason: the pool travels inside
+     * the run, so a re-draw cannot accidentally pull from a pool the user was never shown
+     * a count for. `redraw` returns the run unchanged when there is nothing else to draw,
+     * which is what makes this a no-op on a plain list drill rather than a reshuffle
+     * wearing a different name.
+     */
+    case 'RESTART_FRESH_DRAW': {
+      if (state.screen !== 'results') return state
+      const run = redraw(state.run, rng)
+      if (run === state.run) return state
+      return {
+        screen: 'practising',
+        run,
+        session: createSession(runPairs(run), rng, runListId(run), state.session.mode),
+      }
+    }
 
     case 'OPEN_GAME':
       // Legal from anywhere, the drill included — NavMenu owns the "you will lose this"

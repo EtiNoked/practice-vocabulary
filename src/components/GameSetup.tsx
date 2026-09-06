@@ -1,8 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { LANG_NAMES } from '../lang/languages'
-import { listOptions, poolLanguages, type PoolSource, type PoolSpec } from '../state/wordPool'
+import { poolLanguages, type PoolSpec } from '../state/wordPool'
 import type { WordList } from '../state/types'
+import { PoolPicker, usePoolDraft, type PoolLimits } from './PoolPicker'
 import { COUNT_CHIPS, MAX_GAME_WORDS, MIN_POOL, type GameSettings } from '../game/types'
+
+/**
+ * What a game allows.
+ *
+ * `min` is MIN_POOL because a cloud of six needs five distractors; `max` is the CLOCK —
+ * 50 words at ten seconds is about eight minutes. Neither is a fact about choosing words,
+ * which is why they are stated here and passed in rather than living in the picker.
+ */
+const GAME_LIMITS: PoolLimits = {
+  chips: COUNT_CHIPS,
+  max: MAX_GAME_WORDS,
+  min: MIN_POOL,
+  // A game is dealt once, so "all 7" can simply BE 7 — there is no later re-run for the
+  // distinction to matter to.
+  allowUncapped: false,
+}
 
 interface Props {
   lists: WordList[]
@@ -45,39 +62,13 @@ export function GameSetup({
   onBack,
   onNewList,
 }: Props) {
-  const [selected, setSelected] = useState<string[]>(() => [...(initial?.spec.listIds ?? [])])
-  const [source, setSource] = useState<PoolSource>(initial?.spec.source ?? 'all')
-  /*
-   * Held as the RAW STRING, not a number.
-   *
-   * A controlled number input whose value is clamped on every render cannot be
-   * cleared: emptying it re-renders as the minimum, and the next digit typed appends
-   * to that instead of replacing it — so typing "4" over "10" gives 104. The clamp
-   * belongs at the point the value is USED, not at the point it is typed.
-   */
-  const [typed, setTyped] = useState<string>(String(initial?.count ?? COUNT_CHIPS[0]!))
+  const draft = usePoolDraft({
+    ...(initial !== undefined ? { initial: { spec: initial.spec, count: initial.count } } : {}),
+    count,
+    limits: GAME_LIMITS,
+  })
 
-  const spec: PoolSpec = useMemo(() => ({ listIds: selected, source }), [selected, source])
-
-  /*
-   * Memoised on the SPEC and nothing else. A spec has no `count` in it, which is what
-   * stops every keystroke in the number box from rebuilding the pool (008 R8).
-   */
-  const poolCount = useMemo(() => count(spec), [count, spec])
-
-  const options = useMemo(() => listOptions(lists, selected), [lists, selected])
-  const langs = useMemo(() => poolLanguages(lists, selected), [lists, selected])
-
-  const toggle = (id: string) =>
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
-
-  const cap = Math.min(poolCount, MAX_GAME_WORDS)
-  const chips = COUNT_CHIPS.filter((n) => n <= cap)
-  // Always leave at least one tap target: a pool of 7 offers no 10/15/20 chip, so it
-  // gets an "All 7" instead of nothing but a number box.
-  const showAll = cap >= MIN_POOL && !chips.includes(cap)
-  const enough = poolCount >= MIN_POOL
-  const asking = Math.max(1, Math.min(Number(typed) || 0, cap))
+  const langs = useMemo(() => poolLanguages(lists, draft.listIds), [lists, draft.listIds])
 
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-5 p-4">
@@ -99,72 +90,23 @@ export function GameSetup({
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-2">
-            <h2 className="font-semibold">Which lists?</h2>
-            <div className="flex flex-col gap-2">
-              {options.map(({ list, selected: on, selectable, blocked }) => (
-                <button
-                  key={list.id}
-                  type="button"
-                  aria-pressed={on}
-                  // Disabled, not hidden: a zero-explanation gap invites the question
-                  // that a stated reason closes.
-                  disabled={!selectable}
-                  onClick={() => toggle(list.id)}
-                  className={`btn btn-quiet w-full justify-between text-left ${
-                    on ? 'border-primary bg-primary-soft' : ''
-                  }`}
-                >
-                  <span>{list.name}</span>
-                  <span className="text-sm text-ink-muted">
-                    {blocked === 'language'
-                      ? `${LANG_NAMES[list.col1Lang]} → ${LANG_NAMES[list.col2Lang]} — a game uses one language pair`
-                      : `${list.pairs.length} ${list.pairs.length === 1 ? 'word' : 'words'}`}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <h2 className="font-semibold">Which words?</h2>
-            <div className="flex gap-2">
-              {(
-                [
-                  ['all', 'All words'],
-                  ['missed', 'Words I got wrong'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={source === value}
-                  onClick={() => setSource(value)}
-                  className={`btn btn-quiet flex-1 ${
-                    source === value ? 'border-primary bg-primary-soft' : ''
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <PoolPicker lists={lists} draft={draft} limits={GAME_LIMITS} />
 
           {/* The ask's "see how many words you have after this selection" (008 FR-6). */}
           <p role="status" className="rounded-lg bg-surface-sunken p-3">
-            {selected.length === 0 ? (
+            {draft.listIds.length === 0 ? (
               'Pick at least one list to see how many words you have.'
-            ) : poolCount === 0 && source === 'missed' ? (
+            ) : draft.poolCount === 0 && draft.source === 'missed' ? (
               'No words to practise here yet — you have not got any of these wrong. Try “All words”.'
-            ) : !enough ? (
+            ) : !draft.enough ? (
               <>
-                Only <strong>{poolCount}</strong>{' '}
-                {poolCount === 1 ? 'word' : 'words'} in this selection. A game needs at least{' '}
+                Only <strong>{draft.poolCount}</strong>{' '}
+                {draft.poolCount === 1 ? 'word' : 'words'} in this selection. A game needs at least{' '}
                 {MIN_POOL} — add another list, or switch to “All words”.
               </>
             ) : (
               <>
-                <strong>{poolCount}</strong> words to draw from
+                <strong>{draft.poolCount}</strong> words to draw from
                 {langs && (
                   <>
                     . You&apos;ll hear <strong>{LANG_NAMES[langs.col2Lang]}</strong> and pick the{' '}
@@ -176,51 +118,6 @@ export function GameSetup({
             )}
           </p>
 
-          {enough && (
-            <div className="flex flex-col gap-2">
-              <h2 className="font-semibold">How many words?</h2>
-              <div className="flex flex-wrap gap-2">
-                {chips.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    aria-pressed={asking === n}
-                    onClick={() => setTyped(String(n))}
-                    className={`btn btn-quiet ${asking === n ? 'border-primary bg-primary-soft' : ''}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-                {showAll && (
-                  <button
-                    type="button"
-                    aria-pressed={asking === cap}
-                    onClick={() => setTyped(String(cap))}
-                    className={`btn btn-quiet ${asking === cap ? 'border-primary bg-primary-soft' : ''}`}
-                  >
-                    All {cap}
-                  </button>
-                )}
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-ink-muted">or type a number</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={cap}
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  className="field w-24"
-                />
-              </label>
-              {poolCount > MAX_GAME_WORDS && (
-                <p className="text-sm text-ink-muted">
-                  A game tops out at {MAX_GAME_WORDS} words.
-                </p>
-              )}
-            </div>
-          )}
-
           <div className="flex flex-col gap-2">
             {/*
               This tap is what speaks the first word. It must not navigate and let
@@ -229,12 +126,12 @@ export function GameSetup({
             */}
             <button
               type="button"
-              disabled={!enough}
+              disabled={!draft.enough}
               onClick={() =>
                 langs &&
                 onStart({
-                  spec,
-                  count: asking,
+                  spec: draft.spec,
+                  count: draft.asking,
                   col1Lang: langs.col1Lang,
                   col2Lang: langs.col2Lang,
                 })
