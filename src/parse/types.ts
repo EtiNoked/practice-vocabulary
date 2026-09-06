@@ -33,3 +33,20 @@ export const AUTHORITATIVE_SOURCES: readonly LangSource[] = ['header', 'manual']
 export function isGuessed(source: LangSource): boolean {
   return !AUTHORITATIVE_SOURCES.includes(source)
 }
+
+/**
+ * How much a source is worth when two disagree, weakest first.
+ *
+ * Only ever used to answer one question: may a fresh detection overwrite the
+ * languages a list was already saved with? It may not when it is weaker, and the
+ * gap that matters is `header` (or `manual`) vs `default` — a header row is
+ * CONSUMED when the list is saved, so reopening that list can never re-derive it
+ * and the detector falls back to plain en/nl. Letting that fallback win silently
+ * reverses a Dutch-first list, and the editor then saves the reversal.
+ */
+export const SOURCE_RANK: Record<LangSource, number> = {
+  default: 0,
+  heuristic: 1,
+  header: 2,
+  manual: 3,
+}

@@ -138,13 +138,22 @@ export function score(session: Session): Score {
   const marked = Object.entries(session.marks)
   const right = marked.filter(([, r]) => r === 'right').length
   const wrong = marked.length - right
-  const wrongIds = marked.filter(([, r]) => r === 'wrong').map(([id]) => id)
+  // Sets, not arrays: score() now walks the pairs twice, and a 500-word list
+  // makes the O(n^2) of a repeated `includes` measurable.
+  const wrongIds = new Set(marked.filter(([, r]) => r === 'wrong').map(([id]) => id))
+  const rightIds = new Set(marked.filter(([, r]) => r === 'right').map(([id]) => id))
   return {
     right,
     wrong,
     total: marked.length,
     pct: marked.length === 0 ? 0 : Math.round((right / marked.length) * 100),
-    wrongPairs: session.pairs.filter((p) => wrongIds.includes(p.id)),
+    /*
+     * Both partitioned over `session.pairs`, so they come back in the LIST's
+     * order rather than the shuffle's. The review screen reads them top to
+     * bottom, and a drill's dealing order means nothing to the person reading it.
+     */
+    wrongPairs: session.pairs.filter((p) => wrongIds.has(p.id)),
+    rightPairs: session.pairs.filter((p) => rightIds.has(p.id)),
   }
 }
 

@@ -1,9 +1,12 @@
-import { useCallback, useLayoutEffect, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
 import { Home } from './components/Home'
 import { ListEditor } from './components/ListEditor'
 import { TestCard } from './components/TestCard'
 import { StudyCard } from './components/StudyCard'
 import { ReadyScreen } from './components/ReadyScreen'
+import { ReviewScreen } from './components/ReviewScreen'
+import { ReviewDetail } from './components/ReviewDetail'
+import { NavMenu } from './components/NavMenu'
 import { ResultsScreen } from './components/ResultsScreen'
 import { MigratePrompt } from './components/MigratePrompt'
 import { ScoreHistory } from './components/ScoreHistory'
@@ -24,6 +27,12 @@ import { AccountMenu } from './components/AccountMenu'
 import { ThemeToggle } from './components/ThemeToggle'
 import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
+import {
+  collectMissed,
+  missedCounts,
+  toDrillPairs,
+  type ReviewWindow,
+} from './state/missedWords'
 import { buildSessionRecord } from './state/sessionRecord'
 
 /**
@@ -150,8 +159,53 @@ export default function App() {
    * so the previous identity's lists must not stay on screen. Deriving avoids a
    * clear-then-refill cascade and cannot leave a stale frame behind.
    */
-  const visibleLists = store ? lists : []
-  const visibleRecords = store ? records : []
+  const visibleLists = useMemo(() => (store ? lists : []), [store, lists])
+  const visibleRecords = useMemo(() => (store ? records : []), [store, records])
+
+  /**
+   * The list as it stands NOW, for a screen that is holding a snapshot of it.
+   *
+   * `?? fallback` rather than `null`, deliberately: a brand-new unsaved list is
+   * not in `visibleLists` yet, and null means "deleted" to `collectMissed` —
+   * which would drop every word it was asked about.
+   */
+  const liveList = useCallback(
+    (fallback: WordList) => visibleLists.find((l) => l.id === fallback.id) ?? fallback,
+    [visibleLists],
+  )
+
+  /**
+   * The clock, read at deliberate moments rather than during render.
+   *
+   * Everything time-dependent on screen — the four window counts and the drill
+   * that a chip produces — must agree on ONE instant, or a chip says 12 and the
+   * drill deals 11. Refreshed on arriving at a screen that shows any of it, so a
+   * tab left open for days does not go on answering for the day it was opened.
+   */
+  const [now, setNow] = useState(() => Date.now())
+
+  const readyList = state.screen === 'ready' ? state.list : null
+
+  /**
+   * How many words each window would drill, for the chips on the ready screen.
+   *
+   * `Date.now()` is read HERE and threaded into the pure layer, so all four
+   * counts agree on one instant. Four chips computed against four different
+   * milliseconds is how you get a count of 12 and a drill of 11.
+   */
+  const missedForReady = useMemo(() => {
+    if (!readyList) return null
+    const list = liveList(readyList)
+    return {
+      counts: missedCounts(visibleRecords, { listId: readyList.id, now, list }),
+      degraded: collectMissed(visibleRecords, {
+        listId: readyList.id,
+        window: 'all',
+        now,
+        list,
+      }).degraded,
+    }
+  }, [readyList, visibleRecords, liveList, now])
 
   const persist = useCallback(
     async (list: WordList) => {
@@ -200,6 +254,9 @@ export default function App() {
       // done its job and the speech chain is live again.
       setResumed(false)
 
+      // Arriving somewhere that counts or dates anything: take a fresh reading.
+      if (next.screen === 'ready' || next.screen === 'review') setNow(Date.now())
+
       /**
        * Record a finished drill.
        *
@@ -228,11 +285,19 @@ export default function App() {
       const nextRunKind: SessionRecord['mode'] =
         action.type === 'RESTART_WRONG_ONLY'
           ? 'wrong-only'
-          : action.type === 'START' ||
-              action.type === 'RESTART_SHUFFLED' ||
-              action.type === 'SWITCH_MODE'
-            ? 'full'
-            : sessionMode
+          : action.type === 'START'
+            ? /*
+               * A missed-words drill is a harder subset and must not flatter the
+               * average — the same reasoning that made RESTART_WRONG_ONLY its own
+               * run kind. `state` here is the PRE-action state, which is `ready`
+               * at the moment START is dispatched, so the subset is still visible.
+               */
+              state.screen === 'ready' && state.missed
+              ? 'wrong-only'
+              : 'full'
+            : action.type === 'RESTART_SHUFFLED' || action.type === 'SWITCH_MODE'
+              ? 'full'
+              : sessionMode
       setSessionMode(nextRunKind)
 
       /*
@@ -266,6 +331,31 @@ export default function App() {
       if (advances) speakCurrent(next)
     },
     [state, speakCurrent, store, sessionMode],
+  )
+
+  const pickWindow = useCallback(
+    (window: ReviewWindow) => {
+      if (state.screen !== 'ready') return
+      const list = liveList(state.list)
+      const set = collectMissed(visibleRecords, {
+        listId: state.list.id,
+        window,
+        // The SAME `now` the chips were counted against. Reading the clock again
+        // here is how a chip says 12 and the drill deals 11.
+        now,
+        list,
+      })
+      // The chip is already disabled at zero; this is the belt to that pair of
+      // braces, and it keeps the reducer from ever seeing an empty drill.
+      if (set.words.length === 0) return
+      act({
+        type: 'PRACTISE_MISSED',
+        list,
+        pairs: toDrillPairs(set.words),
+        source: { kind: 'window', window },
+      })
+    },
+    [state, visibleRecords, liveList, act, now],
   )
 
   const promptLang =
@@ -307,7 +397,21 @@ export default function App() {
         The theme lives in here, and it is not an account setting — leaving the
         slot out of a local-only build would take dark mode with it.
       */}
-      <div className="mx-auto flex max-w-xl justify-end px-4 pt-3">
+      <div className="mx-auto flex max-w-xl items-center justify-between gap-2 px-4 pt-3">
+        {/*
+          Navigation is not an account feature, so it sits in this slot whether
+          or not Firebase is configured — the same reason the theme control does.
+          The confirm before abandoning a drill lives in NavMenu, because a pure
+          reducer must not open a dialog.
+        */}
+        <NavMenu
+          screen={state.screen}
+          guard={
+            state.screen === 'practising' ? 'drill' : state.screen === 'editing' ? 'edit' : null
+          }
+          onHome={() => act({ type: 'GO_HOME' })}
+          onReview={() => act({ type: 'OPEN_REVIEW' })}
+        />
         {authAvailable ? (
           <AccountMenu
             drillInProgress={state.screen === 'practising'}
@@ -337,6 +441,7 @@ export default function App() {
             />
           }
           history={<ScoreHistory records={visibleRecords} />}
+          onSeeAllHistory={() => act({ type: 'OPEN_REVIEW' })}
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
@@ -380,7 +485,16 @@ export default function App() {
         <ReadyScreen
           list={state.list}
           saved={savedIds.has(state.list.id) || visibleLists.some((l) => l.id === state.list.id)}
+          missed={
+            state.missed
+              ? { count: state.missed.pairs.length, source: state.missed.source }
+              : null
+          }
+          counts={missedForReady?.counts ?? { day: 0, week: 0, month: 0, all: 0 }}
+          degraded={missedForReady?.degraded ?? false}
           onStart={(mode) => act({ type: 'START', mode })}
+          onPickWindow={pickWindow}
+          onPractiseFull={() => act({ type: 'PRACTISE_FULL' })}
           onSave={() => void persist(state.list)}
           onBack={() => act({ type: 'GO_HOME' })}
         />
@@ -429,6 +543,59 @@ export default function App() {
           onDone={() => act({ type: 'GO_HOME' })}
         />
       )}
+
+      {state.screen === 'review' && (
+        <ReviewScreen
+          records={visibleRecords}
+          loading={store === null}
+          onOpen={(recordId) => act({ type: 'OPEN_REVIEW_DETAIL', recordId })}
+          onHome={() => act({ type: 'GO_HOME' })}
+        />
+      )}
+
+      {state.screen === 'reviewDetail' &&
+        (() => {
+          /*
+           * Resolved at RENDER time from the live records, never copied into
+           * state. A re-emitted subscription has to win, and a record that has
+           * gone (account deletion, or trimmed under the cap) has to be
+           * detectable rather than frozen on screen.
+           */
+          const record = visibleRecords.find((r) => r.id === state.recordId) ?? null
+          const list = record
+            ? (visibleLists.find((l) => l.id === record.listId) ?? null)
+            : null
+          return (
+            <ReviewDetail
+              record={record}
+              list={list}
+              onBack={() => act({ type: 'OPEN_REVIEW' })}
+              onPractiseMisses={() => {
+                if (!record || !list) return
+                /*
+                 * Run the single record through collectMissed rather than using
+                 * `wrongPairs` directly. Still-missed does not apply to one
+                 * drill — these ARE its misses — but the live-list resolution
+                 * does: a translation corrected since is what should be drilled,
+                 * and a word deleted since should not be.
+                 */
+                const set = collectMissed([record], {
+                  listId: record.listId,
+                  window: 'all',
+                  now: Date.now(),
+                  list,
+                })
+                if (set.words.length === 0) return
+                act({
+                  type: 'PRACTISE_MISSED',
+                  list,
+                  pairs: toDrillPairs(set.words),
+                  source: { kind: 'session', finishedAt: record.finishedAt },
+                })
+              }}
+            />
+          )
+        })()}
     </main>
   )
 }

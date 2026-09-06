@@ -14,7 +14,17 @@ import {
   toggleAnswers,
   type Rng,
 } from './session'
-import type { DrillMode, MarkResult, Session, WordList } from './types'
+import type { ReviewWindow } from './missedWords'
+import type { DrillMode, MarkResult, Session, WordList, WordPair } from './types'
+
+/**
+ * Where a missed-words subset came from, so the ready screen can say it in
+ * words. A discriminated union rather than a display string: prose belongs to
+ * the component, and the state stays serialisable and comparable.
+ */
+export type MissedSource =
+  | { kind: 'window'; window: ReviewWindow }
+  | { kind: 'session'; finishedAt: number }
 
 /**
  * The whole app as a discriminated union.
@@ -40,9 +50,24 @@ export type AppState =
       langs?: { col1: LangCode; col2: LangCode }
       langSource?: LangSource
     }
-  | { screen: 'ready'; list: WordList }
+  | {
+      screen: 'ready'
+      list: WordList
+      /**
+       * Present when the user picked a missed-words subset on this screen.
+       *
+       * Carried BESIDE the list rather than as a synthetic WordList whose pairs
+       * are the subset. Such a list would share the real one's id, so "Save this
+       * list" would overwrite forty words with twelve — keeping them separate
+       * makes that mistake unrepresentable rather than merely avoided.
+       */
+      missed?: { pairs: WordPair[]; source: MissedSource }
+    }
   | { screen: 'practising'; list: WordList; session: Session }
   | { screen: 'results'; list: WordList; session: Session }
+  | { screen: 'review' }
+  /** Holds the record ID, never the record: a copy goes stale on the next emit. */
+  | { screen: 'reviewDetail'; recordId: string }
 
 export type AppAction =
   | { type: 'NEW_LIST' }
@@ -64,6 +89,12 @@ export type AppAction =
   | { type: 'RESTART_WRONG_ONLY' }
   /** From results: run the same list again in the other mode. */
   | { type: 'SWITCH_MODE' }
+  | { type: 'OPEN_REVIEW' }
+  | { type: 'OPEN_REVIEW_DETAIL'; recordId: string }
+  /** Arrive at ready with a subset of the list's words to drill. */
+  | { type: 'PRACTISE_MISSED'; list: WordList; pairs: WordPair[]; source: MissedSource }
+  /** Drop the subset and go back to the whole list, staying on ready. */
+  | { type: 'PRACTISE_FULL' }
   | { type: 'GO_HOME' }
 
 export const initialState: AppState = { screen: 'home' }
@@ -94,7 +125,32 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       }
 
     case 'PRACTISE_LIST':
+      // Deliberately WITHOUT `missed`: arriving from home always means the whole
+      // list, even when the previous visit to this screen had a subset selected.
       return { screen: 'ready', list: action.list }
+
+    case 'PRACTISE_MISSED':
+      return {
+        screen: 'ready',
+        list: action.list,
+        missed: { pairs: action.pairs, source: action.source },
+      }
+
+    case 'PRACTISE_FULL':
+      return state.screen === 'ready' ? { screen: 'ready', list: state.list } : state
+
+    /*
+     * Legal from every screen, the running drill included.
+     *
+     * The "you will lose this drill" confirm lives in NavMenu, not here: a pure
+     * reducer must not open a dialog, which is the same reason AccountMenu owns
+     * its own mid-drill sign-out warning.
+     */
+    case 'OPEN_REVIEW':
+      return { screen: 'review' }
+
+    case 'OPEN_REVIEW_DETAIL':
+      return { screen: 'reviewDetail', recordId: action.recordId }
 
     case 'CANCEL_EDIT':
       return state.screen === 'editing' ? { screen: 'home' } : state
@@ -107,7 +163,15 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       return {
         screen: 'practising',
         list: state.list,
-        session: createSession(state.list.pairs, rng, state.list.id, action.mode ?? 'test'),
+        session: createSession(
+          // The subset when one is selected, otherwise the whole list. The list
+          // ID is kept either way, so the record files against the real list and
+          // the next missed set can read this drill back.
+          state.missed?.pairs ?? state.list.pairs,
+          rng,
+          state.list.id,
+          action.mode ?? 'test',
+        ),
       }
 
     /*

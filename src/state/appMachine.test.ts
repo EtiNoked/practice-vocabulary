@@ -353,3 +353,110 @@ describe('illegal transitions', () => {
     expect(reduce(initialState, { type: 'PREV' })).toBe(initialState)
   })
 })
+
+describe('reaching the review screens', () => {
+  it('opens review from anywhere', () => {
+    for (const start of [
+      initialState,
+      reduce(initialState, { type: 'PRACTISE_LIST', list }),
+      at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' }),
+    ]) {
+      expect(reduce(start, { type: 'OPEN_REVIEW' }).screen).toBe('review')
+    }
+  })
+
+  it('opens one drill by its record id, not by copying the record', () => {
+    // Holding the id keeps the state serialisable and means a re-emitted
+    // subscription always wins over what the screen was opened with.
+    const s = reduce(initialState, { type: 'OPEN_REVIEW_DETAIL', recordId: 'r1' })
+    expect(s).toEqual({ screen: 'reviewDetail', recordId: 'r1' })
+  })
+
+  it('goes home from either review screen', () => {
+    expect(reduce({ screen: 'review' }, { type: 'GO_HOME' }).screen).toBe('home')
+    expect(
+      reduce({ screen: 'reviewDetail', recordId: 'r1' }, { type: 'GO_HOME' }).screen,
+    ).toBe('home')
+  })
+
+  it('leaves a running drill for review — the confirm belongs to the menu, not here', () => {
+    // A pure reducer must not open a dialog, so this transition is legal and the
+    // warning lives in NavMenu, exactly as the mid-drill sign-out warning lives
+    // in AccountMenu.
+    const drilling = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    expect(reduce(drilling, { type: 'OPEN_REVIEW' }).screen).toBe('review')
+  })
+})
+
+describe('practising the words you missed', () => {
+  const missedPairs = [{ id: 'missed-0', col1: 'son', col2: 'zoon' }]
+  const source = { kind: 'window', window: 'week' } as const
+
+  it('lands on ready carrying the subset, beside the real list', () => {
+    const s = reduce(initialState, { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source })
+    expect(s.screen).toBe('ready')
+    if (s.screen !== 'ready') throw new Error('unreachable')
+    // The list is the REAL one — the subset never masquerades as it, or Save
+    // would overwrite two words with one.
+    expect(s.list).toBe(list)
+    expect(s.missed?.pairs).toEqual(missedPairs)
+    expect(s.missed?.source).toEqual(source)
+  })
+
+  it('starts the drill from the subset', () => {
+    const s = at(
+      initialState,
+      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'START' },
+    )
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.pairs).toHaveLength(1)
+    expect(s.session.pairs[0]?.col2).toBe('zoon')
+    // Still attributed to the real list, so the record files correctly and the
+    // next missed set can read this drill back.
+    expect(s.session.listId).toBe(list.id)
+  })
+
+  it('starts the whole list when no subset is selected', () => {
+    const s = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.pairs).toHaveLength(2)
+  })
+
+  it('honours the drill mode for a missed subset too', () => {
+    const s = at(
+      initialState,
+      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'START', mode: 'practice' },
+    )
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.mode).toBe('practice')
+  })
+
+  it('drops back to the full list on PRACTISE_FULL', () => {
+    const s = at(
+      initialState,
+      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'PRACTISE_FULL' },
+    )
+    if (s.screen !== 'ready') throw new Error('unreachable')
+    expect(s.missed).toBeUndefined()
+    expect(s.list).toBe(list)
+  })
+
+  it('ignores PRACTISE_FULL anywhere but ready, by reference', () => {
+    const home: AppState = { screen: 'home' }
+    expect(reduce(home, { type: 'PRACTISE_FULL' })).toBe(home)
+  })
+
+  it('clears a stale subset when the same list is picked again from home', () => {
+    // Arriving from Home always means the whole list.
+    const s = at(
+      initialState,
+      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'PRACTISE_LIST', list },
+    )
+    if (s.screen !== 'ready') throw new Error('unreachable')
+    expect(s.missed).toBeUndefined()
+  })
+})
