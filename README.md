@@ -140,6 +140,41 @@ Two things worth knowing:
   never the ones you got right. History is append-only by design, so there is no backfill:
   those drills show a line saying so rather than pretending you scored zero.
 
+## Playing a game
+
+**Play a game** — from the home screen or the menu — is the drill's faster, noisier
+sibling. You hear a word and grab its meaning from a cloud of six before a ten-second
+clock runs out, and the clock *is* the score: tap while it reads 7 and you bank 7. Wrong
+scores nothing, and says so three ways at once — the tile you tapped, the tile you should
+have tapped, and a line naming the answer.
+
+Setting one up takes three choices:
+
+- **Which lists.** Several at once, and the running total tells you how many words you
+  have before you commit to anything. A word in two lists counts once.
+- **All words, or just the ones you keep getting wrong** — the same "still getting wrong"
+  set the drill offers, pooled across every list you picked.
+- **How many words.** 10, 15 or 20, or type a number. Options bigger than your pool are
+  disabled rather than hidden, so the reason is on screen.
+
+Lists can only be combined when they share **both** languages. That is partly because
+speech needs one language to read in, and mostly because a lone French option among five
+Dutch ones can be picked out with no vocabulary at all.
+
+At the end you get your score, your correct count, and the words worth another look.
+**Play again** keeps your settings and deals a completely new set of words; **New game**
+takes you back to setup with those settings already filled in.
+
+Two things worth knowing:
+
+- **Games count.** A word you miss in a game joins the same *words you got wrong* pool the
+  drill fills, so you can drill it properly afterwards — and a word you get right leaves
+  it again. Game scores are kept in their own history and never folded into your drill
+  average, because marking yourself and being marked are not the same measurement.
+- **A game does not survive a reload**, unlike a drill in progress. There is no honest
+  answer to how much of the ten seconds was left, and the word could not be re-spoken on
+  the way back in — a silent, mis-timed round is worse than starting again.
+
 ## If you hear nothing
 
 Speech uses your device's own voices, so a voice for the language being read has to
@@ -193,6 +228,13 @@ Every colour, type size, radius and shadow in the app is defined once, in
 palette colour. Shared `.btn` / `.card` / `.field` classes live there too, which is where
 the 44px minimum touch target is enforced — it used to be a convention retyped at every
 call site, and a convention is not something a test can check.
+
+**Choosing words from settings is one shared function**, not something each feature does
+its own way. [`src/state/wordPool.ts`](src/state/wordPool.ts) turns a small declarative
+spec — these lists, all words or just my misses — into the words themselves, deduped
+across lists and tagged with where each came from. The game is its first caller rather
+than its owner, and it knows nothing about games: how many to take, and what to do with
+them, belongs to whoever asked.
 
 The typeface is [Lexend](https://github.com/googlefonts/lexend), self-hosted and served
 from `src/assets/fonts/` under the SIL Open Font License. It was chosen because its design
