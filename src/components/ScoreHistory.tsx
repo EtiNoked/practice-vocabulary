@@ -42,9 +42,9 @@ export function ScoreHistory({ records }: Props) {
       )}
 
       {/*
-        Named, so the log is addressable as a region. The same score can now
-        appear both here and on the list's own row, and "which 50% do you mean"
-        is a question a screen-reader user has to answer too.
+        Named, so the log is addressable as a region rather than an anonymous
+        list. A list's name appears both here and in Saved lists above, so
+        "which Lesson 3" is a question a screen-reader user has to answer too.
       */}
       <ul aria-label="Recent practice" className="flex flex-col gap-1">
         {records.slice(0, 10).map((record) => (

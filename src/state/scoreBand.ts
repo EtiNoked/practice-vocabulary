@@ -10,7 +10,7 @@ import type { SessionRecord } from './types'
 export type ScoreBand = 'perfect' | 'fair' | 'weak'
 
 /** Below this, a run needs another go rather than a polish. */
-export const FAIR_PCT = 70
+const FAIR_PCT = 70
 
 /**
  * The band a run falls into, or null when it says nothing.
@@ -36,18 +36,22 @@ export function scoreBand(
 /**
  * The border a band wears.
  *
- * Shared by every surface that lists a practice, so the review screen and the
- * home log cannot drift apart. Tokens, so both themes come for free —
- * `--color-correct` is a dark green in light and a light green in dark, and none
- * of these components has to know which.
+ * Tokens, so both themes come for free — `--color-correct` is a dark green in
+ * light and a light green in dark, and no component has to know which.
  */
-export const BAND_BORDER: Record<ScoreBand, string> = {
+const BAND_BORDER: Record<ScoreBand, string> = {
   perfect: 'border-correct',
   fair: 'border-accent',
   weak: 'border-incorrect',
 }
 
-/** The border for a run, including the neutral case. */
+/**
+ * The border class for a run, including the neutral case.
+ *
+ * The only thing the components need, and therefore the only presentation
+ * export: shared by all three surfaces that show a practice, so the review
+ * screen, the home log and the drill's own page cannot drift apart.
+ */
 export function bandBorder(record: Pick<SessionRecord, 'right' | 'total' | 'pct'>): string {
   const band = scoreBand(record)
   return band ? BAND_BORDER[band] : 'border-line'

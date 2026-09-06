@@ -93,8 +93,6 @@ export interface MissedSet {
   records: number
 }
 
-export const EMPTY_MISSED: MissedSet = { words: [], degraded: false, records: 0 }
-
 /**
  * The words from `listId` that the user is STILL getting wrong within `window`.
  *
