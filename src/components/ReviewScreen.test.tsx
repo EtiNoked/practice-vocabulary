@@ -198,3 +198,41 @@ describe('each practice wears its score', () => {
     expect(row()).toHaveClass('card')
   })
 })
+
+describe('a run over several lists is one run (011 D-3)', () => {
+  const spanning = [
+    rec({ id: 'a', runId: 'r7', listId: 'A', listName: 'Chapter 1', right: 4, wrong: 1, total: 5, pct: 80 }),
+    rec({ id: 'b', runId: 'r7', listId: 'B', listName: 'Chapter 2', right: 5, wrong: 1, total: 6, pct: 83 }),
+  ]
+
+  it('shows one summary for the run, with the run’s own score', () => {
+    setup(spanning)
+    expect(screen.getByText(/2 lists/)).toBeInTheDocument()
+    expect(screen.getByText(/9 \/ 11 \(82%\)/)).toBeInTheDocument()
+  })
+
+  it('offers each list’s share as its own way in, since detail is per list', () => {
+    setup(spanning)
+    expect(screen.getByRole('button', { name: /chapter 1/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /chapter 2/i })).toBeInTheDocument()
+  })
+
+  it('opens the record for the list that was clicked', async () => {
+    const { onOpen, user } = setup(spanning)
+    await user.click(screen.getByRole('button', { name: /chapter 2/i }))
+    expect(onOpen).toHaveBeenCalledWith('b')
+  })
+
+  it('filters to one list and shows that list’s share alone', async () => {
+    const { user } = setup(spanning)
+    await user.selectOptions(screen.getByLabelText(/list/i), 'B')
+    expect(screen.getByText(/5 \/ 6 \(83%\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/9 \/ 11/)).not.toBeInTheDocument()
+  })
+
+  it('leaves a single-record run exactly as it was — one clickable row', async () => {
+    const { onOpen, user } = setup([rec({ id: 'solo', listName: 'Lesson 3' })])
+    await user.click(screen.getByRole('button', { name: /lesson 3/i }))
+    expect(onOpen).toHaveBeenCalledWith('solo')
+  })
+})
