@@ -269,8 +269,19 @@ describe('there is exactly one grouping rule (011 D-4)', () => {
     expect(offenders).toEqual([])
   })
 
-  it('routes both history surfaces through groupRuns', () => {
-    for (const path of ['../components/ScoreHistory.tsx', '../components/ReviewScreen.tsx']) {
+  it('routes every drill-history surface through groupRuns', () => {
+    /*
+     * `ScoreHistory.tsx` was one of these until 012 emptied the home screen. Its rolling
+     * average moved to `state/scoreTrend.ts` — which folds first — and the list it sat
+     * above is `ReviewScreen`'s job now. `App.tsx` joined the list in the same change: it
+     * folds the records per list for the practice line on each row, and counting raw
+     * records there would report three practices for one three-list test.
+     */
+    for (const path of [
+      '../components/ReviewScreen.tsx',
+      '../state/scoreTrend.ts',
+      '../App.tsx',
+    ]) {
       expect(sources[path] ?? '').toContain('groupRuns')
     }
   })
@@ -307,5 +318,76 @@ describe('deleting an account deletes everything (011 D-14)', () => {
 
     const missed = written.filter((name) => !purged.includes(name))
     expect(missed).toEqual([])
+  })
+})
+
+describe('icons stay decorative, and stay in one file (012 D-7, NFR-5)', () => {
+  /*
+   * Three ways this goes wrong, none of which fails a test in the offending file:
+   *
+   * An icon library gets added for the seventh glyph, and the bundle guard becomes an
+   * argument rather than a budget. An `<svg>` is inlined in some component with a
+   * hard-coded colour, so dark mode has a second palette nobody remembers to update. Or a
+   * glyph is rendered without `aria-hidden`, and a screen reader reads a decorative shape
+   * as though it were content.
+   */
+  const componentSources = () =>
+    appSources().filter(([path]) => path.endsWith('.tsx') && !path.includes('.test.'))
+
+  it('pulls in no icon library', () => {
+    const offenders = appSources()
+      .filter(([, src]) =>
+        /from '(react-icons|lucide-react|@heroicons|feather-icons|@fortawesome)/.test(src),
+      )
+      .map(([path]) => path)
+    expect(offenders).toEqual([])
+  })
+
+  /*
+   * Two files carry an inline `<svg>` that is NOT a navigation icon, and neither belongs
+   * in `icons.tsx`:
+   *
+   * `GameCloud` draws the countdown ring, whose stroke-dashoffset is set inline precisely
+   * because prefers-reduced-motion zeroes every CSS animation in this app and would
+   * freeze the ring at full — silently removing the countdown for the users most likely
+   * to need it. It is a moving part, not a glyph.
+   *
+   * `WelcomeScreen` carries the Google mark, whose four hexes are Google's and must stay
+   * exact. It is the one place a hard-coded colour is correct, and `currentColor` would
+   * be wrong there.
+   *
+   * Listing them by name is the point: a THIRD inline svg has to come here and argue.
+   */
+  it('inlines an <svg> only in icons.tsx and the two graphics that cannot live there', () => {
+    const withSvg = componentSources()
+      .filter(([, src]) => /<svg\b/.test(src))
+      .map(([path]) => path)
+      .sort()
+    expect(withSvg).toEqual([
+      '../components/GameCloud.tsx',
+      '../components/WelcomeScreen.tsx',
+      '../components/icons.tsx',
+    ])
+  })
+
+  it('covers something — a filter that matches nothing passes vacuously', () => {
+    expect(componentSources().length).toBeGreaterThan(10)
+  })
+
+  it('hides every glyph from assistive tech, and names none of them', () => {
+    const icons = sources['../components/icons.tsx'] ?? ''
+    expect(icons).toBeTruthy()
+    // One shared wrapper, so one place carries the attributes for all of them.
+    expect(icons.match(/<svg\b/g)).toHaveLength(1)
+    expect(icons).toContain('aria-hidden="true"')
+    expect(icons).toContain('focusable="false"')
+    expect(icons).not.toMatch(/<title>/)
+  })
+
+  it('colours no glyph itself, so 007’s tokens stay the only palette', () => {
+    const icons = sources['../components/icons.tsx'] ?? ''
+    expect(icons).toContain('currentColor')
+    expect(icons).not.toMatch(/#[0-9a-f]{3,8}\b/i)
+    expect(icons).not.toMatch(/\brgba?\(/)
   })
 })

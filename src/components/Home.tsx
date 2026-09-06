@@ -1,109 +1,166 @@
 import type { ReactNode } from 'react'
-import type { WordList } from '../state/types'
-import { SavedLists } from './SavedLists'
+import { GamesIcon, ListsIcon, PracticesIcon, TestsIcon } from './icons'
 
-interface Props {
-  lists: WordList[]
-  /** True while we do not yet know whose lists to show. */
-  loading?: boolean
-  /** Slot for account-level notices, e.g. the migration offer. */
-  banner?: ReactNode
-  /** Slot for the score history list. */
-  history?: ReactNode
-  /** Optional route into the full review screen. Rendered only when supplied. */
-  onSeeAllHistory?: () => void
-  /** Where the lists live, which changes what the empty state can promise. */
-  scope?: 'device' | 'account'
-  onNewList: () => void
+/**
+ * Where the user stands, in numbers.
+ *
+ * Derived in `App` from the same live subscriptions the sections read, against the same
+ * `now` (012 NFR-4) — nothing here is stored, and nothing is cached, so the brief cannot
+ * drift from the screen it summarises.
+ *
+ * The two "last" entries are nullable and their absence is meaningful: no practice yet is
+ * a different thing from a practice that scored nothing.
+ */
+export interface Brief {
+  lists: number
+  tests: number
+  games: number
+  practices: number
+  /** The newest RUN, already folded — never a raw record (012 D-6). */
+  lastPractice: { label: string; right: number; total: number; pct: number } | null
+  lastGame: { label: string; correct: number; asked: number } | null
   /**
-   * Optional, and the button renders only when supplied — several tests render Home
-   * directly, and the same rule `onSeeAllHistory` follows.
+   * How the last few full runs have gone, or null when there is not yet a trend.
+   *
+   * The one thing `ScoreHistory` carried that nothing else did. Its ten-row log is
+   * `ReviewScreen`'s job now — day-grouped, filterable, openable — but an average has to
+   * be somewhere, and a brief is exactly where it belongs.
    */
-  onPlayGame?: () => void
-  /** Same rule as `onPlayGame`: optional, and the button appears only when supplied. */
-  onBuildTest?: () => void
-  /** Slot for the saved-tests list. Rendered only when supplied, for the same reason. */
-  savedTests?: ReactNode
-  onPractise: (list: WordList) => void
-  onEdit: (list: WordList) => void
-  onRename: (list: WordList) => void
-  onDelete: (list: WordList) => void
+  average: { pct: number; runs: number } | null
 }
 
+interface Props {
+  /** Slot for account-level notices, e.g. the migration offer. */
+  banner?: ReactNode
+  /** True while we do not yet know whose data this is. */
+  loading?: boolean
+  brief: Brief
+  onLists: () => void
+  onTests: () => void
+  onGames: () => void
+  onPractices: () => void
+}
+
+/** "None yet" rather than "0 lists": a count of nothing is not a fact worth stating. */
+const count = (n: number, one: string, many: string) =>
+  n === 0 ? 'None yet' : `${n} ${n === 1 ? one : many}`
+
+/**
+ * The front door — a brief, and four ways out of it.
+ *
+ * This screen used to carry three verbs, two collections and a history log, all competing
+ * for the same eye. 012 D-1 moved every one of them beside the thing it acts on: the verbs
+ * to their sections, the collections to theirs. What is left is the two questions worth
+ * answering on arrival — how am I doing, and where am I going.
+ *
+ * The banner survived the clear-out on purpose. It is an account-level notice and belongs
+ * at the front door, not buried one tap deep.
+ */
 export function Home({
-  lists,
-  loading = false,
   banner,
-  history,
-  onSeeAllHistory,
-  scope = 'device',
-  onNewList,
-  onPlayGame,
-  onBuildTest,
-  savedTests,
-  ...listActions
+  loading = false,
+  brief,
+  onLists,
+  onTests,
+  onGames,
+  onPractices,
 }: Props) {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-6 p-4">
       <header>
         <h1 className="text-2xl font-semibold">Vocabulary Trainer</h1>
-        <p className="mt-1 text-ink-muted">
-          Hear a word, say the answer, mark yourself.
-        </p>
+        <p className="mt-1 text-ink-muted">Hear a word, say the answer, mark yourself.</p>
       </header>
 
       {banner}
 
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={onNewList}
-          className="btn btn-primary btn-lg"
-        >
-          New list
-        </button>
-        {onBuildTest && (
-          <button type="button" onClick={onBuildTest} className="btn btn-quiet btn-lg">
-            Build a test
-          </button>
-        )}
-        {onPlayGame && (
-          <button type="button" onClick={onPlayGame} className="btn btn-quiet btn-lg">
-            Play a game
-          </button>
-        )}
-      </div>
-
-      <div>
-        <h2 className="mb-2 font-semibold">Saved lists</h2>
-        <SavedLists lists={lists} loading={loading} scope={scope} {...listActions} />
-      </div>
-
-      {savedTests && (
-        <div>
-          <h2 className="mb-2 font-semibold">Saved tests</h2>
-          {savedTests}
+      {/*
+        Three states, like every other surface in this app. A brief that says "0 lists"
+        to a signed-in user whose data is still arriving reads as an account that has
+        lost everything, which is the one lie this screen is capable of telling.
+      */}
+      {loading ? (
+        <p className="text-ink-muted" role="status">
+          Getting your things together…
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1 text-ink-muted">
+          {brief.lastPractice === null && brief.lastGame === null ? (
+            <p>Nothing practised yet. Pick a list and go.</p>
+          ) : (
+            <>
+              {brief.lastPractice && (
+                <p>
+                  Last practice:{' '}
+                  <span className="text-ink">{brief.lastPractice.label}</span>,{' '}
+                  {brief.lastPractice.right} / {brief.lastPractice.total} (
+                  {brief.lastPractice.pct}%)
+                </p>
+              )}
+              {brief.lastGame && (
+                <p>
+                  Last game: <span className="text-ink">{brief.lastGame.label}</span>,{' '}
+                  {brief.lastGame.correct} / {brief.lastGame.asked}
+                </p>
+              )}
+              {brief.average && (
+                <p>
+                  Averaging{' '}
+                  <span className="text-ink">{brief.average.pct}%</span> over your last{' '}
+                  {brief.average.runs} full runs.
+                </p>
+              )}
+            </>
+          )}
         </div>
       )}
 
-      {history && (
-        <div>
-          <div className="mb-2 flex items-baseline justify-between gap-2">
-            <h2 className="font-semibold">Recent practice</h2>
-            {/* The menu is the primary route to review; this is the discoverable one. */}
-            {onSeeAllHistory && (
-              <button
-                type="button"
-                onClick={onSeeAllHistory}
-                className="text-sm text-primary underline"
-              >
-                See all →
-              </button>
-            )}
-          </div>
-          {history}
-        </div>
-      )}
+      {/*
+        A nav rather than a bare stack of buttons: these four ARE the navigation of the
+        app, and the menu in the corner is the same four. Naming the region says so to a
+        screen reader instead of leaving it to be inferred from four adjacent buttons.
+      */}
+      <nav aria-label="Sections" className="flex flex-col gap-2">
+        <Card icon={<ListsIcon />} label="My lists" hint={hint(loading, brief.lists, 'list', 'lists')} onClick={onLists} />
+        <Card icon={<TestsIcon />} label="My tests" hint={hint(loading, brief.tests, 'saved', 'saved')} onClick={onTests} />
+        <Card icon={<GamesIcon />} label="My games" hint={hint(loading, brief.games, 'round', 'rounds')} onClick={onGames} />
+        <Card
+          icon={<PracticesIcon />}
+          label="My practices"
+          hint={hint(loading, brief.practices, 'run', 'runs')}
+          onClick={onPractices}
+        />
+      </nav>
     </section>
+  )
+}
+
+/** The hint waits for the data; the route does not (012 FR-2). */
+const hint = (loading: boolean, n: number, one: string, many: string) =>
+  loading ? '' : count(n, one, many)
+
+function Card({
+  icon,
+  label,
+  hint,
+  onClick,
+}: {
+  icon: ReactNode
+  label: string
+  hint: string
+  onClick: () => void
+}) {
+  return (
+    <button type="button" onClick={onClick} className="btn btn-quiet btn-lg justify-start gap-3">
+      {icon}
+      <span className="flex flex-col items-start">
+        <span>{label}</span>
+        {/*
+          Empty while loading, and then it renders nothing at all rather than a
+          placeholder that reserves space and flickers.
+        */}
+        {hint && <span className="text-sm font-normal text-ink-muted">{hint}</span>}
+      </span>
+    </button>
   )
 }

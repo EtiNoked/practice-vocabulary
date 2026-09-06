@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { AppState } from '../state/appMachine'
+import {
+  GamesIcon,
+  HomeIcon,
+  ListsIcon,
+  MenuIcon,
+  PracticesIcon,
+  TestsIcon,
+} from './icons'
 
 interface Props {
   /** Which screen is showing, so the menu can mark where you already are. */
@@ -7,9 +15,10 @@ interface Props {
   /** What leaving would cost, if anything. */
   guard: 'drill' | 'edit' | 'game' | null
   onHome: () => void
-  onReview: () => void
-  onGame: () => void
-  onTest: () => void
+  onLists: () => void
+  onTests: () => void
+  onGames: () => void
+  onPractices: () => void
 }
 
 /**
@@ -30,6 +39,35 @@ const CONFIRM: Record<'drill' | 'edit' | 'game', string> = {
   game: "You're in the middle of a game. Leaving will end it and keep only what you've scored so far. Leave anyway?",
 }
 
+/** The five destinations, as the menu and the home cards both name them. */
+type Section = 'home' | 'lists' | 'tests' | 'games' | 'practices'
+
+/**
+ * Which section a screen belongs to.
+ *
+ * A section owns several screens: the editor and the ready screen are places you got to
+ * from My lists, and the builder from My tests. Marking only the exact screen would leave
+ * a user two taps into a section told they are nowhere.
+ *
+ * `practising` and `results` are deliberately ABSENT, and absent is the answer rather
+ * than an oversight — a drill can be reached from a list OR from a saved test, so there
+ * is no honest section to mark, and marking one would say something that may be false.
+ */
+const SECTION: Partial<Record<AppState['screen'], Section>> = {
+  home: 'home',
+  lists: 'lists',
+  editing: 'lists',
+  ready: 'lists',
+  tests: 'tests',
+  testSetup: 'tests',
+  games: 'games',
+  gameSetup: 'games',
+  playing: 'games',
+  gameResults: 'games',
+  review: 'practices',
+  reviewDetail: 'practices',
+}
+
 /**
  * Navigation: one control, in the corner, opposite the account slot.
  *
@@ -38,8 +76,20 @@ const CONFIRM: Record<'drill' | 'edit' | 'game', string> = {
  * special case this one has no use for — the shared thing would be a superset of
  * both rather than the intersection. The open/close behaviour here is copied on
  * purpose, and the reasons for each part of it are written out there.
+ *
+ * Five destinations since 012, and only destinations: the verbs ("New list", "Build a
+ * test", "Play a game") moved to the sections they add to, so this menu answers exactly
+ * one question — where do you want to be.
  */
-export function NavMenu({ screen, guard, onHome, onReview, onGame, onTest }: Props) {
+export function NavMenu({
+  screen,
+  guard,
+  onHome,
+  onLists,
+  onTests,
+  onGames,
+  onPractices,
+}: Props) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -81,19 +131,25 @@ export function NavMenu({ screen, guard, onHome, onReview, onGame, onTest }: Pro
     go()
   }
 
-  const item = (label: string, here: boolean, go: () => void) => (
-    <button
-      type="button"
-      role="menuitem"
-      {...(here ? { 'aria-current': 'page' as const } : {})}
-      onClick={() => leave(go)}
-      className={`btn btn-quiet w-full justify-start border-0 bg-transparent ${
-        here ? 'font-semibold text-primary' : ''
-      }`}
-    >
-      {label}
-    </button>
-  )
+  const here = SECTION[screen]
+
+  const item = (icon: ReactNode, label: string, section: Section, go: () => void) => {
+    const current = here === section
+    return (
+      <button
+        type="button"
+        role="menuitem"
+        {...(current ? { 'aria-current': 'page' as const } : {})}
+        onClick={() => leave(go)}
+        className={`btn btn-quiet w-full justify-start gap-2 border-0 bg-transparent ${
+          current ? 'font-semibold text-primary' : ''
+        }`}
+      >
+        {icon}
+        {label}
+      </button>
+    )
+  }
 
   return (
     <div className="relative">
@@ -103,8 +159,11 @@ export function NavMenu({ screen, guard, onHome, onReview, onGame, onTest }: Pro
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="btn btn-quiet text-sm"
+        className="btn btn-quiet gap-2 text-sm"
       >
+        {/* Beside the word, never instead of it — the glyph is aria-hidden, so the
+            trigger's accessible name is still exactly "Menu". */}
+        <MenuIcon />
         Menu
       </button>
 
@@ -119,16 +178,13 @@ export function NavMenu({ screen, guard, onHome, onReview, onGame, onTest }: Pro
         <div
           ref={popoverRef}
           role="menu"
-          className="card absolute left-0 z-40 mt-2 flex w-48 flex-col p-2 text-left"
+          className="card absolute left-0 z-40 mt-2 flex w-52 flex-col p-2 text-left"
         >
-          {item('Home', screen === 'home', onHome)}
-          {item('Review', screen === 'review' || screen === 'reviewDetail', onReview)}
-          {item('Build a test', screen === 'testSetup', onTest)}
-          {item(
-            'Play a game',
-            screen === 'gameSetup' || screen === 'playing' || screen === 'gameResults',
-            onGame,
-          )}
+          {item(<HomeIcon />, 'Home', 'home', onHome)}
+          {item(<ListsIcon />, 'My lists', 'lists', onLists)}
+          {item(<TestsIcon />, 'My tests', 'tests', onTests)}
+          {item(<GamesIcon />, 'My games', 'games', onGames)}
+          {item(<PracticesIcon />, 'My practices', 'practices', onPractices)}
         </div>
       )}
     </div>

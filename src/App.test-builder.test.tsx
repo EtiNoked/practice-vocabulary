@@ -5,6 +5,7 @@ import { listRepo } from './storage/listRepo'
 import { sessionRepo } from './storage/sessionRepo'
 import { testRepo } from './storage/testRepo'
 import { renderApp } from './test/renderApp'
+import { goTo } from './test/navigate'
 import type { SessionRecord, WordList } from './state/types'
 
 /**
@@ -64,6 +65,7 @@ afterEach(() => {
 
 const openBuilder = async (user: ReturnType<typeof userEvent.setup>) => {
   renderApp()
+  await goTo(user, 'My tests')
   await user.click(await screen.findByRole('button', { name: 'Build a test' }))
 }
 
@@ -98,11 +100,19 @@ describe('building a test over several lists', () => {
 
     await user.click(screen.getByRole('button', { name: /done/i }))
 
-    // ONE row in Recent practice, with the run's own score, not one list's share.
-    const history = within(await screen.findByRole('list', { name: /recent practice/i }))
-    expect(history.getAllByRole('listitem')).toHaveLength(1)
-    expect(history.getByText(/2 lists/)).toBeInTheDocument()
-    expect(history.getByText(/3 \/ 4 \(75%\)/)).toBeInTheDocument()
+    /*
+     * ONE run on My practices, not three.
+     *
+     * `ReviewScreen` renders a multi-list run as a summary with each list's share beneath
+     * it, and the shares are the buttons — detail is per record, so a single button would
+     * have to pick one list and silently drop the others. So the thing to count is the
+     * run's own combined score, which must appear exactly once however many records it
+     * wrote (011 D-3).
+     */
+    await goTo(user, 'My practices')
+    expect(screen.getAllByText(/3 \/ 4 \(75%\)/)).toHaveLength(1)
+    expect(screen.getByText(/2 lists/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Chapter [12]/ })).toHaveLength(2)
   })
 
   it('sends each miss back to the list it came from', async () => {
@@ -125,6 +135,7 @@ describe('building a test over several lists', () => {
     await user.click(screen.getByRole('button', { name: /done/i }))
 
     // The ready screen for ONE of the lists now offers its own two misses.
+    await goTo(user, 'My lists')
     const firstList = (await screen.findByText('Chapter 1')).closest('li')!
     await user.click(within(firstList).getByRole('button', { name: /practise/i }))
     expect(await screen.findByRole('button', { name: /All time · 2/i })).toBeInTheDocument()
@@ -132,7 +143,7 @@ describe('building a test over several lists', () => {
 })
 
 describe('a test you keep', () => {
-  it('saves, lists, and runs again from the home screen', async () => {
+  it('saves, lists, and runs again from My tests', async () => {
     listRepo.save(chapter1)
     listRepo.save(chapter2)
     vi.spyOn(window, 'prompt').mockReturnValue('Weak verbs')
@@ -151,7 +162,7 @@ describe('a test you keep', () => {
     expect(saved.count).toBeNull()
     expect(saved.spec).toEqual({ listIds: ['c1', 'c2'], source: 'all' })
 
-    // It is on the home screen, described, and counted against today's lists.
+    // It is on My tests, described, and counted against today's lists.
     expect(await screen.findByText('Weak verbs')).toBeInTheDocument()
     expect(screen.getByText(/2 lists · all words · all 4/i)).toBeInTheDocument()
 
@@ -171,7 +182,9 @@ describe('a test you keep', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    const user = userEvent.setup()
     renderApp()
+    await goTo(user, 'My tests')
 
     expect(await screen.findByText(/no lists left/i)).toBeInTheDocument()
     const row = screen.getByText('Gone').closest('li')!
@@ -249,6 +262,7 @@ describe('a plain list drill is unchanged (011 D-9)', () => {
     listRepo.save(chapter1)
     const user = userEvent.setup()
     renderApp()
+    await goTo(user, 'My lists')
 
     const row = (await screen.findByText('Chapter 1')).closest('li')!
     await user.click(within(row).getByRole('button', { name: /practise/i }))

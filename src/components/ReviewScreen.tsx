@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { byDay } from '../state/dayLabel'
 import { groupRuns, runLabel, type RunGroup } from '../state/runGroup'
 import { bandBorder } from '../state/scoreBand'
 import type { SessionRecord } from '../state/types'
@@ -7,30 +8,19 @@ interface Props {
   records: SessionRecord[]
   /** True while we do not yet know whose history to show. */
   loading?: boolean
+  /**
+   * Which list to start filtered to, when arriving from that list's practice line.
+   *
+   * A SEED, not a controlled value: the user must still be able to change the filter
+   * afterwards, and a re-emitted subscription must not yank their choice back. Same rule
+   * as `testSetup.initial` and `gameSetup.initial` (008 D-11).
+   */
+  initialListId?: string
   onOpen: (recordId: string) => void
   onHome: () => void
 }
 
 const ALL = 'all'
-
-/**
- * 'Today' / 'Yesterday' / an en-GB date, matching `formatDate` elsewhere.
- *
- * Compares LOCAL MIDNIGHTS rather than elapsed milliseconds. 23:30 yesterday and
- * 00:30 today are an hour apart and two different days, and subtracting raw time
- * would file them together.
- *
- * Deliberately a different notion of time from `missedWords.ts`, whose windows
- * roll from `now`. A heading is a calendar idea; a window is a duration. Do not
- * unify them.
- */
-function dayLabel(ms: number, now: number): string {
-  const startOf = (t: number) => new Date(t).setHours(0, 0, 0, 0)
-  const days = Math.round((startOf(now) - startOf(ms)) / 86_400_000)
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  return new Date(ms).toLocaleDateString('en-GB')
-}
 
 /**
  * Every list that appears in the history, named as it was most recently drilled.
@@ -46,8 +36,14 @@ function listOptions(records: SessionRecord[]): Array<{ id: string; name: string
   return [...byId].map(([id, name]) => ({ id, name }))
 }
 
-export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props) {
-  const [filter, setFilter] = useState<string>(ALL)
+export function ReviewScreen({
+  records,
+  loading = false,
+  initialListId,
+  onOpen,
+  onHome,
+}: Props) {
+  const [chosen, setChosen] = useState<string>(initialListId ?? ALL)
 
   /*
    * One clock reading, taken once when the screen mounts.
@@ -59,6 +55,18 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
   const [now] = useState(() => Date.now())
 
   const options = useMemo(() => listOptions(records), [records])
+
+  /**
+   * The filter actually applied, which is the chosen one only if it still exists.
+   *
+   * Derived each render rather than validated once at mount, and both halves matter.
+   * A seed can name a list whose records have since been trimmed under the storage cap,
+   * and honouring it would leave the select pointing at an option that is not there —
+   * showing a blank filter over an empty screen. And records ARRIVE: seeding from a
+   * subscription that has not emitted yet would otherwise fall back permanently, so the
+   * choice is re-checked as the options fill in.
+   */
+  const filter = chosen !== ALL && options.some((o) => o.id === chosen) ? chosen : ALL
 
   /*
    * FILTER FIRST, then group.
@@ -75,17 +83,13 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
 
   const runs = useMemo(() => groupRuns(shown), [shown])
 
-  const days: Array<{ label: string; rows: RunGroup[] }> = []
-  for (const run of runs) {
-    const label = dayLabel(run.finishedAt, now)
-    const last = days[days.length - 1]
-    if (last && last.label === label) last.rows.push(run)
-    else days.push({ label, rows: [run] })
-  }
+  // `groupRuns` already returns newest-first, which is what `byDay` requires of its caller.
+  const days = byDay(runs, (run) => run.finishedAt, now)
 
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Review</h1>
+      {/* Named to match the menu (012 D-4). The SCREEN keeps its id `review`. */}
+      <h1 className="text-2xl font-semibold">My practices</h1>
 
       {options.length > 0 && (
         <div className="flex items-center gap-2">
@@ -95,7 +99,7 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
           <select
             id="review-list-filter"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => setChosen(e.target.value)}
             className="field flex-1"
           >
             <option value={ALL}>All lists</option>
@@ -143,7 +147,7 @@ export function ReviewScreen({ records, loading = false, onOpen, onHome }: Props
         onClick={onHome}
         className="min-h-11 rounded border border-line-strong"
       >
-        Back to my lists
+        Back to home
       </button>
     </section>
   )

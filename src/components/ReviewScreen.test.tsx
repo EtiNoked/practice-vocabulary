@@ -26,8 +26,8 @@ const rec = (over: Partial<SessionRecord> = {}): SessionRecord => ({
 const setup = (records: SessionRecord[], over = {}) => {
   const onOpen = vi.fn()
   const onHome = vi.fn()
-  render(<ReviewScreen records={records} onOpen={onOpen} onHome={onHome} {...over} />)
-  return { onOpen, onHome, user: userEvent.setup() }
+  const view = render(<ReviewScreen records={records} onOpen={onOpen} onHome={onHome} {...over} />)
+  return { onOpen, onHome, user: userEvent.setup(), rerender: view.rerender }
 }
 
 beforeEach(() => {
@@ -234,5 +234,86 @@ describe('a run over several lists is one run (011 D-3)', () => {
     const { onOpen, user } = setup([rec({ id: 'solo', listName: 'Lesson 3' })])
     await user.click(screen.getByRole('button', { name: /lesson 3/i }))
     expect(onOpen).toHaveBeenCalledWith('solo')
+  })
+})
+
+/**
+ * Arriving from one list's practice line (012 FR-5).
+ *
+ * A SEED, not a controlled prop: the user must still be able to change the filter, and a
+ * later re-render must not yank it back — the rule `testSetup.initial` and
+ * `gameSetup.initial` already follow (008 D-11).
+ */
+describe('a seeded list filter', () => {
+  const mine = rec({ listId: 'l1', listName: 'Lesson 3' })
+  const theirs = rec({ listId: 'l2', listName: 'Lesson 4', right: 3, total: 10, pct: 30 })
+
+  /*
+   * The ROWS, never `getByText`. Every list in the history is also an <option> in the
+   * filter, so a document-wide text query matches whether the run is shown or not — it
+   * would pass identically with the filter doing nothing at all.
+   */
+  const shown = () =>
+    screen.queryAllByRole('listitem').map((li) => li.textContent ?? '')
+
+  it('starts filtered to the list it was given', () => {
+    setup([mine, theirs], { initialListId: 'l2' })
+    expect(screen.getByRole('combobox')).toHaveValue('l2')
+    expect(shown().join(' ')).toContain('Lesson 4')
+    expect(shown().join(' ')).not.toContain('Lesson 3')
+  })
+
+  it('shows every list when given no seed', () => {
+    setup([mine, theirs])
+    expect(screen.getByRole('combobox')).toHaveValue('all')
+    expect(shown().join(' ')).toContain('Lesson 3')
+    expect(shown().join(' ')).toContain('Lesson 4')
+  })
+
+  /*
+   * A seed naming a list with no history cannot happen through the UI — the practice line
+   * only exists for lists that HAVE history — but it can happen through the door between
+   * rendering that line and tapping it, if the records were trimmed under the storage cap
+   * in between. Falling back to everything keeps the select agreeing with what is on
+   * screen; honouring it would show a filter set to an option that does not exist.
+   */
+  it('falls back to all lists when the seed names a list with no history', () => {
+    setup([mine], { initialListId: 'gone' })
+    expect(screen.getByRole('combobox')).toHaveValue('all')
+    expect(shown().join(' ')).toContain('Lesson 3')
+  })
+
+  it('honours the seed once late-arriving records make it valid', () => {
+    const { rerender } = setup([], { initialListId: 'l2' })
+    // Nothing has arrived yet, so there is no such option and nothing to filter to.
+    rerender(
+      <ReviewScreen
+        records={[mine, theirs]}
+        onOpen={vi.fn()}
+        onHome={vi.fn()}
+        initialListId="l2"
+      />,
+    )
+    expect(screen.getByRole('combobox')).toHaveValue('l2')
+    expect(shown().join(' ')).not.toContain('Lesson 3')
+  })
+
+  it('lets the user change it afterwards, and keeps their choice', async () => {
+    const { user } = setup([mine, theirs], { initialListId: 'l2' })
+    await user.selectOptions(screen.getByRole('combobox'), 'all')
+    expect(shown().join(' ')).toContain('Lesson 3')
+    expect(shown().join(' ')).toContain('Lesson 4')
+  })
+})
+
+describe('what the screen is called (012)', () => {
+  it('is My practices, matching the menu', () => {
+    setup([rec()])
+    expect(screen.getByRole('heading', { level: 1, name: 'My practices' })).toBeInTheDocument()
+  })
+
+  it('goes home, which is where the menu says it goes', () => {
+    setup([rec()])
+    expect(screen.getByRole('button', { name: /home/i })).toBeInTheDocument()
   })
 })

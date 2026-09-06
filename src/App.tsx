@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
-import { Home } from './components/Home'
+import { Home, type Brief } from './components/Home'
 import { ListEditor } from './components/ListEditor'
 import { TestCard } from './components/TestCard'
 import { StudyCard } from './components/StudyCard'
@@ -7,9 +7,11 @@ import { ReadyScreen } from './components/ReadyScreen'
 import { ReviewScreen } from './components/ReviewScreen'
 import { ReviewDetail } from './components/ReviewDetail'
 import { NavMenu } from './components/NavMenu'
+import { ListsScreen } from './components/ListsScreen'
+import { TestsScreen } from './components/TestsScreen'
+import { GamesScreen } from './components/GamesScreen'
 import { ResultsScreen } from './components/ResultsScreen'
 import { MigratePrompt } from './components/MigratePrompt'
-import { ScoreHistory } from './components/ScoreHistory'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
@@ -34,16 +36,17 @@ import {
   type ReviewWindow,
 } from './state/missedWords'
 import { buildRunRecords } from './state/sessionRecord'
+import { groupRuns, runLabel } from './state/runGroup'
+import { trendOfRuns } from './state/scoreTrend'
 import { GameSetup } from './components/GameSetup'
 import { GameCloud } from './components/GameCloud'
 import { GameResults } from './components/GameResults'
 import { buildWordPool, poolSize, type PoolSpec } from './state/wordPool'
 import { canRedraw, poolSubject, runFromPool, type TestPlan } from './state/drillRun'
 import { TestSetup } from './components/TestSetup'
-import { SavedTests } from './components/SavedTests'
 import type { SavedTest } from './state/testPlan'
 import { createGame } from './game/game'
-import { buildGameRecord, gameMissSources } from './game/gameRecord'
+import { buildGameRecord, gameLabel, gameMissSources } from './game/gameRecord'
 import type { GameRecord, GameSettings } from './game/types'
 
 /**
@@ -249,6 +252,77 @@ export default function App() {
       }).degraded,
     }
   }, [readyList, missSources, liveList, now])
+
+  /**
+   * Each list's practice history, folded the only way that gives an honest count.
+   *
+   * Bucketed by `listId` FIRST and grouped SECOND (012 D-5). A run over three lists writes
+   * three records sharing a run (011 D-3): grouping first would have to decide which list
+   * such a run "belongs to", and counting the raw records would report three practices for
+   * one test — a wrong number that looks entirely plausible, on a row nobody would think
+   * to check. This is the same rule `ReviewScreen` writes out for its filter, and it is
+   * not a coincidence that both surfaces need it.
+   *
+   * One pass over every list, so eight rows cannot disagree about what they counted
+   * (012 NFR-4).
+   */
+  const practiceByList = useMemo(() => {
+    const buckets = new Map<string, SessionRecord[]>()
+    for (const record of visibleRecords) {
+      const bucket = buckets.get(record.listId)
+      if (bucket) bucket.push(record)
+      else buckets.set(record.listId, [record])
+    }
+
+    const summary = new Map<string, { count: number; lastPct: number }>()
+    for (const [listId, records] of buckets) {
+      const runs = groupRuns(records)
+      const newest = runs[0]
+      if (newest) summary.set(listId, { count: runs.length, lastPct: newest.pct })
+    }
+    return summary
+  }, [visibleRecords])
+
+  const practicesFor = useCallback(
+    (listId: string) => practiceByList.get(listId) ?? null,
+    [practiceByList],
+  )
+
+  /**
+   * The home screen, in numbers.
+   *
+   * Derived from the same live values every section reads, so the brief cannot claim
+   * something a section then contradicts. `runLabel` and `gameLabel` rather than local
+   * string-building: the newest run is named here and on the review screen, and the newest
+   * round here and in the game log, and two answers to "what is a three-list run called"
+   * would drift.
+   */
+  const brief = useMemo((): Brief => {
+    const runs = groupRuns(visibleRecords)
+    const newestRun = runs[0] ?? null
+    // Sorted here, because nothing sorts games — the same reason GameHistory sorts.
+    const newestGame = [...visibleGames].sort((a, b) => b.finishedAt - a.finishedAt)[0] ?? null
+    const average = trendOfRuns(runs)
+
+    return {
+      lists: visibleLists.length,
+      tests: visibleTests.length,
+      games: visibleGames.length,
+      practices: runs.length,
+      lastPractice: newestRun && {
+        label: runLabel(newestRun),
+        right: newestRun.right,
+        total: newestRun.total,
+        pct: newestRun.pct,
+      },
+      lastGame: newestGame && {
+        label: gameLabel(newestGame),
+        correct: newestGame.correct,
+        asked: newestGame.asked,
+      },
+      average: average && { pct: average.average, runs: average.count },
+    }
+  }, [visibleLists, visibleTests, visibleRecords, visibleGames])
 
   const persist = useCallback(
     async (list: WordList) => {
@@ -587,9 +661,14 @@ export default function App() {
                   : null
           }
           onHome={() => act({ type: 'GO_HOME' })}
-          onReview={() => act({ type: 'OPEN_REVIEW' })}
-          onGame={() => act({ type: 'OPEN_GAME' })}
-          onTest={() => act({ type: 'OPEN_TEST_SETUP' })}
+          onLists={() => act({ type: 'OPEN_LISTS' })}
+          onTests={() => act({ type: 'OPEN_TESTS' })}
+          onGames={() => act({ type: 'OPEN_GAMES' })}
+          /*
+           * Bare, with no seed: arriving from the menu means every list. The seeded form
+           * is dispatched from a list's own practice line, below.
+           */
+          onPractices={() => act({ type: 'OPEN_REVIEW' })}
         />
         {authAvailable ? (
           <AccountMenu
@@ -609,9 +688,8 @@ export default function App() {
 
       {state.screen === 'home' && (
         <Home
-          lists={visibleLists}
           loading={store === null}
-          scope={authStatus === 'signed-in' ? 'account' : 'device'}
+          brief={brief}
           banner={
             <MigratePrompt
               count={migration.count}
@@ -619,35 +697,26 @@ export default function App() {
               onDismiss={migration.dismiss}
             />
           }
-          history={<ScoreHistory records={visibleRecords} />}
-          onSeeAllHistory={() => act({ type: 'OPEN_REVIEW' })}
+          onLists={() => act({ type: 'OPEN_LISTS' })}
+          onTests={() => act({ type: 'OPEN_TESTS' })}
+          onGames={() => act({ type: 'OPEN_GAMES' })}
+          onPractices={() => act({ type: 'OPEN_REVIEW' })}
+        />
+      )}
+
+      {state.screen === 'lists' && (
+        <ListsScreen
+          lists={visibleLists}
+          loading={store === null}
+          scope={authStatus === 'signed-in' ? 'account' : 'device'}
+          practices={practicesFor}
+          /*
+           * WITH the list id. Dispatching this bare gives an unfiltered review screen
+           * that looks perfectly correct and answers a different question from the one
+           * the user asked by tapping this particular row.
+           */
+          onOpenPractices={(list) => act({ type: 'OPEN_REVIEW', listId: list.id })}
           onNewList={() => act({ type: 'NEW_LIST' })}
-          onPlayGame={() => act({ type: 'OPEN_GAME' })}
-          onBuildTest={() => act({ type: 'OPEN_TEST_SETUP' })}
-          savedTests={
-            <SavedTests
-              tests={visibleTests}
-              lists={visibleLists}
-              count={testPoolSize}
-              loading={store === null}
-              onRun={(test, mode) =>
-                startRun({ spec: test.spec, count: test.count }, mode, test.id, test.name)
-              }
-              onEdit={(test) => act({ type: 'EDIT_TEST', test })}
-              onRename={(test) => {
-                const name = window.prompt('New name', test.name)
-                if (name === null || name.trim() === '') return
-                void saveTest({ ...test, name: name.trim(), updatedAt: Date.now() })
-              }}
-              onDelete={(test) => {
-                if (!window.confirm(`Delete “${test.name}”?`)) return
-                if (!store) return
-                void store.removeTest(test.id).then((result) => {
-                  if (!result.ok) setToast(writeFailureMessage(result.reason))
-                })
-              }}
-            />
-          }
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
           onRename={async (list) => {
@@ -658,11 +727,51 @@ export default function App() {
             if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
           onDelete={async (list) => {
-            if (!window.confirm(`Delete “${list.name}”?`)) return
+            if (!window.confirm(`Delete \u201c${list.name}\u201d?`)) return
             if (!store) return
             const result = await store.removeList(list.id)
             if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
+        />
+      )}
+
+      {state.screen === 'tests' && (
+        <TestsScreen
+          tests={visibleTests}
+          lists={visibleLists}
+          /*
+           * ONE `now` for every row (011 NFR-4), which is why this is threaded from App
+           * rather than computed by the screen. Eight tests must not disagree about which
+           * millisecond they were counted at, and the number shown has to be the number
+           * the user then gets.
+           */
+          count={testPoolSize}
+          loading={store === null}
+          onBuildTest={() => act({ type: 'OPEN_TEST_SETUP' })}
+          onRun={(test, mode) =>
+            startRun({ spec: test.spec, count: test.count }, mode, test.id, test.name)
+          }
+          onEdit={(test) => act({ type: 'EDIT_TEST', test })}
+          onRename={(test) => {
+            const name = window.prompt('New name', test.name)
+            if (name === null || name.trim() === '') return
+            void saveTest({ ...test, name: name.trim(), updatedAt: Date.now() })
+          }}
+          onDelete={(test) => {
+            if (!window.confirm(`Delete \u201c${test.name}\u201d?`)) return
+            if (!store) return
+            void store.removeTest(test.id).then((result) => {
+              if (!result.ok) setToast(writeFailureMessage(result.reason))
+            })
+          }}
+        />
+      )}
+
+      {state.screen === 'games' && (
+        <GamesScreen
+          games={visibleGames}
+          loading={store === null}
+          onPlayGame={() => act({ type: 'OPEN_GAME' })}
         />
       )}
 
@@ -701,7 +810,8 @@ export default function App() {
           onPickWindow={pickWindow}
           onPractiseFull={() => act({ type: 'PRACTISE_FULL' })}
           onSave={() => void persist(state.list)}
-          onBack={() => act({ type: 'GO_HOME' })}
+          /* Back goes to the section this screen was reached from (012 D-8). */
+          onBack={() => act({ type: 'OPEN_LISTS' })}
         />
       )}
 
@@ -779,9 +889,10 @@ export default function App() {
               createdAt: existing?.createdAt ?? at,
               updatedAt: at,
             })
-            act({ type: 'GO_HOME' })
+            // Lands on My tests, where the thing it just saved now is.
+            act({ type: 'OPEN_TESTS' })
           }}
-          onBack={() => act({ type: 'GO_HOME' })}
+          onBack={() => act({ type: 'OPEN_TESTS' })}
           onNewList={() => act({ type: 'NEW_LIST' })}
         />
       )}
@@ -793,7 +904,7 @@ export default function App() {
           count={gamePoolSize}
           {...(state.initial !== undefined ? { initial: state.initial } : {})}
           onStart={startGame}
-          onBack={() => act({ type: 'GO_HOME' })}
+          onBack={() => act({ type: 'OPEN_GAMES' })}
           onNewList={() => act({ type: 'NEW_LIST' })}
         />
       )}
@@ -826,6 +937,7 @@ export default function App() {
         <ReviewScreen
           records={visibleRecords}
           loading={store === null}
+          {...(state.listId !== undefined ? { initialListId: state.listId } : {})}
           onOpen={(recordId) => act({ type: 'OPEN_REVIEW_DETAIL', recordId })}
           onHome={() => act({ type: 'GO_HOME' })}
         />
