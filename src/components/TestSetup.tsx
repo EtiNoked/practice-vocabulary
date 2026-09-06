@@ -5,7 +5,8 @@ import { TEST_COUNT_CHIPS, isRunnable, type SavedTest } from '../state/testPlan'
 import type { DrillMode } from '../state/types'
 import type { WordList } from '../state/types'
 import { poolLanguages, type PoolSpec } from '../state/wordPool'
-import { PoolPicker, usePoolDraft, type PoolLimits } from './PoolPicker'
+import { PoolPicker } from './PoolPicker'
+import { usePoolDraft, type PoolLimits } from './usePoolDraft'
 
 /**
  * What a test allows.

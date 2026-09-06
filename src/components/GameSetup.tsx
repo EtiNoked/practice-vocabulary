@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { LANG_NAMES } from '../lang/languages'
 import { poolLanguages, type PoolSpec } from '../state/wordPool'
 import type { WordList } from '../state/types'
-import { PoolPicker, usePoolDraft, type PoolLimits } from './PoolPicker'
+import { PoolPicker } from './PoolPicker'
+import { usePoolDraft, type PoolLimits } from './usePoolDraft'
 import { COUNT_CHIPS, MAX_GAME_WORDS, MIN_POOL, type GameSettings } from '../game/types'
 
 /**

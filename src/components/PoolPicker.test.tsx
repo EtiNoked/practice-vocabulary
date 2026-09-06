@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { PoolPicker, usePoolDraft, type PoolDraft, type PoolLimits } from './PoolPicker'
+import { PoolPicker } from './PoolPicker'
+import { usePoolDraft, type PoolDraft, type PoolLimits } from './usePoolDraft'
 import type { PoolSpec } from '../state/wordPool'
 import type { WordList } from '../state/types'
 

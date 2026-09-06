@@ -109,6 +109,55 @@ the option to shuffle and go again or drill only the ones you got wrong.
 
 Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 
+## Building a test
+
+A drill covers one list. **Build a test** — from the home screen or the menu — covers as
+many as you like, and lets you say how much of them you want.
+
+Pick your lists, choose **All words** or **Words I got wrong**, and set a length: **10**,
+**15**, **20**, type a number, or **All**. The words are drawn at random. The screen keeps
+a running count of how many words your selection actually has, so you decide against a
+real number rather than a guess.
+
+Lists have to share a language pair — you hear one language and answer in the other, and a
+lone French option among five Dutch ones would give itself away. Incompatible lists stay
+visible but disabled, with their own pair shown as the reason.
+
+Then **Practice** or **Test**, exactly as on a single list.
+
+### Two ways to go again
+
+At the end you get both, and they are not the same thing:
+
+- **Shuffle & restart** — the *same* words, in a new order.
+- **Another 15, freshly drawn** — a *different* fifteen from the same pool. Only offered
+  when there are more words to draw than you asked for.
+
+The second one re-draws from the pool as it was when you started, so the length you chose
+still means what it meant even if a list changed in another tab meanwhile.
+
+### Saving a test
+
+**Save this test** gives it a name and puts it on the home screen under **Saved tests**,
+with its setup written out — *"3 lists · words I got wrong · 15 of 34"*.
+
+A saved test is a **definition, not a snapshot**. It stores which lists, which words and
+how many — never the words themselves. Run it next month and it asks about your mistakes
+*then*, not the ones you had the day you saved it. The count on each row is worked out
+fresh every time you look at it, for the same reason.
+
+Delete a list a saved test uses and the test stays put, saying it has no lists left. It is
+never quietly repaired or removed — that would leave you with a test that has silently
+become a different test.
+
+### In your history
+
+A test over three lists is filed against each of those lists, so its misses turn up in the
+right list's *words you missed* chips. But it is still **one test**: Recent practice and
+Review show it as a single row with its own score, and it counts once towards your
+average. In Review, each list's share sits underneath, and opening one shows that list's
+answer sheet.
+
 ## Reviewing what you got wrong
 
 **Menu → Review** lists every finished drill, newest first, grouped under Today,
