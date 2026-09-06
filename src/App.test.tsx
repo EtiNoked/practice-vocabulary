@@ -544,10 +544,18 @@ describe('a full practice run', () => {
     await user.click(screen.getByRole('button', { name: /practise/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
 
-    // Card 1: the word and its answer are both simply there.
+    /*
+     * Card 1: the word is simply there, and the answer is covered.
+     *
+     * STRENGTHENED for 009, not merely reworded. This used to assert
+     * `getByText('daughter')` was in the document — which still passes with the
+     * answer covered, because the cover is a CSS filter over ordinary DOM text.
+     * A presence check cannot see this feature at all, so it has to go through
+     * the accessibility tree instead.
+     */
     expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
     expect(screen.getByText('dochter')).toBeInTheDocument()
-    expect(screen.getByText('daughter')).toBeInTheDocument()
+    expect(screen.getByText('daughter')).toHaveAttribute('aria-hidden', 'true')
 
     await user.click(screen.getByRole('button', { name: /next/i }))
     expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
@@ -639,6 +647,112 @@ describe('switching mode from the results screen', () => {
 
     await user.click(screen.getByRole('button', { name: /test yourself/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
+  })
+})
+
+/**
+ * 009. The answer cover, end to end.
+ *
+ * The unit tests pin each piece; these pin the thing the user actually
+ * experiences — that the decision outlives the card it was made on, and the
+ * reload that would otherwise quietly undo it.
+ */
+describe('covering and uncovering the answer in practice', () => {
+  const covered = () => screen.getByText('daughter').getAttribute('aria-hidden') === 'true'
+
+  const startPractice = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+  }
+
+  it('uncovers on request, and covers again', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await startPractice(user)
+
+    expect(covered()).toBe(true)
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    expect(covered()).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /hide answer/i }))
+    expect(covered()).toBe(true)
+  })
+
+  // FR-4, and the whole of US-4: decide once, not once per card.
+  it('carries the decision on to the next card', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await startPractice(user)
+
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+    expect(screen.getByText('zoon')).toBeInTheDocument()
+    expect(screen.getByText('son')).not.toHaveAttribute('aria-hidden')
+  })
+
+  it('carries a re-covering back the other way too', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await startPractice(user)
+
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await user.click(screen.getByRole('button', { name: /hide answer/i }))
+    await user.click(screen.getByRole('button', { name: /previous/i }))
+
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+    expect(covered()).toBe(true)
+  })
+
+  // FR-6. The cover rides inside the Session, so the drill's existing
+  // park-on-every-action already covers it — this is what proves it did.
+  it('comes back uncovered after a reload', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    const first = renderApp()
+    await startPractice(user)
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+
+    first.unmount()
+    renderApp()
+
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+    expect(covered()).toBe(false)
+    expect(screen.getByRole('button', { name: /hide answer/i })).toBeInTheDocument()
+  })
+
+  // FR-5. A new run is a new decision, however the last one ended.
+  it('covers the answer again when the same list is practised again', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await startPractice(user)
+
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await user.click(screen.getByRole('button', { name: /practice again/i }))
+
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
+    expect(covered()).toBe(true)
+  })
+
+  // FR-10. Uncovering is not an advance, so it must not re-speak the prompt.
+  it('says nothing when the answer is uncovered', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await startPractice(user)
+    speechCalls.length = 0
+
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    expect(speechCalls).toHaveLength(0)
   })
 })
 

@@ -34,7 +34,7 @@ export function ReadyScreen({ list, saved, onStart, onSave, onBack }: Props) {
       {/*
         The one-liner sits OUTSIDE each button, referenced by aria-describedby
         rather than nested inside it. Nested, it becomes part of the button's
-        accessible name — "Practice Hear it, see it, see the answer" — which is
+        accessible name — "Practice Hear it, try it, reveal when you want" — which is
         what a screen reader would then announce on every focus.
       */}
       <div className="flex flex-col gap-4">
@@ -48,7 +48,7 @@ export function ReadyScreen({ list, saved, onStart, onSave, onBack }: Props) {
             Practice
           </button>
           <p id="mode-practice-hint" className="text-center text-sm text-ink-muted">
-            Hear it, see it, see the answer
+            Hear it, try it, reveal when you want
           </p>
         </div>
 

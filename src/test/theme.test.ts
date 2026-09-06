@@ -246,3 +246,75 @@ describe('the primitives exist, and carry the rules', () => {
     expect(css).toContain('prefers-reduced-motion')
   })
 })
+
+/**
+ * 009's answer cover.
+ *
+ * The same argument as the palette guards above, applied to one more property:
+ * a rule that lives in the token layer can be reasoned about, and the same rule
+ * retyped into a `className` drifts one component at a time.
+ */
+describe('the practice answer cover lives in the primitive layer', () => {
+  /*
+   * Assembled from parts, exactly as the white/black guard below does and for
+   * its reason: Tailwind scans src/ for class names, so spelling the utility
+   * here would compile it into the production stylesheet and this test would
+   * then fail on its own source.
+   */
+  const B = 'bl' + 'ur'
+  const maskBlock = block('\\.answer-masked')
+
+  it('defines the cover as a class, not as a call-site utility', () => {
+    expect(maskBlock).toMatch(new RegExp(`filter:\\s*${B}\\(`))
+  })
+
+  /*
+   * `em`, never `px`. --text-word is 2.5rem today; a pixel radius stops covering
+   * the word the moment that number changes, and it fails silently — the answer
+   * is simply readable through it and no test anywhere goes red.
+   *
+   * The leading zero is optional because this reads the COMPILED stylesheet:
+   * Vitest serves it untransformed (`0.35em`) while a production build minifies
+   * it to `.35em`, and a guard matching only one of those passes for the wrong
+   * reason. Same trick as the quotes in the dark-block selectors above.
+   */
+  it('scales the cover with the font rather than pinning it to pixels', () => {
+    expect(maskBlock).toMatch(new RegExp(`${B}\\(\\s*0?\\.\\d+em\\s*\\)`))
+    expect(maskBlock).not.toMatch(new RegExp(`${B}\\([^)]*px`))
+  })
+
+  // A filter hides the word from the eye and from nothing else. Without this the
+  // answer can be read straight off the screen by dragging across it.
+  it('makes the covered answer unselectable', () => {
+    expect(maskBlock).toMatch(/user-select:\s*none/)
+  })
+
+  /*
+   * Windows High Contrast can discard `filter` outright. With no fallback that
+   * uncovers every answer, for the users least able to notice it happened.
+   */
+  it('falls back to hiding the box where filters are discarded', () => {
+    expect(css).toMatch(/forced-colors/)
+    const forced = css.slice(css.indexOf('forced-colors'))
+    expect(forced).toMatch(/\.answer-masked\s*\{[^}]*visibility:\s*hidden/)
+  })
+
+  it('uses no Tailwind blur utility anywhere in src', () => {
+    // Both the bare utility and the suffixed scale, plus the backdrop variant —
+    // any of them at a call site would be a pixel radius (NFR-3) living in a
+    // className (NFR-2), which is both halves of the rule at once.
+    const UTILITY = new RegExp(
+      `\\b(?:backdrop-)?${B}(?:-(?:xs|sm|md|lg|xl|2xl|3xl|none))?\\b`,
+      'g',
+    )
+
+    const offenders = appSources().flatMap(([path, src]) => {
+      const hits = src.match(UTILITY) ?? []
+      return hits.map((hit) => `${path}: ${hit}`)
+    })
+
+    // Reported with the offending class, so a failure is actionable rather than
+    // the start of a search.
+    expect(offenders).toEqual([])
+  })
+})

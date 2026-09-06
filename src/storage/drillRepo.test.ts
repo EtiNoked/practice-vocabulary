@@ -48,6 +48,21 @@ describe('round trip', () => {
     expect(drillRepo.load()?.session.mode).toBe('practice')
   })
 
+  /*
+   * 009. The answer cover is a property of the run, so a reload has to come back
+   * the way the user left it — the same contract `index` and `order` already have.
+   */
+  it('preserves an uncovered answer across a reload', () => {
+    const session = { ...practiceSession(), answersOpen: true }
+    drillRepo.save({ list, session, runKind: 'full' })
+    expect(drillRepo.load()?.session.answersOpen).toBe(true)
+  })
+
+  it('preserves a covered one too', () => {
+    drillRepo.save({ list, session: practiceSession(), runKind: 'full' })
+    expect(drillRepo.load()?.session.answersOpen).toBe(false)
+  })
+
   it('preserves the drill order rather than reshuffling on restore', () => {
     const session = testSession()
     drillRepo.save({ list, session, runKind: 'full' })
@@ -236,6 +251,66 @@ describe('clear', () => {
     drillRepo.save({ list, session: testSession(), runKind: 'full' })
     drillRepo.clear()
     expect(localStorage.getItem('pvt.lists.v1')).toBe('the lists')
+  })
+})
+
+/**
+ * 009 FR-7. A drill parked by a build older than this feature has no
+ * `answersOpen` key at all.
+ *
+ * The tempting fix — teaching `isSession` to require the field — would make
+ * `read()` return null for every one of those, so shipping this feature would
+ * silently end every practice run in flight at that moment. The field is
+ * DEFAULTED on read instead, which is the same trade-off `runKind` already
+ * makes for a label it cannot verify.
+ */
+describe('a drill parked before the answer cover existed', () => {
+  /** A v1 payload exactly as an older build wrote it: no `answersOpen` anywhere. */
+  function putLegacy(): void {
+    const { answersOpen: _dropped, ...legacySession } = practiceSession()
+    putRaw({
+      schemaVersion: SCHEMA_VERSION,
+      savedAt: Date.now(),
+      screen: 'practising',
+      list,
+      session: legacySession,
+      runKind: 'full',
+    })
+  }
+
+  it('still restores, rather than being thrown away', () => {
+    putLegacy()
+    expect(drillRepo.load()).not.toBeNull()
+    expect(drillRepo.load()?.session.index).toBe(0)
+  })
+
+  it('comes back covered', () => {
+    putLegacy()
+    expect(drillRepo.load()?.session.answersOpen).toBe(false)
+  })
+
+  // Coerced with `=== true`, never a truthiness test: a hand-edited or
+  // half-migrated value must land closed, not open (E-6).
+  it('coerces a non-boolean value rather than trusting it', () => {
+    for (const junk of ['yes', 1, {}, []]) {
+      putRaw({
+        schemaVersion: SCHEMA_VERSION,
+        savedAt: Date.now(),
+        screen: 'practising',
+        list,
+        session: { ...practiceSession(), answersOpen: junk },
+        runKind: 'full',
+      })
+      expect(drillRepo.load()?.session.answersOpen).toBe(false)
+    }
+  })
+
+  /*
+   * The guard on the mistake above. Bumping the version to admit a field a
+   * reader can simply default deletes every drill in flight to gain nothing.
+   */
+  it('did not need a schema bump to gain the field', () => {
+    expect(SCHEMA_VERSION).toBe(1)
   })
 })
 
