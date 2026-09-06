@@ -1,8 +1,24 @@
+import type { GameRecord } from '../game/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalListStore } from './localListStore'
 import { listRepo } from './listRepo'
 import { SESSION_STORAGE_KEY, MAX_RECORDS } from './sessionRepo'
 import type { SessionRecord, WordList } from '../state/types'
+
+const aGameRecord = (over: Partial<GameRecord> = {}): GameRecord => ({
+  id: 'g1',
+  finishedAt: 1000,
+  listIds: ['l1'],
+  listNames: ['Food'],
+  source: 'all',
+  correct: 7,
+  asked: 10,
+  points: 52,
+  available: 100,
+  results: [],
+  partial: false,
+  ...over,
+})
 
 const makeList = (over: Partial<WordList> = {}): WordList => ({
   id: 'a',
@@ -179,5 +195,47 @@ describe('localListStore session history', () => {
     const onChange = vi.fn()
     createLocalListStore().subscribeSessions(null, onChange, vi.fn())
     expect(onChange).toHaveBeenCalledWith([])
+  })
+})
+
+describe('games survive a round trip through localStorage', () => {
+  it('emits what gameRepo holds, immediately', () => {
+    const store = createLocalListStore()
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    expect(seen).toEqual([[]])
+  })
+
+  it('re-emits after a write', async () => {
+    const store = createLocalListStore()
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    await store.recordGame(aGameRecord())
+    expect(seen[1]?.map((r) => r.id)).toEqual(['g1'])
+  })
+
+  it('does NOT re-emit when the write failed — a failed write changed nothing', async () => {
+    const store = createLocalListStore()
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError')
+    })
+    const result = await store.recordGame(aGameRecord())
+    expect(result.ok).toBe(false)
+    expect(seen).toHaveLength(1)
+    // Restored HERE, not in an afterEach: this file has no global restore, and a
+    // leaked setItem stub silently breaks every test after it.
+    vi.restoreAllMocks()
+  })
+
+  it('leaves stored games alone on dispose — they outlive a sign-out', async () => {
+    const store = createLocalListStore()
+    await store.recordGame(aGameRecord())
+    await store.dispose()
+    const next = createLocalListStore()
+    let seen: GameRecord[] = []
+    next.subscribeGames((r) => (seen = r), () => {})
+    expect(seen.map((r) => r.id)).toEqual(['g1'])
   })
 })

@@ -1,6 +1,22 @@
+import type { GameRecord } from '../game/types'
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryStore } from './memoryStore'
 import type { SessionRecord, WordList } from '../state/types'
+
+const aGameRecord = (over: Partial<GameRecord> = {}): GameRecord => ({
+  id: 'g1',
+  finishedAt: 1000,
+  listIds: ['l1'],
+  listNames: ['Food'],
+  source: 'all',
+  correct: 7,
+  asked: 10,
+  points: 52,
+  available: 100,
+  results: [],
+  partial: false,
+  ...over,
+})
 
 const makeList = (over: Partial<WordList> = {}): WordList => ({
   id: 'a',
@@ -160,5 +176,63 @@ describe('memoryStore dispose', () => {
     await store.dispose()
     await store.saveList(makeList())
     expect(onChange).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('games — a first-class part of the contract, not a stub', () => {
+  it('emits immediately on subscribe, like every other subscription here', () => {
+    const store = createMemoryStore()
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    expect(seen).toEqual([[]])
+  })
+
+  it('emits again after a game is recorded', async () => {
+    const store = createMemoryStore()
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    await store.recordGame(aGameRecord())
+    expect(seen).toHaveLength(2)
+    expect(seen[1]?.map((r) => r.id)).toEqual(['g1'])
+  })
+
+  it('emits newest first', async () => {
+    const store = createMemoryStore()
+    await store.recordGame(aGameRecord({ id: 'old', finishedAt: 1 }))
+    await store.recordGame(aGameRecord({ id: 'new', finishedAt: 9 }))
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    expect(seen[0]?.map((r) => r.id)).toEqual(['new', 'old'])
+  })
+
+  it('hands out clones, so a caller cannot mutate the store through what it read', async () => {
+    const store = createMemoryStore()
+    await store.recordGame(aGameRecord())
+    let first: GameRecord[] = []
+    store.subscribeGames((r) => (first = r), () => {})
+    // Cast is the point of the test, not a workaround: GameRecord is readonly, so this
+    // is what a caller with a bug would have to do — and the store must survive it.
+    ;(first[0] as { points: number }).points = 999
+    let second: GameRecord[] = []
+    store.subscribeGames((r) => (second = r), () => {})
+    expect(second[0]?.points).toBe(52)
+  })
+
+  it('stops emitting after unsubscribe', async () => {
+    const store = createMemoryStore()
+    const seen: GameRecord[][] = []
+    const off = store.subscribeGames((r) => seen.push(r), () => {})
+    off()
+    await store.recordGame(aGameRecord())
+    expect(seen).toHaveLength(1)
+  })
+
+  it('stops emitting after dispose', async () => {
+    const store = createMemoryStore()
+    const seen: GameRecord[][] = []
+    store.subscribeGames((r) => seen.push(r), () => {})
+    await store.dispose()
+    await store.recordGame(aGameRecord())
+    expect(seen).toHaveLength(1)
   })
 })

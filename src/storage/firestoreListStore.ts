@@ -1,7 +1,9 @@
+import type { GameRecord } from '../game/types'
 import type { SessionRecord, WordList } from '../state/types'
 import type { FirebaseServices } from '../auth/firebase'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
 import { MAX_RECORDS as MAX_SESSION_RECORDS } from './sessionRepo'
+import { MAX_GAME_RECORDS } from './gameRepo'
 
 /**
  * Recursively drop keys whose value is `undefined`.
@@ -64,6 +66,7 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
 
   const listsPath = `users/${uid}/lists`
   const sessionsPath = `users/${uid}/sessions`
+  const gamesPath = `users/${uid}/games`
 
   /** Track every listener so dispose() can detach all of them. A leaked
    * onSnapshot keeps firing after sign-out and would write one user's data
@@ -149,6 +152,37 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
     recordSession: (record) =>
       write(async () => {
         await fs.setDoc(fs.doc(db, sessionsPath, record.id), stripUndefined(record))
+      }),
+
+    subscribeGames(onChange, onError): Unsubscribe {
+      if (disposed) return () => {}
+      /*
+       * BOUNDED, matching gameRepo.MAX_GAME_RECORDS.
+       *
+       * Not optional. Games feed the missed-words pool, so if the two stores disagree
+       * about how much history exists, the same user gets a different set of "words you
+       * got wrong" on two devices — with nothing on either screen to explain it. Same
+       * reasoning that bounded the session query above.
+       */
+      const q = fs.query(
+        fs.collection(db, gamesPath),
+        fs.orderBy('finishedAt', 'desc'),
+        fs.limit(MAX_GAME_RECORDS),
+      )
+      return track(
+        fs.onSnapshot(
+          q,
+          (snap) => onChange(snap.docs.map((d) => ({ ...d.data(), id: d.id }) as GameRecord)),
+          (error) => onError(toStoreError(error)),
+        ),
+      )
+    },
+
+    recordGame: (record) =>
+      write(async () => {
+        // stripUndefined is mandatory: Firestore THROWS on an undefined field value, and
+        // `results` is legitimately absent on a record whose detail was shed.
+        await fs.setDoc(fs.doc(db, gamesPath, record.id), stripUndefined(record))
       }),
 
     async dispose(): Promise<void> {

@@ -1,3 +1,4 @@
+import type { GameRecord } from '../game/types'
 import type { SessionRecord, WordList } from '../state/types'
 
 /**
@@ -64,6 +65,20 @@ export interface ListStore {
   ): Unsubscribe
 
   recordSession(record: SessionRecord): Promise<WriteResult>
+
+  /**
+   * Finished games, newest first, bounded by `MAX_GAME_RECORDS`.
+   *
+   * NO listId parameter, unlike `subscribeSessions` above — a game draws from several
+   * lists at once, so "the games for list X" has no honest answer. Callers that need
+   * per-list detail read it off `GameRecord.results`.
+   */
+  subscribeGames(
+    onChange: (records: GameRecord[]) => void,
+    onError: (error: StoreError) => void,
+  ): Unsubscribe
+
+  recordGame(record: GameRecord): Promise<WriteResult>
 
   /**
    * Detach every listener and release cached data. Called on sign-out and when

@@ -1,3 +1,4 @@
+import type { GameRecord } from '../game/types'
 import type { SessionRecord, WordList } from '../state/types'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
 
@@ -15,6 +16,8 @@ export function createMemoryStore(initial: readonly WordList[] = []): ListStore 
   let records: SessionRecord[] = []
   let listSubs: Array<(l: WordList[]) => void> = []
   let sessionSubs: Array<{ listId: string | null; fn: (r: SessionRecord[]) => void }> = []
+  let games: GameRecord[] = []
+  let gameSubs: Array<(r: GameRecord[]) => void> = []
   let disposed = false
 
   function clone<T>(value: T): T {
@@ -39,6 +42,14 @@ export function createMemoryStore(initial: readonly WordList[] = []): ListStore 
   function emitSessions(): void {
     if (disposed) return
     sessionSubs.forEach(({ listId, fn }) => fn(sortedRecords(listId)))
+  }
+
+  const sortedGames = (): GameRecord[] =>
+    [...games].sort((a, b) => b.finishedAt - a.finishedAt).map(clone)
+
+  function emitGames(): void {
+    if (disposed) return
+    gameSubs.forEach((fn) => fn(sortedGames()))
   }
 
   return {
@@ -89,10 +100,26 @@ export function createMemoryStore(initial: readonly WordList[] = []): ListStore 
       return { ok: true }
     },
 
+    subscribeGames(onChange, _onError): Unsubscribe {
+      void (_onError satisfies (e: StoreError) => void)
+      gameSubs.push(onChange)
+      onChange(sortedGames())
+      return () => {
+        gameSubs = gameSubs.filter((fn) => fn !== onChange)
+      }
+    },
+
+    async recordGame(record: GameRecord): Promise<WriteResult> {
+      games = [...games.filter((r) => r.id !== record.id), clone(record)]
+      emitGames()
+      return { ok: true }
+    },
+
     async dispose(): Promise<void> {
       disposed = true
       listSubs = []
       sessionSubs = []
+      gameSubs = []
     },
   }
 }

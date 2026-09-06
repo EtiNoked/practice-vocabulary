@@ -23,6 +23,20 @@ const BOB = 'bob'
 
 const aList = { name: 'Lesson 3', pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }] }
 const aSession = { listId: 'l1', listName: 'Lesson 3', finishedAt: 123, right: 1, wrong: 0 }
+const aGame = {
+  finishedAt: 123,
+  listIds: ['l1', 'l2'],
+  listNames: ['Food', 'Market'],
+  source: 'all',
+  correct: 7,
+  asked: 10,
+  points: 52,
+  available: 100,
+  results: [
+    { word: { id: 'w0', col1: 'bread', col2: 'brood', listId: 'l1', listName: 'Food' }, correct: true },
+  ],
+  partial: false,
+}
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
@@ -249,5 +263,85 @@ describe('user document — field whitelist', () => {
       await setDoc(doc(ctx.firestore(), `users/${ALICE}`), profile)
     })
     await assertSucceeds(deleteDoc(doc(asAlice(), `users/${ALICE}`)))
+  })
+})
+
+describe('games — append-only, and the owner’s alone', () => {
+  it('lets the owner create and read a game', async () => {
+    const ref = doc(asAlice(), `users/${ALICE}/games/g1`)
+    await assertSucceeds(setDoc(ref, aGame))
+    await assertSucceeds(getDoc(ref))
+  })
+
+  it('lets the owner list their games collection', async () => {
+    await assertSucceeds(getDocs(collection(asAlice(), `users/${ALICE}/games`)))
+  })
+
+  it('lets the owner delete one, so account deletion can work', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${ALICE}/games/g1`), aGame)
+    })
+    await assertSucceeds(deleteDoc(doc(asAlice(), `users/${ALICE}/games/g1`)))
+  })
+
+  it('REJECTS an update to an existing game', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${ALICE}/games/g1`), aGame)
+    })
+    // A game is a log entry. Not even the owner may improve their score after the fact.
+    await assertFails(updateDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { points: 999 }))
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, points: 999 }))
+  })
+
+  it('accepts a game with no results at all — detail can legitimately be shed', async () => {
+    const { results: _dropped, ...slim } = aGame
+    await assertSucceeds(setDoc(doc(asAlice(), `users/${ALICE}/games/g2`), slim))
+  })
+})
+
+describe('games — what the rules refuse', () => {
+  it('REJECTS another signed-in user reading or writing', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${ALICE}/games/g1`), aGame)
+    })
+    await assertFails(getDoc(doc(asBob(), `users/${ALICE}/games/g1`)))
+    await assertFails(setDoc(doc(asBob(), `users/${ALICE}/games/g9`), aGame))
+    await assertFails(deleteDoc(doc(asBob(), `users/${ALICE}/games/g1`)))
+    await assertFails(getDocs(collection(asBob(), `users/${ALICE}/games`)))
+  })
+
+  it('REJECTS an anonymous visitor entirely', async () => {
+    await assertFails(setDoc(doc(asAnon(), `users/${ALICE}/games/g1`), aGame))
+    await assertFails(getDoc(doc(asAnon(), `users/${ALICE}/games/g1`)))
+  })
+
+  it('REJECTS a finishedAt that is not a number', async () => {
+    await assertFails(
+      setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, finishedAt: 'yesterday' }),
+    )
+  })
+
+  it('REJECTS a missing finishedAt', async () => {
+    const { finishedAt: _dropped, ...noDate } = aGame
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), noDate))
+  })
+
+  it('REJECTS listIds that is not a list', async () => {
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, listIds: 'l1' }))
+  })
+
+  it('REJECTS an absurd number of source lists', async () => {
+    const tooMany = Array.from({ length: 21 }, (_, i) => `l${i}`)
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, listIds: tooMany }))
+  })
+
+  it('REJECTS an unbounded results array', async () => {
+    // The blast-radius cap: one client bug must not be able to write a huge document.
+    const huge = Array.from({ length: 101 }, () => aGame.results[0])
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, results: huge }))
+  })
+
+  it('REJECTS results that is not a list', async () => {
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/games/g1`), { ...aGame, results: 'lots' }))
   })
 })

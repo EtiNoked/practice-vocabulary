@@ -22,6 +22,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { createFirestoreListStore, stripUndefined } from '../../src/storage/firestoreListStore'
 import type { FirebaseServices } from '../../src/auth/firebase'
 import type { SessionRecord, WordList } from '../../src/state/types'
+import type { GameRecord } from '../../src/game/types'
 
 /**
  * The Firestore adapter against the real emulator with the real rules loaded.
@@ -118,6 +119,26 @@ beforeAll(async () => {
 
 afterAll(() => testEnv.cleanup())
 beforeEach(() => testEnv.clearFirestore())
+
+const makeGame = (over: Partial<GameRecord> = {}): GameRecord => ({
+  id: 'g1',
+  finishedAt: 1000,
+  listIds: ['l1', 'l2'],
+  listNames: ['Lesson 3', 'Market'],
+  source: 'all',
+  correct: 7,
+  asked: 10,
+  points: 52,
+  available: 100,
+  results: [
+    {
+      word: { id: 'w0', col1: 'daughter', col2: 'dochter', listId: 'l1', listName: 'Lesson 3' },
+      correct: true,
+    },
+  ],
+  partial: false,
+  ...over,
+})
 
 describe('lists round-trip', () => {
   it('saves a list and emits it to a subscriber', async () => {
@@ -313,5 +334,74 @@ describe('stripUndefined', () => {
   it('leaves a fully-populated object untouched', () => {
     const list = makeList()
     expect(stripUndefined(list)).toEqual(list)
+  })
+})
+
+describe('game history through the real adapter and the real rules', () => {
+  it('round-trips a game, per-word results intact', async () => {
+    const store = storeFor()
+    expect(await store.recordGame(makeGame())).toEqual({ ok: true })
+
+    const games = await nextMatching<GameRecord[]>(
+      (cb) => store.subscribeGames(cb, () => {}),
+      (g) => g.length === 1,
+    )
+    expect(games[0]).toMatchObject({ id: 'g1', points: 52, listIds: ['l1', 'l2'] })
+    expect(games[0]?.results?.[0]?.word.listId).toBe('l1')
+    await store.dispose()
+  })
+
+  it('emits newest first', async () => {
+    const store = storeFor()
+    await store.recordGame(makeGame({ id: 'old', finishedAt: 1 }))
+    await store.recordGame(makeGame({ id: 'new', finishedAt: 9 }))
+
+    const games = await nextMatching<GameRecord[]>(
+      (cb) => store.subscribeGames(cb, () => {}),
+      (g) => g.length === 2,
+    )
+    expect(games.map((g) => g.id)).toEqual(['new', 'old'])
+    await store.dispose()
+  })
+
+  it('syncs a record whose detail was shed, rather than refusing it', async () => {
+    /*
+     * A game that lost its `results` to local quota pressure still carries a score
+     * worth keeping. Firestore THROWS on an undefined field, so this is also the test
+     * that stripUndefined is actually applied on this path.
+     */
+    const store = storeFor()
+    const { results: _dropped, ...slim } = makeGame()
+    expect(await store.recordGame(slim as GameRecord)).toEqual({ ok: true })
+
+    const games = await nextMatching<GameRecord[]>(
+      (cb) => store.subscribeGames(cb, () => {}),
+      (g) => g.length === 1,
+    )
+    expect(games[0]?.results).toBeUndefined()
+    expect(games[0]?.points).toBe(52)
+    await store.dispose()
+  })
+
+  it('cannot rewrite a game it already wrote — the rules say so, not the client', async () => {
+    const store = storeFor()
+    await store.recordGame(makeGame())
+    expect(await store.recordGame(makeGame({ points: 999 }))).toEqual({
+      ok: false,
+      reason: 'permission',
+    })
+    await store.dispose()
+  })
+
+  it('detaches its game listener on dispose', async () => {
+    const store = storeFor()
+    let calls = 0
+    store.subscribeGames(() => (calls += 1), () => {})
+    await nextMatching<GameRecord[]>((cb) => store.subscribeGames(cb, () => {}), () => true)
+    await store.dispose()
+    const before = calls
+    await storeFor().recordGame(makeGame({ id: 'after-dispose' }))
+    await new Promise((r) => setTimeout(r, 250))
+    expect(calls).toBe(before)
   })
 })

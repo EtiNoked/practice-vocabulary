@@ -1,4 +1,6 @@
+import type { GameRecord } from '../game/types'
 import type { SessionRecord, WordList } from '../state/types'
+import { gameRepo } from './gameRepo'
 import { listRepo } from './listRepo'
 import { sessionRepo } from './sessionRepo'
 import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
@@ -18,6 +20,7 @@ import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
 export function createLocalListStore(): ListStore {
   let listSubs: Array<(lists: WordList[]) => void> = []
   let sessionSubs: Array<{ listId: string | null; fn: (r: SessionRecord[]) => void }> = []
+  let gameSubs: Array<(r: GameRecord[]) => void> = []
   let disposed = false
 
   function emitLists(): void {
@@ -29,6 +32,11 @@ export function createLocalListStore(): ListStore {
   function emitSessions(): void {
     if (disposed) return
     sessionSubs.forEach(({ listId, fn }) => fn(sessionRepo.getAll(listId)))
+  }
+
+  function emitGames(): void {
+    if (disposed) return
+    gameSubs.forEach((fn) => fn(gameRepo.getAll()))
   }
 
   /** Emit only when the write actually landed — a failed write changed nothing. */
@@ -89,6 +97,19 @@ export function createLocalListStore(): ListStore {
       return afterWrite(sessionRepo.add(record), emitSessions)
     },
 
+    subscribeGames(onChange, _onError): Unsubscribe {
+      void (_onError satisfies (e: StoreError) => void)
+      gameSubs.push(onChange)
+      onChange(gameRepo.getAll())
+      return () => {
+        gameSubs = gameSubs.filter((fn) => fn !== onChange)
+      }
+    },
+
+    async recordGame(record: GameRecord): Promise<WriteResult> {
+      return afterWrite(gameRepo.add(record), emitGames)
+    },
+
     /**
      * Detaches listeners ONLY.
      *
@@ -99,6 +120,7 @@ export function createLocalListStore(): ListStore {
       disposed = true
       listSubs = []
       sessionSubs = []
+      gameSubs = []
     },
   }
 }
