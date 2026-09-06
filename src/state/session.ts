@@ -61,6 +61,10 @@ export function createSession(
     order: mode === 'test' ? shuffle(ids, rng) : ids,
     index: 0,
     revealed: false,
+    // The ONLY place this is initialised, which is what makes "every new run
+    // starts covered" free for restartShuffled, restartWrongOnly and the
+    // SWITCH_MODE branch — all three build their session through here (009 FR-5).
+    answersOpen: false,
     marks: {},
   }
 }
@@ -80,12 +84,29 @@ export function reveal(session: Session): Session {
 }
 
 /**
+ * Flip practice mode's answer cover.
+ *
+ * A toggle, not a one-way `reveal` — a peek has to be reversible on the same
+ * card (009 US-3), which is the one behaviour test mode deliberately does not
+ * have. It is also the reason the two are separate fields: `revealed` is spent
+ * by the next advance, and this survives it.
+ */
+export function toggleAnswers(session: Session): Session {
+  return { ...session, answersOpen: !session.answersOpen }
+}
+
+/**
  * Move to the next card without recording anything — practice mode's advance.
  *
  * Not clamped: stepping past the last card leaves `index === order.length`,
  * which `isFinished` already recognises. Clamping would make a completed
  * practice run indistinguishable from resting on the final card, and there
  * would be no way to reach the results screen.
+ *
+ * `revealed` is cleared and `answersOpen` is deliberately NOT — the spread
+ * carries it, and that carry is the whole of 009 FR-4. Adding a reset here
+ * looks like tidying up after the line above and would silently make the user
+ * re-open the answer on every single card.
  */
 export function nextCard(session: Session): Session {
   return { ...session, index: session.index + 1, revealed: false }
@@ -93,6 +114,7 @@ export function nextCard(session: Session): Session {
 
 /** Move back one card, floored at the first. Practice mode only. */
 export function prevCard(session: Session): Session {
+  // Carries `answersOpen` for the same reason nextCard does — see above.
   return { ...session, index: Math.max(0, session.index - 1), revealed: false }
 }
 

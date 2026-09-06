@@ -503,9 +503,12 @@ export default function App() {
       {/*
         Routed on the SESSION's mode, not on a separate screen.
 
-        The two cards answer opposite questions — one hides the answer and
-        counts, the other hides nothing and counts nothing — so they are two
-        components rather than one with a pile of conditionals.
+        The two cards answer opposite questions — one gates the answer behind a
+        one-way reveal and scores what follows, the other lets the user uncover
+        and re-cover it at will and counts nothing — so they are two components
+        rather than one with a pile of conditionals. Since 009 both hide the
+        answer, which makes them look mergeable and is exactly why the note in
+        StudyCard.tsx spells out that they are not.
       */}
       {state.screen === 'practising' &&
         (state.session.mode === 'practice' ? (
@@ -515,6 +518,7 @@ export default function App() {
             resumed={resumed}
             onNext={() => act({ type: 'NEXT' })}
             onPrev={() => act({ type: 'PREV' })}
+            onToggleAnswer={() => act({ type: 'TOGGLE_ANSWER' })}
             onQuit={() => act({ type: 'QUIT' })}
           />
         ) : (

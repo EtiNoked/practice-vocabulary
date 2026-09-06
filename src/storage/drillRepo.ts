@@ -96,7 +96,20 @@ function read(now: number): RestoredDrill | null {
 
     return {
       list: payload.list,
-      session: payload.session,
+      session: {
+        ...payload.session,
+        /*
+         * COERCED here rather than required in isSession, and the difference
+         * matters: a drill parked by a build older than 009 has no such key, so
+         * requiring it would return null for every run in flight the moment this
+         * shipped — ending someone's practice to gain a default we can simply
+         * write ourselves (009 FR-7).
+         *
+         * `=== true` and not a truthiness test, so a hand-edited "yes" lands
+         * covered rather than open.
+         */
+        answersOpen: payload.session.answersOpen === true,
+      },
       // COERCED, not rejected. Throwing away a drill in progress over this one
       // label would be a worse outcome than logging it as a full run — the same
       // trade-off listRepo makes for an unknown language code.

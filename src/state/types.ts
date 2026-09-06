@@ -47,6 +47,19 @@ export interface Session {
   index: number
   revealed: boolean
   /**
+   * Practice mode's "answers are uncovered", for the whole run.
+   *
+   * NOT `revealed` above, and the distinction is the reason this is a second
+   * field rather than a reuse. `revealed` is per CARD — test mode sets it with
+   * REVEAL and `mark()` clears it on every advance. This is per RUN: opening the
+   * answer on card 3 leaves it open on card 4, and only the user closes it again
+   * (009 FR-4).
+   *
+   * Meaningless in test mode, where it stays false, exactly as `marks` stays
+   * empty in practice.
+   */
+  answersOpen: boolean
+  /**
    * Both stay at their initial values in practice mode rather than being split
    * off into a union member. `score()` on a practice session therefore reports
    * `total: 0`, which is correct and is never displayed.

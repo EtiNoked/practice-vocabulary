@@ -191,6 +191,36 @@ describe('the practice-mode loop', () => {
     if (s.screen !== 'practising') throw new Error('unreachable')
     expect(s.session.marks).toEqual({})
   })
+
+  // 009. The answer cover, which is a property of the run rather than the card.
+  it('TOGGLE_ANSWER uncovers the answer', () => {
+    const s = reduce(studying, { type: 'TOGGLE_ANSWER' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.answersOpen).toBe(true)
+  })
+
+  it('TOGGLE_ANSWER twice covers it again', () => {
+    const s = at(studying, { type: 'TOGGLE_ANSWER' }, { type: 'TOGGLE_ANSWER' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.answersOpen).toBe(false)
+  })
+
+  // FR-4: the decision outlives the card it was made on, in both directions.
+  it('carries the uncovered answer across NEXT and back across PREV', () => {
+    const s = at(studying, { type: 'TOGGLE_ANSWER' }, { type: 'NEXT' }, { type: 'PREV' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.answersOpen).toBe(true)
+  })
+
+  it('changes nothing else about the card', () => {
+    const s = reduce(studying, { type: 'TOGGLE_ANSWER' })
+    if (s.screen !== 'practising' || studying.screen !== 'practising') {
+      throw new Error('unreachable')
+    }
+    expect(s.session.index).toBe(studying.session.index)
+    expect(s.session.order).toEqual(studying.session.order)
+    expect(s.session.marks).toEqual({})
+  })
 })
 
 describe('actions guarded by mode', () => {
@@ -211,6 +241,14 @@ describe('actions guarded by mode', () => {
 
   it('MARK is a no-op in practice mode', () => {
     expect(reduce(studying, { type: 'MARK', result: 'right' })).toBe(studying)
+  })
+
+  /*
+   * The mirror image of REVEAL above, and the pair is the point: each mode owns
+   * exactly one way to show the answer, and neither reaches into the other.
+   */
+  it('TOGGLE_ANSWER is a no-op in test mode', () => {
+    expect(reduce(testing, { type: 'TOGGLE_ANSWER' })).toBe(testing)
   })
 
   it('NEXT is a no-op in test mode', () => {
@@ -244,6 +282,14 @@ describe('SWITCH_MODE', () => {
     expect(s.session.mode).toBe('practice')
     expect(s.session.marks).toEqual({})
     expect(s.session.index).toBe(0)
+  })
+
+  // 009 FR-5, via E-9: the switch builds a fresh session, so the cover comes
+  // back up for free — as long as createSession stays the only initialiser.
+  it('starts the new practice run with the answer covered', () => {
+    const s = reduce(finishedTest, { type: 'SWITCH_MODE' })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.answersOpen).toBe(false)
   })
 
   it('flips a finished practice run into a test', () => {
@@ -285,6 +331,10 @@ describe('illegal transitions', () => {
 
   it('ignores MARK when not practising', () => {
     expect(reduce(initialState, { type: 'MARK', result: 'right' })).toBe(initialState)
+  })
+
+  it('ignores TOGGLE_ANSWER when not practising', () => {
+    expect(reduce(initialState, { type: 'TOGGLE_ANSWER' })).toBe(initialState)
   })
 
   it('ignores START when not ready', () => {

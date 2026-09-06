@@ -24,11 +24,13 @@ const list: WordList = {
 
 const noShuffle = () => 0.999999999
 
-const setup = (over: { session?: Session; resumed?: boolean } = {}) => {
+const setup = (over: { session?: Session; resumed?: boolean; answersOpen?: boolean } = {}) => {
   const onNext = vi.fn()
   const onPrev = vi.fn()
+  const onToggleAnswer = vi.fn()
   const onQuit = vi.fn()
-  const session = over.session ?? createSession(list.pairs, noShuffle, list.id, 'practice')
+  const base = over.session ?? createSession(list.pairs, noShuffle, list.id, 'practice')
+  const session = over.answersOpen === undefined ? base : { ...base, answersOpen: over.answersOpen }
   render(
     <StudyCard
       list={list}
@@ -36,18 +38,55 @@ const setup = (over: { session?: Session; resumed?: boolean } = {}) => {
       resumed={over.resumed ?? false}
       onNext={onNext}
       onPrev={onPrev}
+      onToggleAnswer={onToggleAnswer}
       onQuit={onQuit}
     />,
   )
-  return { onNext, onPrev, onQuit, session, user: userEvent.setup() }
+  return { onNext, onPrev, onToggleAnswer, onQuit, session, user: userEvent.setup() }
 }
 
+/** The element carrying the answer text, covered or not. */
+const answer = () => screen.getByText('daughter')
+
 describe('what a study card shows', () => {
-  // FR-11: the whole point of practice mode — nothing is hidden.
-  it('shows the prompt word and the answer together, with no interaction', () => {
+  /*
+   * INVERTED, deliberately and visibly.
+   *
+   * Through 002 this said the prompt and the answer are shown together, and
+   * cited that spec's FR-11: "the whole point of practice mode — nothing is
+   * hidden". 009 revokes that requirement. Reading a translation is not recall,
+   * and a mode with the answer already on screen offers no moment at which the
+   * user tries — which is the gap between "everything given" and Test mode's
+   * "graded" that this feature exists to fill.
+   *
+   * The prompt is still simply there. Only the answer moved.
+   */
+  it('shows the prompt word plainly, and the answer covered', () => {
     setup()
-    expect(screen.getByText('dochter')).toBeInTheDocument()
-    expect(screen.getByText('daughter')).toBeInTheDocument()
+    const prompt = screen.getByText('dochter')
+    expect(prompt).toBeInTheDocument()
+    expect(prompt).not.toHaveClass('answer-masked')
+
+    /*
+     * Asserted on the class and the accessibility tree, NOT on presence. The
+     * covered answer is still ordinary text in the DOM — `toBeInTheDocument`
+     * passes either way and would be a test that cannot fail.
+     */
+    expect(answer()).toHaveClass('answer-masked')
+    expect(answer()).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('uncovers the answer once the run has been opened', () => {
+    setup({ answersOpen: true })
+    expect(answer()).not.toHaveClass('answer-masked')
+    expect(answer()).not.toHaveAttribute('aria-hidden')
+  })
+
+  // E-11. The prompt is the question, and it is what gets spoken — covering it
+  // would make the card useless to anyone with no voice for that language.
+  it('never covers the prompt, in either state', () => {
+    setup({ answersOpen: true })
+    expect(screen.getByText('dochter')).not.toHaveClass('answer-masked')
   })
 
   it('labels both languages', () => {
@@ -85,8 +124,18 @@ describe('what a study card must NOT show', () => {
     expect(screen.queryByRole('button', { name: /wrong/i })).not.toBeInTheDocument()
   })
 
-  it('offers no reveal, because nothing is hidden', () => {
+  /*
+   * INVERTED, deliberately — the other half of 002's FR-11. See the note in
+   * "what a study card shows" above for why that requirement no longer holds.
+   *
+   * It keeps checking for "Show answer" specifically, and that is not an
+   * oversight: this card's control is "Reveal answer", and Test mode's is "Show
+   * answer". App.test.tsx tells a restored practice drill from a test one by
+   * exactly that string, so the two names must stay distinct.
+   */
+  it('offers a reveal of its own, and not test mode’s', () => {
     setup()
+    expect(screen.getByRole('button', { name: /reveal answer/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /show answer/i })).not.toBeInTheDocument()
   })
 
@@ -128,6 +177,49 @@ describe('moving through the list', () => {
     const { user, onQuit } = setup()
     await user.click(screen.getByRole('button', { name: /quit/i }))
     expect(onQuit).toHaveBeenCalled()
+  })
+})
+
+// 009. The eye: the whole of what practice mode gained.
+describe('uncovering the answer', () => {
+  it('asks to be uncovered when the answer is covered', async () => {
+    const { user, onToggleAnswer } = setup()
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    expect(onToggleAnswer).toHaveBeenCalledTimes(1)
+  })
+
+  // US-3: a peek is not a one-way door. The label carries the state, which is
+  // what a sighted user and a screen reader both read.
+  it('offers to cover it again once it is open', async () => {
+    const { user, onToggleAnswer } = setup({ answersOpen: true })
+    const button = screen.getByRole('button', { name: /hide answer/i })
+    await user.click(button)
+    expect(onToggleAnswer).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: /reveal answer/i })).not.toBeInTheDocument()
+  })
+
+  /*
+   * No aria-pressed beside the changing label. Carrying both makes a screen
+   * reader announce the state twice — "Hide answer, toggle button, pressed" —
+   * which is the pattern the ARIA practices warn against for this control.
+   */
+  it('says the state in the label rather than in a pressed flag', () => {
+    setup({ answersOpen: true })
+    expect(screen.getByRole('button', { name: /hide answer/i })).not.toHaveAttribute('aria-pressed')
+  })
+
+  // FR-10. Uncovering is not an advance; nothing about the card changed.
+  it('does not speak', async () => {
+    const { user } = setup()
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    expect(speechCalls).toHaveLength(0)
+  })
+
+  it('does not navigate', async () => {
+    const { user, onNext, onPrev } = setup()
+    await user.click(screen.getByRole('button', { name: /reveal answer/i }))
+    expect(onNext).not.toHaveBeenCalled()
+    expect(onPrev).not.toHaveBeenCalled()
   })
 })
 
@@ -183,18 +275,41 @@ describe('keyboard shortcuts', () => {
   })
 
   /*
+   * `a` for answer, and not Enter: Enter already advances in this card, and
+   * re-pointing it would break both muscle memory and the test above.
+   */
+  it('uncovers the answer on A', async () => {
+    const { user, onToggleAnswer } = setup()
+    await user.keyboard('a')
+    expect(onToggleAnswer).toHaveBeenCalledTimes(1)
+  })
+
+  it('covers it again on a second A', async () => {
+    const { user, onToggleAnswer } = setup({ answersOpen: true })
+    await user.keyboard('A')
+    expect(onToggleAnswer).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so in the shortcut hint, or nobody finds it', () => {
+    setup()
+    expect(screen.getByText(/\bA\b.*answer/i)).toBeInTheDocument()
+  })
+
+  /*
    * The same guard TestCard carries: these bindings live on window, so they are
    * live while the account menu is open on top of the drill.
    */
   it('ignores keys while a menu owns the keyboard', async () => {
-    const { user, onNext } = setup()
+    const { user, onNext, onToggleAnswer } = setup()
     const menu = document.createElement('div')
     menu.setAttribute('role', 'menu')
     document.body.append(menu)
 
     await user.keyboard('{ArrowRight}')
+    await user.keyboard('a')
 
     expect(onNext).not.toHaveBeenCalled()
+    expect(onToggleAnswer).not.toHaveBeenCalled()
     menu.remove()
   })
 })

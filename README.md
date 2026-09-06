@@ -86,6 +86,23 @@ their languages together.
 
 ## Practising
 
+Two modes, chosen fresh each time you start — the choice belongs to the run, not to
+the list.
+
+### Practice — no score, no pressure
+
+Hear the word, see it spelled, and have a go. The translation starts **covered**, and
+**Reveal answer 👁** uncovers it whenever you want it. Move with **Next** and
+**Previous**; nothing is marked and nothing is recorded.
+
+Uncover once and it **stays uncovered for the rest of the run**, so a list you already
+half-know doesn't mean tapping the eye forty times. Cover it again and that sticks too.
+Every new run starts covered.
+
+Keyboard: `Space` replays, `A` shows the answer, `→` next, `←` previous.
+
+### Test — answer from memory, and mark yourself
+
 Start → hear the word → **Hear it again 🔊** as needed → **Show answer** → mark
 **Right ✓** or **Wrong ✗**. At the end you get a score, the words you missed, and
 the option to shuffle and go again or drill only the ones you got wrong.

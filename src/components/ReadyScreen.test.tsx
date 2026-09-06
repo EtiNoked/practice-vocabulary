@@ -62,7 +62,9 @@ describe('choosing a mode', () => {
 
   it('explains each one in a line', () => {
     setup()
-    expect(screen.getByText(/see the answer/i)).toBeInTheDocument()
+    // 009: practice no longer hands the answer over, so the line that promised
+    // it would ("see it, see the answer") had to stop saying so.
+    expect(screen.getByText(/reveal when you want/i)).toBeInTheDocument()
     expect(screen.getByText(/from memory/i)).toBeInTheDocument()
   })
 

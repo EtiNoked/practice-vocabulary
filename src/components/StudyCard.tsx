@@ -11,25 +11,44 @@ interface Props {
   resumed: boolean
   onNext: () => void
   onPrev: () => void
+  /** Flip the answer cover for the whole run (009). */
+  onToggleAnswer: () => void
   onQuit: () => void
 }
 
 /**
- * One card of a PRACTICE run: hear it, see it spelled, see the answer, move on.
+ * One card of a PRACTICE run: hear it, see it spelled, try it, uncover the
+ * answer when you want it, move on.
  *
  * Deliberately shares nothing with TestCard but the domain. The two look similar
- * today, but they answer opposite questions — this one hides nothing and counts
- * nothing — and inventing a shared "card" abstraction for two users would couple
- * them where they are most likely to diverge.
+ * today, but they answer opposite questions — this one covers the answer until
+ * asked and counts nothing, that one gates it behind a one-way reveal and scores
+ * what follows — and inventing a shared "card" abstraction for two users would
+ * couple them where they are most likely to diverge.
+ *
+ * 009 is that divergence arriving. Both cards now hide the answer, which looks
+ * like the moment to merge them and is the opposite: here the cover is a
+ * reversible property of the RUN that the user sets for their own benefit, and
+ * there it is a per-card gate the scoring depends on. Same pixels, unrelated
+ * rules.
  *
  * As in TestCard, note what is NOT here: no effect that speaks on mount. iOS
  * Safari silently drops speech that does not descend from a user gesture, so
  * every utterance originates in a tap — the Practice tap for the first card, and
  * Next/Previous for each one after.
  */
-export function StudyCard({ list, session, resumed, onNext, onPrev, onQuit }: Props) {
+export function StudyCard({
+  list,
+  session,
+  resumed,
+  onNext,
+  onPrev,
+  onToggleAnswer,
+  onQuit,
+}: Props) {
   const pair = currentPair(session)
   const atStart = session.index === 0
+  const open = session.answersOpen
 
   const replay = () => {
     if (pair) speak(pair.col2, list.col2Lang)
@@ -51,6 +70,11 @@ export function StudyCard({ list, session, resumed, onNext, onPrev, onQuit }: Pr
       if (event.key === ' ') {
         event.preventDefault()
         replay()
+      } else if (event.key === 'a' || event.key === 'A') {
+        // `a` for answer. Enter cannot do this job here the way it does in
+        // TestCard — it already advances, three branches down.
+        event.preventDefault()
+        onToggleAnswer()
       } else if (event.key === 'ArrowRight' || event.key === 'Enter') {
         // Or the page scrolls under the card on every advance.
         event.preventDefault()
@@ -86,8 +110,37 @@ export function StudyCard({ list, session, resumed, onNext, onPrev, onQuit }: Pr
         <p className="mt-2 text-xs uppercase tracking-wide text-ink-faint">
           {LANG_NAMES[list.col1Lang]}
         </p>
-        <p className="text-word font-bold text-correct">{pair.col1}</p>
+        {/*
+          Rendered either way, covered by a class rather than swapped out for a
+          placeholder — the word keeps its exact box, so the card cannot resize
+          under a thumb already reaching for Next.
+
+          `aria-hidden` while covered is the other half of the cover, and the
+          more important half: the filter is a picture of hiding, and without
+          this a screen reader would read the answer out the moment the card
+          appeared — leaving the feature doing nothing for precisely the user it
+          looks like it helps.
+        */}
+        <p
+          className={`text-word font-bold text-correct${open ? '' : ' answer-masked'}`}
+          // `undefined` and not `false`, so the attribute is absent rather than
+          // rendered as aria-hidden="false". The two behave alike; only one of
+          // them reads as "somebody thought about this element".
+          aria-hidden={open ? undefined : true}
+        >
+          {pair.col1}
+        </p>
       </div>
+
+      {/*
+        The label carries the state, and there is deliberately no `aria-pressed`
+        beside it: together they announce the state twice over.
+        "Reveal", not "Show" — "Show answer" is TestCard's control, and the two
+        modes are told apart by that string in more than one place.
+      */}
+      <button type="button" onClick={onToggleAnswer} className="btn btn-quiet">
+        {open ? 'Hide answer 👁' : 'Reveal answer 👁'}
+      </button>
 
       {resumed && (
         <p className="rounded-lg bg-accent-soft p-3 text-center text-sm">
@@ -118,7 +171,7 @@ export function StudyCard({ list, session, resumed, onNext, onPrev, onQuit }: Pr
       </div>
 
       <p className="text-center text-xs text-ink-faint">
-        Space replays · → next · ← previous
+        Space replays · A shows the answer · → next · ← previous
       </p>
     </section>
   )

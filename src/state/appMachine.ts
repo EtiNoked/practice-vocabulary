@@ -11,6 +11,7 @@ import {
   restartShuffled,
   restartWrongOnly,
   reveal as revealSession,
+  toggleAnswers,
   type Rng,
 } from './session'
 import type { ReviewWindow } from './missedWords'
@@ -77,6 +78,8 @@ export type AppAction =
   /** Omitting `mode` means test — 001's behaviour, and what every pre-modes caller meant. */
   | { type: 'START'; mode?: DrillMode }
   | { type: 'REVEAL' }
+  /** Practice-mode's answer cover. A no-op in test mode, which has REVEAL. */
+  | { type: 'TOGGLE_ANSWER' }
   | { type: 'MARK'; result: MarkResult }
   /** Practice-mode navigation. No-ops in test mode, where MARK does the advancing. */
   | { type: 'NEXT' }
@@ -183,6 +186,17 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
     case 'REVEAL':
       if (state.screen !== 'practising' || state.session.mode !== 'test') return state
       return { ...state, session: revealSession(state.session) }
+
+    /*
+     * The mirror image of REVEAL, guarded the opposite way — each mode owns
+     * exactly one way to show the answer and neither reaches into the other.
+     *
+     * Unlike REVEAL this is reversible and survives the next card: it sets a
+     * property of the RUN, not of the card (009 FR-3, FR-4).
+     */
+    case 'TOGGLE_ANSWER':
+      if (state.screen !== 'practising' || state.session.mode !== 'practice') return state
+      return { ...state, session: toggleAnswers(state.session) }
 
     case 'MARK': {
       if (state.screen !== 'practising' || state.session.mode !== 'test') return state

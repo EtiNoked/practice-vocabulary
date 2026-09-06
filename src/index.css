@@ -351,6 +351,40 @@
     box-shadow: var(--shadow-card);
   }
 
+  /*
+   * Practice mode's answer cover (009).
+   *
+   * A filter rather than a placeholder or a swapped-in blank, so the word keeps
+   * its exact box and the card does not resize under the thumb the moment it is
+   * uncovered — a card that grows while you are reaching for Next is how you
+   * mis-tap it.
+   *
+   * The radius is in `em` and not `px` deliberately: --text-word is 2.5rem
+   * today, and a pixel radius silently stops covering the word the moment that
+   * changes. theme.test.ts fails the build if it ever becomes one.
+   *
+   * `user-select` is not decoration. Blur is a picture of hiding — the text is
+   * ordinary DOM text underneath, and a drag across it reads the answer straight
+   * off the screen. The other half of that leak, the accessibility tree, is
+   * closed in StudyCard with aria-hidden (009 FR-8).
+   */
+  .answer-masked {
+    filter: blur(0.35em);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /*
+   * Windows High Contrast can discard `filter` outright, which would uncover
+   * every answer with no visible failure to explain it. Hide the box instead —
+   * `visibility` still reserves the space, so nothing reflows here either.
+   */
+  @media (forced-colors: active) {
+    .answer-masked {
+      visibility: hidden;
+    }
+  }
+
   .field {
     min-height: 2.75rem;
     width: 100%;

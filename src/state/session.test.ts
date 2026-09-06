@@ -13,6 +13,7 @@ import {
   reveal,
   score,
   seededRng,
+  toggleAnswers,
 } from './session'
 
 const pairs: WordPair[] = [
@@ -196,6 +197,67 @@ describe('reveal and mark', () => {
     let s = createSession(pairs, noShuffle)
     s = mark(reveal(s), 'right')
     expect(Object.keys(s.marks)).toHaveLength(1)
+  })
+})
+
+/**
+ * 009. Practice mode's answer cover, which is a property of the RUN.
+ *
+ * The whole point of these is the contrast with `reveal` above: that one is
+ * per-card and one-way, this one is per-run and reversible. The two fields look
+ * alike and are not, and this block is where that stays true.
+ */
+describe('the practice answer cover', () => {
+  const practice = () => createSession(pairs, noShuffle, 'l1', 'practice')
+
+  it('starts covered, in both modes', () => {
+    expect(practice().answersOpen).toBe(false)
+    expect(createSession(pairs, noShuffle, 'l1', 'test').answersOpen).toBe(false)
+  })
+
+  it('toggleAnswers uncovers, and covers again', () => {
+    const open = toggleAnswers(practice())
+    expect(open.answersOpen).toBe(true)
+    expect(toggleAnswers(open).answersOpen).toBe(false)
+  })
+
+  it('toggleAnswers returns a new session and mutates nothing', () => {
+    const before = practice()
+    const after = toggleAnswers(before)
+    expect(after).not.toBe(before)
+    expect(before.answersOpen).toBe(false)
+  })
+
+  /*
+   * FR-4, and the assertion a future refactor is most likely to break.
+   *
+   * `nextCard` clears `revealed` and deliberately does NOT clear this one. The
+   * two live in the same object and are reset on opposite schedules, so pinning
+   * both in one assertion is the only way the difference stays visible.
+   */
+  it('nextCard carries the cover through, while still re-hiding a revealed card', () => {
+    const s = nextCard(reveal(toggleAnswers(practice())))
+    expect(s.answersOpen).toBe(true)
+    expect(s.revealed).toBe(false)
+  })
+
+  it('prevCard carries it back the other way too', () => {
+    const s = prevCard(nextCard(toggleAnswers(practice())))
+    expect(s.answersOpen).toBe(true)
+    expect(s.index).toBe(0)
+  })
+
+  it('leaves a covered run covered as it moves', () => {
+    expect(nextCard(practice()).answersOpen).toBe(false)
+  })
+
+  // FR-5. A new run is a new decision, however the last one ended.
+  it('starts covered again on a restart, even from an uncovered run', () => {
+    const open = toggleAnswers(practice())
+    expect(restartShuffled(open, seededRng(3)).answersOpen).toBe(false)
+
+    const marked = mark(reveal(createSession(pairs, noShuffle)), 'wrong')
+    expect(restartWrongOnly(toggleAnswers(marked), seededRng(3)).answersOpen).toBe(false)
   })
 })
 
