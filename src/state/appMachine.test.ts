@@ -755,9 +755,22 @@ describe('building a test (011)', () => {
     expect(s.screen).toBe('practising')
   })
 
-  it('no longer starts one from home, which holds no tests since 012', () => {
-    const home: AppState = { screen: 'home' }
-    expect(reduce(home, { type: 'START_RUN', run: poolRun(), mode: 'test' })).toBe(home)
+  /*
+   * Home is back on the list, and this test is the previous one turned around.
+   *
+   * It used to read "no longer starts one from home, which holds no tests since 012" —
+   * true when home held nothing that could deal a run. 013's fourth tile deals one: the
+   * words you are still getting wrong, built into a pool run by `App.startRun` exactly
+   * as a saved test is. Leaving the guard naming only `testSetup` and `tests` would make
+   * that tile a silent no-op, which is the same defect this guard has already produced
+   * twice — in 011 from `testSetup`, and in 012 from `home`.
+   *
+   * The guard still has a job, and the test below is it: never on top of something
+   * already running.
+   */
+  it('starts a run from home, where 013 put the misses tile', () => {
+    const s = reduce({ screen: 'home' }, { type: 'START_RUN', run: poolRun(), mode: 'test' })
+    expect(s.screen).toBe('practising')
   })
 
   it('refuses to start on top of a drill or a game already running, by reference', () => {

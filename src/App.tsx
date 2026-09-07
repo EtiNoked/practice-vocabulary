@@ -46,7 +46,7 @@ import { canRedraw, poolSubject, runFromPool, type TestPlan } from './state/dril
 import { TestSetup } from './components/TestSetup'
 import type { SavedTest } from './state/testPlan'
 import { createGame } from './game/game'
-import { buildGameRecord, gameLabel, gameMissSources } from './game/gameRecord'
+import { buildGameRecord, gameMissSources } from './game/gameRecord'
 import type { GameRecord, GameSettings } from './game/types'
 
 /**
@@ -289,40 +289,95 @@ export default function App() {
   )
 
   /**
+   * The list the home screen's Practice tile would open (013 D-3).
+   *
+   * The newest RUN, not the newest record — `groupRuns` first, always (011 D-3, 012 D-6).
+   * A run over three lists is one practice, and its records are held in the order the
+   * lists were picked, so the first surviving one is the honest answer to "the list you
+   * were last practising".
+   *
+   * Resolved against `visibleLists` and allowed to fall through: a list deleted since its
+   * last drill must not be offered, because `PRACTISE_LIST` would land on a ready screen
+   * for words that no longer exist. Null when nothing qualifies, which the tile renders as
+   * "Pick a list" rather than as a dead square.
+   */
+  const practiceList = useMemo(() => {
+    for (const run of groupRuns(visibleRecords)) {
+      for (const record of run.records) {
+        const list = visibleLists.find((l) => l.id === record.listId)
+        if (list) return list
+      }
+    }
+    return null
+  }, [visibleRecords, visibleLists])
+
+  /**
+   * The drill behind "Fix your misses" (013 D-4).
+   *
+   * Anchored to `practiceList`'s LANGUAGE PAIR, because a pool may not mix them (008 D-6):
+   * speech takes one language code, and a lone French option among five Dutch ones can be
+   * picked out with no vocabulary at all. So "everything I keep getting wrong" is not a
+   * legal pool for a user with two language pairs, and anchoring to the list the Practice
+   * tile already names is the one scoping rule that needs no second answer to "which
+   * language is this drill in".
+   *
+   * The anchor goes FIRST in `listIds`: order decides which list keeps a word that appears
+   * in two of them, and `poolLanguages` reads the first entry.
+   *
+   * `count: null` — everything it selects, uncapped (011 D-10). A cap would put "20 of 34"
+   * on a tile with room for two words, where the whole promise of the number is that it is
+   * the number you get.
+   */
+  const missesPlan = useMemo((): TestPlan | null => {
+    if (!practiceList) return null
+    const compatible = [
+      practiceList,
+      ...visibleLists.filter(
+        (l) =>
+          l.id !== practiceList.id &&
+          l.col1Lang === practiceList.col1Lang &&
+          l.col2Lang === practiceList.col2Lang,
+      ),
+    ]
+    return {
+      spec: { listIds: compatible.map((l) => l.id), source: 'missed', window: 'all' },
+      count: null,
+    }
+  }, [practiceList, visibleLists])
+
+  /**
    * The home screen, in numbers.
    *
    * Derived from the same live values every section reads, so the brief cannot claim
-   * something a section then contradicts. `runLabel` and `gameLabel` rather than local
-   * string-building: the newest run is named here and on the review screen, and the newest
-   * round here and in the game log, and two answers to "what is a three-list run called"
-   * would drift.
+   * something a section then contradicts. `runLabel` rather than local string-building:
+   * the newest run is named here and on the review screen, and two answers to "what is a
+   * three-list run called" would drift.
+   *
+   * `misses` goes through `poolSize`, which is `buildWordPool` — THE SAME COMPUTATION the
+   * tile's drill is dealt from, against the same `now` (013 FR-15). A cheaper count here
+   * is exactly how a tile says 12 and the drill deals 11.
    */
   const brief = useMemo((): Brief => {
     const runs = groupRuns(visibleRecords)
     const newestRun = runs[0] ?? null
-    // Sorted here, because nothing sorts games — the same reason GameHistory sorts.
-    const newestGame = [...visibleGames].sort((a, b) => b.finishedAt - a.finishedAt)[0] ?? null
     const average = trendOfRuns(runs)
 
     return {
       lists: visibleLists.length,
-      tests: visibleTests.length,
       games: visibleGames.length,
-      practices: runs.length,
+      practiceTarget: practiceList?.name ?? null,
+      misses: missesPlan
+        ? poolSize(visibleLists, missesPlan.spec, { records: missSources, now })
+        : 0,
       lastPractice: newestRun && {
         label: runLabel(newestRun),
         right: newestRun.right,
         total: newestRun.total,
         pct: newestRun.pct,
       },
-      lastGame: newestGame && {
-        label: gameLabel(newestGame),
-        correct: newestGame.correct,
-        asked: newestGame.asked,
-      },
       average: average && { pct: average.average, runs: average.count },
     }
-  }, [visibleLists, visibleTests, visibleRecords, visibleGames])
+  }, [visibleLists, visibleRecords, visibleGames, practiceList, missesPlan, missSources, now])
 
   const persist = useCallback(
     async (list: WordList) => {
@@ -371,8 +426,15 @@ export default function App() {
       // done its job and the speech chain is live again.
       setResumed(false)
 
-      // Arriving somewhere that counts or dates anything: take a fresh reading.
-      if (next.screen === 'ready' || next.screen === 'review') setNow(Date.now())
+      /*
+       * Arriving somewhere that counts or dates anything: take a fresh reading.
+       *
+       * `home` joined the list in 013, and it has to: the greeting reads the hour and the
+       * misses tile counts a window. Without it a tab left open overnight says "Good
+       * afternoon" over breakfast and counts yesterday's misses.
+       */
+      if (next.screen === 'ready' || next.screen === 'review' || next.screen === 'home')
+        setNow(Date.now())
 
       /**
        * Record a finished drill.
@@ -422,7 +484,22 @@ export default function App() {
       const nextRunKind: SessionRecord['mode'] =
         action.type === 'RESTART_WRONG_ONLY'
           ? 'wrong-only'
-          : action.type === 'START'
+          : /*
+             * A pool run says which kind it is in its own spec (013 D-6).
+             *
+             * This branch is a FIX as much as an addition. `START_RUN` had none, so it
+             * fell through to `sessionMode` — the run kind of the PREVIOUS drill. Run a
+             * saved test straight after a wrong-only re-run and it was recorded
+             * `wrong-only` and silently dropped from the average: no error, no failing
+             * test, a number that stays entirely plausible. 013's misses tile makes that
+             * path common rather than rare, and it deals a genuine wrong-only subset,
+             * which must not flatter the average either.
+             */
+            action.type === 'START_RUN'
+            ? action.run.plan?.spec.source === 'missed'
+              ? 'wrong-only'
+              : 'full'
+            : action.type === 'START'
             ? /*
                * A missed-words drill is a harder subset and must not flatter the
                * average — the same reasoning that made RESTART_WRONG_ONLY its own
@@ -690,6 +767,17 @@ export default function App() {
         <Home
           loading={store === null}
           brief={brief}
+          /*
+           * The clock the greeting and the misses count share, refreshed on arriving here
+           * (013 D-9). Not `Date.now()` in the child: two readings a render apart is how a
+           * tile's number stops matching the drill it deals.
+           */
+          now={now}
+          /*
+           * Guests have none, and that is the common case — the local-only build has no
+           * accounts at all. `Home` says nothing rather than inventing a placeholder.
+           */
+          name={user?.displayName ?? null}
           banner={
             <MigratePrompt
               count={migration.count}
@@ -698,8 +786,31 @@ export default function App() {
             />
           }
           onLists={() => act({ type: 'OPEN_LISTS' })}
-          onTests={() => act({ type: 'OPEN_TESTS' })}
           onGames={() => act({ type: 'OPEN_GAMES' })}
+          /*
+           * The ready screen for the list, not a drill: that screen owns the mode choice
+           * and the missed-words chips, and skipping it would make this tile mean something
+           * different from every other route into a practice (013 D-3).
+           *
+           * The guard is belt-and-braces — `Home` routes to My lists instead when there is
+           * no target — but a tile that dispatches `PRACTISE_LIST` with nothing is worth
+           * making unrepresentable here too.
+           */
+          onPractise={() => {
+            if (practiceList) act({ type: 'PRACTISE_LIST', list: practiceList })
+          }}
+          /*
+           * Through `startRun`, which is the ONE path that builds a pool, names a subject,
+           * speaks the first word inside this tap and dispatches `START_RUN`. A second path
+           * would be a second record-writing path, which is what 011 D-9 exists to prevent.
+           *
+           * Named "Words to fix" rather than left to `poolSubject`'s default, which would
+           * call it "3 lists" — true, and useless as the title of a drill you asked for by
+           * a different name entirely.
+           */
+          onFixMisses={() => {
+            if (missesPlan) startRun(missesPlan, 'test', undefined, 'Words to fix')
+          }}
           onPractices={() => act({ type: 'OPEN_REVIEW' })}
         />
       )}

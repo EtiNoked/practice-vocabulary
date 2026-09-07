@@ -1314,12 +1314,40 @@ describe('reviewing one drill', () => {
     expect(screen.getByText(/card 1 of 1/i)).toBeInTheDocument()
   })
 
-  it('reaches review from the home screen card too', async () => {
-    // The menu is one route; the brief's own card is the discoverable one. Same rule the
-    // "See all" link followed before 012 emptied the home screen.
+  it('reaches review from the home screen too, without the menu', async () => {
+    /*
+     * The menu is one route; the discoverable one lives on the brief.
+     *
+     * That control has moved twice and this test has followed it both times: a "See all"
+     * link beside the home log until 012, a My practices card after it, and since 013 the
+     * link on the average line — which is My practices' only route off home now that the
+     * fourth square belongs to the misses drill (013 D-2, D-7).
+     *
+     * TWO full runs are seeded because the average is what carries the link, and
+     * `trend()` returns null below two: one score is not a trend. Seeded through the repo
+     * rather than by drilling twice through the UI — this test is about the route, and the
+     * drill that writes a record is exercised end-to-end a dozen times above.
+     */
+    for (const n of [1, 2]) {
+      sessionRepo.add({
+        id: `r${n}`,
+        listId: 'l1',
+        listName: 'Lesson 3',
+        right: 8,
+        wrong: 2,
+        total: 10,
+        pct: 80,
+        wrongPairs: [],
+        rightPairs: [],
+        finishedAt: Date.now() - n * 1000,
+        mode: 'full',
+        partial: false,
+      })
+    }
+
     const user = userEvent.setup()
     renderApp()
-    await user.click(screen.getByRole('button', { name: /my practices/i }))
+    await user.click(screen.getByRole('button', { name: /see all/i }))
     expect(screen.getByRole('heading', { name: /my practices/i })).toBeInTheDocument()
   })
 })
@@ -1364,5 +1392,110 @@ describe('the drill keyboard while the menu is open', () => {
     await user.keyboard('n')
 
     expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+  })
+})
+
+/**
+ * The two squares that DO something (013).
+ *
+ * Everything else on home is a route, and routes are covered by the menu tests above.
+ * These two deal a drill, which means they have to agree with the pool they were counted
+ * from and be recorded as the kind of run they actually are — neither of which is visible
+ * on the tile itself.
+ */
+describe('the home screen tiles that start a drill', () => {
+  /** One finished run over `seeded`, with `wrong` missed, written straight to the repo. */
+  const seedRun = (over: Partial<Parameters<typeof sessionRepo.add>[0]> = {}) =>
+    sessionRepo.add({
+      id: 'run1',
+      listId: seeded.id,
+      listName: seeded.name,
+      right: 1,
+      wrong: 1,
+      total: 2,
+      pct: 50,
+      wrongPairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
+      rightPairs: [{ id: 'p2', col1: 'son', col2: 'zoon' }],
+      finishedAt: Date.now() - 1000,
+      mode: 'full',
+      partial: false,
+      ...over,
+    })
+
+  it('opens the ready screen for the list you practised last (FR-9)', async () => {
+    listRepo.save(seeded)
+    seedRun()
+    const user = userEvent.setup()
+    renderApp()
+
+    expect(screen.getByRole('button', { name: /^practice/i })).toHaveTextContent('Lesson 3')
+    await user.click(screen.getByRole('button', { name: /^practice/i }))
+
+    // The ready screen, not a drill: it owns the mode choice and the missed chips.
+    expect(screen.getByRole('button', { name: /^test$/i })).toBeInTheDocument()
+    expect(screen.getByText(/lesson 3/i)).toBeInTheDocument()
+  })
+
+  /*
+   * A list deleted since its last drill must not be offered.
+   *
+   * `PRACTISE_LIST` would land on a ready screen for words that no longer exist, and the
+   * history record outlives the list on purpose (that is why `listName` is denormalised).
+   */
+  it('offers no target when the last practised list is gone (FR-9)', () => {
+    seedRun()
+    renderApp()
+    expect(screen.getByRole('button', { name: /^practice/i })).toHaveTextContent(/pick a list/i)
+  })
+
+  it('deals exactly the words the tile counted, and records them as wrong-only (FR-13, FR-14)', async () => {
+    listRepo.save(seeded)
+    seedRun()
+    const user = userEvent.setup()
+    renderApp()
+
+    // One word was missed, so that is what the tile promises and what the drill deals.
+    const tile = screen.getByRole('button', { name: /^fix your misses/i })
+    expect(tile).toHaveTextContent('1 word')
+    await user.click(tile)
+    expect(screen.getByText(/card 1 of 1/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+
+    /*
+     * THE assertion this whole describe exists for.
+     *
+     * A misses drill is a harder subset and must not flatter the average. Before 013
+     * `START_RUN` had no run-kind branch at all and fell through to the PREVIOUS drill's
+     * mode, so this record's `mode` depended on what the user happened to do last.
+     */
+    const written = sessionRepo.getAll().find((r) => r.id !== 'run1')
+    expect(written?.mode).toBe('wrong-only')
+  })
+
+  it('has nothing to fix once the missed word has been answered right (FR-11)', () => {
+    listRepo.save(seeded)
+    // A later run got the same word right, so it is no longer still-missed (006).
+    seedRun()
+    sessionRepo.add({
+      id: 'run2',
+      listId: seeded.id,
+      listName: seeded.name,
+      right: 1,
+      wrong: 0,
+      total: 1,
+      pct: 100,
+      wrongPairs: [],
+      rightPairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
+      finishedAt: Date.now(),
+      mode: 'full',
+      partial: false,
+    })
+    renderApp()
+
+    const tile = screen.getByRole('button', { name: /^fix your misses/i })
+    expect(tile).toBeDisabled()
+    expect(tile).toHaveTextContent(/nothing to fix/i)
   })
 })

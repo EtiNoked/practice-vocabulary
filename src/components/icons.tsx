@@ -82,6 +82,46 @@ export function GamesIcon() {
   )
 }
 
+/**
+ * A speech bubble with a soundwave — hear a word, say the answer.
+ *
+ * Deliberately not a play triangle. This drill is spoken: the prompt is a voice and the
+ * answer is out loud, which is the one thing about it a new user does not expect. A play
+ * button would promise a video.
+ *
+ * Distinct from `PracticesIcon` below on purpose (013 D-10). That one is bars on a
+ * baseline — scores over time, which is the HISTORY of practising — and reusing it for
+ * the verb would put the same glyph on a tile that starts a drill and a menu item that
+ * lists old ones.
+ */
+export function PracticeIcon() {
+  return (
+    <Glyph>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
+      {/* A soundwave inside the bubble: three bars, tallest in the middle. */}
+      <path d="M8.5 10v3M12 8.5v5M15.5 10v3" />
+    </Glyph>
+  )
+}
+
+/**
+ * A tick inside a coming-round-again arrow — these words, asked once more, right this
+ * time.
+ *
+ * Not a cross and not an eraser. The tile deals words the user got WRONG, but what it
+ * offers is the chance to get them right, and a screen full of crosses is a scolding
+ * rather than an invitation.
+ */
+export function FixIcon() {
+  return (
+    <Glyph>
+      <path d="M21 12a9 9 0 1 1-9-9c2.4 0 4.7.9 6.4 2.6L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="m8.5 11.5 2.5 2.5 4.5-4.5" />
+    </Glyph>
+  )
+}
+
 /** Bars on a baseline — scores over time. */
 export function PracticesIcon() {
   return (
