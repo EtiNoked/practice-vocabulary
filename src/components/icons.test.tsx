@@ -1,7 +1,16 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ReactElement } from 'react'
-import { GamesIcon, HomeIcon, ListsIcon, MenuIcon, PracticesIcon, TestsIcon } from './icons'
+import {
+  FixIcon,
+  GamesIcon,
+  HomeIcon,
+  ListsIcon,
+  MenuIcon,
+  PracticeIcon,
+  PracticesIcon,
+  TestsIcon,
+} from './icons'
 
 /** The module's own source, the way `invariants.test.ts` reads sources. */
 const iconSource = (
@@ -28,6 +37,13 @@ const ICONS = {
   GamesIcon,
   PracticesIcon,
   MenuIcon,
+  /*
+   * 013's two verbs. `PracticesIcon` above is bars on a baseline — scores over time,
+   * which is history and not the act — so the home screen's Practice tile needs a glyph
+   * of its own rather than borrowing one that means something else.
+   */
+  PracticeIcon,
+  FixIcon,
 } as const
 
 const svgOf = (Icon: () => ReactElement) => {

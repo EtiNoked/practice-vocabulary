@@ -424,11 +424,21 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
      * and a guard that names where a collection USED to live is the same defect wearing a
      * different screen name. `appMachine.test.ts` now asserts both halves.
      *
+     * `home` is back since 013, and NOT because the collection moved back. Home's fourth
+     * tile deals a pool run of its own — the words you are still getting wrong — built by
+     * `App.startRun` exactly as a saved test is. The rule this guard encodes has not
+     * changed; the list of screens that can legitimately deal a run has.
+     *
      * Named screens rather than "anywhere": the point of the guard is that a run cannot
      * start on top of a drill or a game already in flight.
      */
     case 'START_RUN':
-      if (state.screen !== 'testSetup' && state.screen !== 'tests') return state
+      if (
+        state.screen !== 'testSetup' &&
+        state.screen !== 'tests' &&
+        state.screen !== 'home'
+      )
+        return state
       return {
         screen: 'practising',
         run: action.run,
