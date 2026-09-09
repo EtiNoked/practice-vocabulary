@@ -220,7 +220,24 @@ export function listOptions(
   })
 }
 
-/** Project down to plain pairs, for a caller that has no use for the origin. */
+/**
+ * Project down to plain pairs, for a caller that has no use for the origin.
+ *
+ * **No production caller yet.** Written in 008 for a convergence 008 itself deferred:
+ * folding 006's per-list missed selection onto `buildWordPool`, at which point its
+ * `toDrillPairs` becomes this (008 spec § Out of scope). Deferred so 006's untouched
+ * suite could stay the regression net for the `MissSource` widening. It has not landed.
+ *
+ * Meanwhile the same projection is written out twice more, over carriers that are
+ * `PooledWord` in all but name: `runPairs` (drillRun.ts:142), whose body is identical to
+ * this one, and `buildGameRecord` (gameRecord.ts:87), which does it per item inside its
+ * loop. This is the module-level one — route the next caller through it rather than
+ * writing a fourth copy. (`runFromList` at drillRun.ts:77 is the INVERSE — it adds the
+ * origin. Not a copy of this, and not a candidate for it.)
+ *
+ * Deleting it also costs a test edit: wordPool.test.ts asserts this module's export
+ * surface by exact name list, and `toPairs` is in it.
+ */
 export function toPairs(words: readonly PooledWord[]): WordPair[] {
   return words.map((w) => ({ id: w.id, col1: w.col1, col2: w.col2 }))
 }
