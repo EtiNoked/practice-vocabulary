@@ -4,8 +4,16 @@ import type { DrillMode, MarkResult, Score, Session, WordPair } from './types'
 export type Rng = () => number
 
 /**
- * Small deterministic PRNG (mulberry32). Used by tests and by "shuffle & restart",
- * which wants a fresh order each time but no cryptographic quality.
+ * Small deterministic PRNG (mulberry32). **Test-only** — 98 call sites across nine test
+ * files, and nothing in `src/` outside this definition.
+ *
+ * "Shuffle & restart" does NOT use it, though this comment used to say so. Every
+ * production shuffle arrives through `reduce`'s default argument, which is `randomRng`
+ * (appMachine.ts:229), and no call site overrides it. A seeded restart would deal the
+ * same order every time — the opposite of what that button promises.
+ *
+ * Keep it exported. Determinism is what makes the shuffle, `runFromPool`'s draw and the
+ * game's distractor cloud testable at all.
  */
 export function seededRng(seed: number): Rng {
   let a = seed >>> 0
@@ -18,6 +26,7 @@ export function seededRng(seed: number): Rng {
   }
 }
 
+/** The production source. A fresh order each time, and no cryptographic quality needed. */
 export const randomRng: Rng = Math.random
 
 /**
