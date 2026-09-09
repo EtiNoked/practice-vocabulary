@@ -58,8 +58,9 @@ describe('normalizeRows', () => {
     expect(normalizeRows([row('a', 'b', 42)])[0]?.conf).toBe(42)
   })
 
-  // The property that keeps the v2 OCR seam free: v1 never sets conf, and a row
-  // without it must never be treated as low-confidence.
+  // The property that keeps the v2 OCR seam free: v1 never sets conf, and
+  // normalize must not invent it — absent, not undefined, so the field stays
+  // safe to write through stripUndefined at the Firestore boundary.
   it('leaves conf absent when the source never set it', () => {
     expect(normalizeRows([row('a', 'b')])[0]).not.toHaveProperty('conf')
   })

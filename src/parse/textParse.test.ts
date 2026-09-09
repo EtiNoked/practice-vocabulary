@@ -109,7 +109,7 @@ describe('parseDelimited', () => {
     expect(parseDelimited(fx.WHITESPACE_ONLY, 'tab')).toEqual([])
   })
 
-  it('never sets conf, so v1 rows are never flagged low-confidence', () => {
+  it('never sets RawRow.conf — OCR is the only source that would', () => {
     expect(parseDelimited(fx.TAB_SIMPLE, 'tab')[0]).not.toHaveProperty('conf')
   })
 })
