@@ -9,11 +9,28 @@
 > and the inverse discipline is stricter than 014's: **no test file is opened, no test count moves
 > (1417 → 1417), and no non-comment line appears in `git diff`.**
 >
-> Every task ends with the same structural check, abbreviated below as **COMMENT-ONLY**:
+> Every task ends with the same structural check, abbreviated below as **COMMENT-ONLY**: strip the
+> comments from the `main` version and from the working version, then diff what is left.
 > ```bash
-> git diff -U0 -- <file> | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vE '^[+-]\s*(\*|/\*\*?|\*/)'
+> strip() { node -e 'const t=require("fs").readFileSync(0,"utf8");let b=false,o=[];
+> for(const l of t.split("\n")){let s="",i=0;while(i<l.length){
+>  if(b){const e=l.indexOf("*/",i);if(e<0){i=l.length}else{b=false;i=e+(l[e+2]==="}"?3:2)}continue}
+>  if(l.startsWith("{/*",i)){b=true;i+=3;continue}
+>  if(l.startsWith("/*",i)){b=true;i+=2;continue}
+>  if(l.startsWith("//",i))break; s+=l[i++]}
+>  if(s.trim())o.push(s.trimEnd())} console.log(o.join("\n"))'; }
+> f=src/state/scoreTrend.ts
+> diff <(git show "main:$f" | strip) <(strip < "$f") && echo "✓ code identical"
 > ```
-> **It must print nothing.** One line of output means a code line got into a comment-only commit.
+> **It must report no difference.** One line of output means a code line got into a comment-only
+> commit.
+>
+> **Do NOT use `git diff | grep -v '^[+-]\s*\*'` for this.** It was the original form of this check
+> and it is wrong: shortening a comment block above a function re-anchors the hunk, so git re-emits
+> the *identical* declaration and body lines on both sides and the grep reports them as changes.
+> T1 tripped exactly that (spec **O-1**), and it cannot distinguish a moved block from a real edit —
+> which is the one thing T1 needs distinguished. The naive grep is fine as a quick screen; the
+> comment-stripped diff is the proof.
 >
 > **One commit per task**, all `docs(015):`. Recommended order: T1 → T3 → T2 → T4 → T5 → T6 → T7.
 
@@ -81,6 +98,14 @@
 ### Task 3: REPLACE the false caller claim — `src/state/sessionRecord.ts` + `src/game/gameRecord.ts`
 
 - **IMPLEMENT:** `plan.md` § B. Satisfies **FR-2**, **FR-2a**, **FR-2b**, **D-3**.
+- **COUNT IT FIRST (spec O-3).** The brief says "17-test suite"; it is **13 of the file's 20**. A
+  number going into a comment must be measured (NFR-5):
+  ```bash
+  node -e 'const s=require("fs").readFileSync("src/state/sessionRecord.test.ts","utf8").split("\n");
+  let c=null,h=new Set(),t=0;
+  s.forEach((l,i)=>{if(/^\s{2}it\(/.test(l)){c=i+1;t++} if(c&&/\bbuildSessionRecord\b/.test(l))h.add(c)});
+  console.log(`${h.size} of ${t}`)'   # → 13 of 20
+  ```
 - **Edit 1 — the false statement.** Inner block comment, lines **31-40**. The clause at **34-36**
   ("Kept because 002, 006 and 008 all call it…") is untrue: 011 re-expressed this function through
   `buildRunRecords` and took those callers with it. Replace the block with:
@@ -93,11 +118,12 @@
      * them when it re-expressed this function through it. An earlier version of this
      * comment claimed they called this one; do not restore that.
      *
-     * Kept for its suite, which nothing else can replace: 17 tests in sessionRecord.test.ts,
-     * one of them deep-equal against what a single-list drill stored BEFORE the split, key
-     * for key and carrying no `runId` (sessionRecord.test.ts:171). That assertion is the
-     * proof the split changed nothing for a plain drill — 011 plan R1 names it as the
-     * regression net for the storage half. If it goes red, the split is wrong.
+     * Kept for its suite, which nothing else can replace: 13 of the 20 tests in
+     * sessionRecord.test.ts drive this function, one of them deep-equal against what a
+     * single-list drill stored BEFORE the split, key for key and carrying no `runId`
+     * (sessionRecord.test.ts:171). That assertion is the proof the split changed nothing
+     * for a plain drill — 011 plan R1 names it as the regression net for the storage half.
+     * If it goes red, the split is wrong.
      *
      * `session.pairs` rather than `list.pairs`: after a wrong-only re-run the session holds
      * only the pairs it drilled, and those are the ones being recorded.
@@ -214,10 +240,12 @@
    * `toDrillPairs` becomes this (008 spec § Out of scope). Deferred so 006's untouched
    * suite could stay the regression net for the `MissSource` widening. It has not landed.
    *
-   * Meanwhile the same one-line projection is inlined at three sites, each holding a
-   * different carrier: `runFromList` (drillRun.ts:77), `runPairs` (drillRun.ts:142) and
-   * `buildGameRecord` (gameRecord.ts:87). This is the module-level one — route the next
-   * caller through it rather than writing a fourth copy.
+   * Meanwhile the same projection is written out twice more, over carriers that are
+   * `PooledWord` in all but name: `runPairs` (drillRun.ts:142), whose body is identical to
+   * this one, and `buildGameRecord` (gameRecord.ts:87), which does it per item inside its
+   * loop. This is the module-level one — route the next caller through it rather than
+   * writing a fourth copy. (`runFromList` at drillRun.ts:77 is the INVERSE — it adds the
+   * origin. Not a copy of this, and not a candidate for it.)
    *
    * Deleting it also costs a test edit: wordPool.test.ts asserts this module's export
    * surface by exact name list, and `toPairs` is in it.
@@ -225,8 +253,12 @@
   ```
 - **KEEP:** the module header (lines 5-27) untouched, and every other export. The header's
   "no `count`, and no sampling" contract is unrelated to this function.
-- **GOTCHA:** do not act on the duplication this comment documents. Collapsing the three inlined
-  projections is a behaviour-touching refactor and is out of scope (plan **R5**).
+- **GOTCHA — check the direction of each site before citing it (spec O-4).** `plan.md` § D listed
+  three copies. There are two: `runFromList` (drillRun.ts:77) projects `WordPair → PooledWord` and
+  **adds** the origin — the inverse of this function. The comment names the exclusion, because that
+  line is exactly what a reader would otherwise "converge".
+- **GOTCHA:** do not act on the duplication this comment documents. Collapsing the two real twins
+  is a behaviour-touching refactor and is out of scope (plan **R5**).
 - **VALIDATE:**
   ```bash
   npm run typecheck && npm run lint && npx vitest run src/state/wordPool.test.ts
@@ -243,7 +275,7 @@
 
   ```ts
   /**
-   * Small deterministic PRNG (mulberry32). **Test-only** — 90+ call sites across nine test
+   * Small deterministic PRNG (mulberry32). **Test-only** — 98 call sites across nine test
    * files, and nothing in `src/` outside this definition.
    *
    * "Shuffle & restart" does NOT use it, though this comment used to say so. Every
@@ -262,7 +294,7 @@
   export const randomRng: Rng = Math.random
   ```
 - **KEEP:** `Rng`'s comment at line 3, `seededRng`'s body byte for byte (it is a PRNG — one changed
-  constant is a different sequence and 90+ pinned assertions), and `shuffle`'s doc block below.
+  constant is a different sequence and 98 pinned assertions), and `shuffle`'s doc block below.
 - **GOTCHA:** the evidence is in the spec, but re-run it at HEAD before writing the claim — if a
   future branch wires a seed through, this comment becomes the stale one:
   ```bash
@@ -283,17 +315,12 @@
 ### Task 7: VERIFY the whole change is comment-only and every citation resolves
 
 - **IMPLEMENT:** the spec's *Definition of done*. Satisfies **FR-6**, **NFR-1** … **NFR-5**.
-- **Structural — no code moved.** Across all six files at once:
-  ```bash
-  git diff main -- '*.ts' '*.tsx' | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' \
-    | grep -vE '^[+-]\s*(\*|/\*\*?|\*/|\{/\*|\*/\})'
-  ```
-  **Expected: no output.** Anything printed is a code line and the commit it came from must be
-  amended.
+- **Structural — no code changed.** Run **COMMENT-ONLY** (top of this file) over all seven files
+  with `main` as the base. **Expected: seven ✓.** *Result: 7 ✓, 614 code lines identical.*
 - **No test file touched (NFR-2):**
   ```bash
   git diff --name-only main | grep -E '\.test\.(ts|tsx)$'   # expect no output
-  git diff --stat main                                       # expect exactly 6 files
+  git diff --stat main -- src                                # expect 7 files (spec O-2)
   ```
 - **Gates (NFR-1):**
   ```bash

@@ -1,7 +1,7 @@
 # Spec: Repair the comments on five test-only exports
 
 **ID:** 015-stale-comment-repair
-**Status:** PLANNED
+**Status:** IMPLEMENTED — `chore/stale-comment-repair`, 8 commits, all gates green. See § *Outcome*.
 **Created:** 2026-09-09
 **Baseline:** `main` @ `27dc31c` (`Chore/dead code removal (#15)`) — 71 test files, **1417 tests, all
 green**, `typecheck` and `lint` clean (verified, not assumed — full run at 14:37, 11.84s)
@@ -153,9 +153,59 @@ Named so they are decisions rather than oversights:
 
 ## Definition of done
 
-- [ ] All six files edited; `git diff` contains **no non-comment line**.
-- [ ] `npm test` → 1417 passed, 71 files. `npm run typecheck` → clean. `npm run lint` → clean.
-- [ ] Every `grep` in the verification table re-run at HEAD and still returning the same counts.
-- [ ] No comment in `src/` names `trend()`, `buildSessionRecord`, `parseText`, `toPairs` or
+- [x] All seven files edited; the code is **identical with comments stripped** (see O-1).
+- [x] `npm test` → 1417 passed, 71 files. `npm run typecheck` → clean. `npm run lint` → clean.
+- [x] Every `grep` in the verification table re-run at HEAD and still returning the same counts.
+- [x] No comment in `src/` names `trend()`, `buildSessionRecord`, `parseText`, `toPairs` or
       `seededRng` as something production calls.
-- [ ] Every file:line citation added by this change verified to resolve.
+- [x] Every file:line citation added by this change verified to resolve.
+
+---
+
+## Outcome
+
+| | Planned | Actual |
+|---|---|---|
+| Commits | 7 + spec | **8** (spec, T1, T3, T2, T4, T5, T6, outcome) |
+| Files touched in `src/` | "exactly 6" | **7** — the spec's own arithmetic was wrong (O-2) |
+| Tests | 1417 / 71 files, unchanged | **1417 / 71** ✓ |
+| `typecheck` / `lint` | clean | clean ✓ |
+| `check:bundle` | unchanged from 014's close | **88.6 KB JS / 166.5 KB total** — identical ✓ |
+| Net lines in `src/` | comments only | **+82 / −18**, every line a comment ✓ |
+| Test files opened | none | **none** ✓ |
+
+Zero code lines changed: verified per file by stripping comments from both the `main` version and
+the working version and diffing the remainder — 614 code lines across the seven files, identical.
+
+### Four things execution found that the plan had wrong
+
+Each was checked because the number or claim was about to be written *into a comment*, which NFR-5
+forbids doing unverified. All four corrections landed in the comments themselves.
+
+- **O-1 — the plan's own comment-only check gives a false positive on a block move.** `plan.md`
+  **R1** prescribed `git diff -U0 | grep -vE '^[+-]\s*(\*|/\*\*|\*/)'`. On T1 it printed four
+  `+`/`-` pairs — `export function trend(...)`, its body and its closing brace — because shortening
+  the block above a function re-anchors the hunk and git re-emits *identical* code lines on both
+  sides. The check cannot distinguish that from a real edit, and T1 was the one task where R1 said
+  a slip would be invisible. Replaced with the definitive form: strip comments from both versions
+  and diff the remainder. `tasks.md` now carries it.
+- **O-2 — seven files, not six.** `scoreTrend.ts`, `Home.tsx`, `sessionRecord.ts`, `gameRecord.ts`,
+  `textParse.ts`, `wordPool.ts`, `session.ts`. Every one is covered by an FR; only the count was
+  wrong. (014 recorded the same class of slip.)
+- **O-3 — B2's suite is 13 tests, not 17.** The brief said 17. Counted by walking `it()` blocks:
+  `sessionRecord.test.ts` holds **20** tests, **13** of which call `buildSessionRecord` (lines 44,
+  49, 54, 60, 67, 74, 79, 87, 93, 98, 121, 140, 171). The comment says "13 of the 20".
+- **O-4 — `toPairs` has two twins, not three, and one plan citation was the inverse function.**
+  `plan.md` § D listed `runFromList` (drillRun.ts:77) alongside `runPairs` (drillRun.ts:142) and
+  `buildGameRecord` (gameRecord.ts:87). `runFromList` projects `WordPair → PooledWord` — it **adds**
+  the origin. It is the inverse of `toPairs`, not a copy. The comment states both the two real
+  twins and this exclusion, because drillRun.ts:77 is exactly the line a reader would otherwise
+  mistake for a third copy and "converge".
+
+### D-1 held up
+
+The brief's one cleared item was the one that needed an edit. All three checks re-run at HEAD before
+the claim was written: `seededRng` has **0** production references, `grep -n "rng" src/App.tsx`
+returns nothing, `reduce`'s default is `randomRng` ([appMachine.ts:229](src/state/appMachine.ts#L229)),
+and `git log -S` still shows the single first commit. The counts in the comment are measured: **98
+call sites across nine test files**.

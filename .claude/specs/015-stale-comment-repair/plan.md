@@ -21,7 +21,7 @@ graph LR
     Panel["PastePanel.tsx:31,34"] --> DD["detectDelimiter()"]
     Panel --> PD["parseDelimited()"]
     Red["reduce() default arg<br/>appMachine.ts:229"] --> RND["randomRng"]
-    Inl["runFromList · runPairs<br/>buildGameRecord"] --> PROJ["inline id/col1/col2"]
+    Inl["runPairs · buildGameRecord"] --> PROJ["longhand id/col1/col2"]
   end
 
   subgraph test["Test-only surface — all five KEPT"]
@@ -102,13 +102,19 @@ delimiter would re-run detection for a value the panel throws away.
 Not a stale comment so much as a **missing provenance**. 008's spec § *Out of scope* records the
 convergence this function was written for ("`toDrillPairs` becomes `toPairs`"), deferred so 006's
 untouched suite could stay the regression net for the `MissSource` widening. That follow-up never
-landed, so `toPairs` has been waiting for its caller since 008 while three sites inlined the same
-projection.
+landed, so `toPairs` has been waiting for its caller since 008 while two other sites wrote the same
+projection out longhand: `runPairs` (drillRun.ts:142), body-identical, and `buildGameRecord`
+(gameRecord.ts:87), per item inside its loop.
 
 The repaired comment states all of it and ends with a directive — route the next caller through
 this one rather than writing a fourth copy — which converts a dead export into a designated
 convergence point. It also records the export-surface assertion, so a future dead-code sweep sees
 the test cost before it starts.
+
+> **Corrected during execution (spec O-4).** This section first listed `runFromList`
+> (drillRun.ts:77) as a third copy. It is not: it projects `WordPair → PooledWord` and **adds** the
+> origin — the inverse of `toPairs`. The landed comment names that exclusion, because drillRun.ts:77
+> is precisely the line a reader would otherwise try to "converge".
 
 ### E · B5 — `src/state/session.ts` (FR-5, FR-5a) — the brief's exception
 
@@ -125,11 +131,11 @@ a seeded restart deals the same order twice.
 
 | ID | Risk | Mitigation |
 |---|---|---|
-| **R1** | **A comment edit becomes a code edit.** B1 moves a 16-line block between two adjacent functions; a slipped brace or a swapped body is a silent behaviour change with no failing test — both functions return `Trend \| null` and the wrong one still compiles. | The block moves **between** the two declarations; neither declaration line is in the diff. Verify with `git diff -U0 -- src/state/scoreTrend.ts \| grep -E '^[+-]' \| grep -vE '^[+-]\s*(\*\|/\*\*\|\*/)'` → must print only the `+++`/`---` headers. Same check per file in every task. |
+| **R1** | **A comment edit becomes a code edit.** B1 moves a 16-line block between two adjacent functions; a slipped brace or a swapped body is a silent behaviour change with no failing test — both functions return `Trend \| null` and the wrong one still compiles. | Strip the comments from the `main` version and from the working version, then diff the remainder — see `tasks.md` § **COMMENT-ONLY**. **Materialised, and the original mitigation was itself wrong (spec O-1):** this cell first prescribed `git diff \| grep -vE '^[+-]\s*\*'`, which reported T1's *identical, re-anchored* declaration and body lines as changes. It cannot tell a moved block from a real edit — the one thing R1 needs told apart. Result across the seven files: 614 code lines, identical. |
 | **R2** | **A new citation is wrong on arrival.** This change writes ~12 new file:line references. NFR-4 exists because a wrong one is the same defect being fixed. | Final gate re-resolves every citation with `sed -n` before commit (tasks.md T7). Prefer symbol names over line numbers wherever the symbol is unique in its file. |
 | **R3** | **The keep-reason reads as an apology and the next sweep deletes it anyway.** "No production caller" is the first thing a dead-code hunter greps for. | Every one of the five comments states the keep-reason *in the same paragraph* as the absence, and B2/B4 name the specific test that goes red. B4 additionally names the export-surface assertion. |
 | **R4** | **`toPairs`'s directive ages badly** if the 008 convergence lands and inlines it anyway. | The comment cites 008's out-of-scope entry rather than asserting a schedule, so it stays true whether the convergence lands or not. |
-| **R5** | **Scope creep into the three inlined projections** while writing B4's comment (D-2's temptation, and a real DRY finding). | Spec § *Out of scope* names it. The comment documents the duplication; the PR does not touch it. |
+| **R5** | **Scope creep into the twin projections** while writing B4's comment (D-2's temptation, and a real DRY finding). | Spec § *Out of scope* names it. The comment documents the duplication; the PR does not touch it. Held. |
 | **R6** | **`oxlint` or `tsc` object to a moved JSDoc block.** Unlikely — neither lints comment placement — but a `/** */` left orphaned above nothing would trip `tsc` only in exotic cases. | Every task's VALIDATE runs `typecheck` + `lint`, not just the local test file. |
 
 ---
@@ -146,6 +152,7 @@ a seeded restart deals the same order twice.
 
 ## Commit sequence
 
-Seven commits on `chore/stale-comment-repair`, all `docs(015):`. T1-T6 are order-independent (`[P]`);
-T7 is the gate. Suggested order puts the two substantive ones first, so a reviewer reads the moved
-block and the false claim before six small rewords: **T1 → T3 → T2 → T4 → T5 → T6 → T7.**
+Eight commits on `chore/stale-comment-repair`, all `docs(015):` — the spec artifacts, T1-T6, and the
+outcome. T1-T6 are order-independent (`[P]`); T7 is the gate and produced no `src/` change. The
+order puts the two substantive repairs first, so a reviewer reads the moved block and the false
+claim before four small rewords: **T1 → T3 → T2 → T4 → T5 → T6 → T7.** *Landed in that order.*
