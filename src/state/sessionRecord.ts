@@ -16,6 +16,9 @@ export const MAX_RIGHT_PAIRS = 300
 /**
  * Build the log entry for a finished drill.
  *
+ * The one-list form, and test-only — see the note in the body. The live path is
+ * `buildRunRecords` below.
+ *
  * A pure function, kept OUT of appMachine.ts on purpose: the reducer must stay
  * free of side effects, and the write itself belongs to the component that owns
  * the store. This is just the shaping step, so it stays unit-testable.
@@ -31,9 +34,16 @@ export function buildSessionRecord(
   /*
    * The ONE-LIST case of `buildRunRecords`, not a second implementation of it.
    *
-   * Kept because 002, 006 and 008 all call it, and because its existing suite is the
-   * proof that splitting a run into per-list records did not change what a plain drill
-   * stores. If that suite goes red, the split is wrong.
+   * NO PRODUCTION CALLER. 002, 006 and 008 all reach `buildRunRecords` now — 011 moved
+   * them when it re-expressed this function through it. An earlier version of this
+   * comment claimed they called this one; do not restore that.
+   *
+   * Kept for its suite, which nothing else can replace: 13 of the 20 tests in
+   * sessionRecord.test.ts drive this function, one of them deep-equal against what a
+   * single-list drill stored BEFORE the split, key for key and carrying no `runId`
+   * (sessionRecord.test.ts:171). That assertion is the proof the split changed nothing
+   * for a plain drill — 011 plan R1 names it as the regression net for the storage half.
+   * If it goes red, the split is wrong.
    *
    * `session.pairs` rather than `list.pairs`: after a wrong-only re-run the session holds
    * only the pairs it drilled, and those are the ones being recorded.

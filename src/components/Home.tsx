@@ -125,8 +125,9 @@ export function Home({
 
         The average first, because it is the only thing on this screen that says how it is
         GOING rather than what happened once. Below two full runs there is no average —
-        `trend()` returns null — and a user who has just finished their first drill would
-        otherwise read a greeting, four squares and no mention of it.
+        `trendOfRuns` returns null and `average` arrives here as null (App.tsx:363) — and a
+        user who has just finished their first drill would otherwise read a greeting, four
+        squares and no mention of it.
 
         Three states, like every other surface in this app. A brief that says "Nothing
         practised yet" to a signed-in user whose data is still arriving reads as an account

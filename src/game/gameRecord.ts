@@ -6,7 +6,7 @@ import type { WordPair } from '../state/types'
 /**
  * Shape a finished game into its log entry.
  *
- * Pure, and kept out of the reducer for the reason `buildSessionRecord` is: the reducer
+ * Pure, and kept out of the reducer for the reason `buildRunRecords` is: the reducer
  * must stay free of side effects, and the write itself belongs to whoever owns the store.
  * This is only the shaping step, so it stays unit-testable.
  *
