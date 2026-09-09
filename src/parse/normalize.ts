@@ -1,8 +1,5 @@
 import type { RawRow } from './types'
 
-/** Below this OCR confidence a row is flagged for review. Unused in v1. */
-export const LOW_CONFIDENCE = 60
-
 /**
  * Characters that are table-drawing artifacts rather than content. Deliberately
  * narrow: column 2 holds whole sentences, so stripping trailing punctuation in
@@ -38,9 +35,4 @@ export function isComplete(row: RawRow): boolean {
 
 export function countComplete(rows: readonly RawRow[]): number {
   return rows.reduce((n, row) => (isComplete(row) ? n + 1 : n), 0)
-}
-
-/** True when OCR confidence is known and poor. Always false in v1. */
-export function isLowConfidence(row: RawRow): boolean {
-  return row.conf !== undefined && row.conf < LOW_CONFIDENCE
 }
