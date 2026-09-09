@@ -516,7 +516,18 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
     case 'GO_HOME':
       return { screen: 'home' }
 
+    /*
+     * Unreachable: every AppAction variant above returns. `satisfies never` is what
+     * keeps it that way — add a variant without a case and this line stops compiling
+     * (TS1360) instead of silently falling through to a no-op that looks deliberate.
+     *
+     * Not `const _exhaustive: never = action`, the usual spelling of this: that
+     * declares a local nothing reads, which `noUnusedLocals` rejects. `satisfies`
+     * binds nothing and erases to nothing, so `return state` below is still the only
+     * runtime behaviour here.
+     */
     default:
+      action satisfies never
       return state
   }
 }

@@ -20,11 +20,6 @@ function synth(): SpeechSynthesis | null {
   return typeof globalThis.speechSynthesis === 'undefined' ? null : globalThis.speechSynthesis
 }
 
-/** True when the browser can speak at all. */
-export function isSupported(): boolean {
-  return synth() !== null
-}
-
 /**
  * Resolve the device's voice list, coping with Chrome's empty first call.
  *
@@ -55,11 +50,6 @@ export function loadVoices(timeoutMs = 3000): Promise<SpeechSynthesisVoice[]> {
     const timer = setTimeout(() => finish(speech.getVoices()), timeoutMs)
     speech.addEventListener('voiceschanged', onChange)
   })
-}
-
-/** The voices most recently loaded. Empty until loadVoices() resolves. */
-export function getCachedVoices(): SpeechSynthesisVoice[] {
-  return cachedVoices
 }
 
 /**

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { LangCode } from '../lang/languages'
-import { hasVoiceFor, loadVoices } from './tts'
+import { loadVoices } from './tts'
 
 export interface VoicesState {
   voices: SpeechSynthesisVoice[]
@@ -29,10 +28,4 @@ export function useVoices(): VoicesState {
   }, [])
 
   return state
-}
-
-/** Convenience for the missing-voice banner. Reports false until voices load. */
-export function useHasVoice(lang: LangCode): { available: boolean; ready: boolean } {
-  const { voices, ready } = useVoices()
-  return { available: ready && hasVoiceFor(lang, voices), ready }
 }
