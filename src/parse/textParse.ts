@@ -162,7 +162,22 @@ export function parseDelimited(text: string, delimiter: Delimiter): RawRow[] {
   })
 }
 
-/** Detect and parse in one step. Pass `override` to force a delimiter. */
+/**
+ * Detect and parse in one step. Pass `override` to force a delimiter.
+ *
+ * **No production caller, and `PastePanel` is not one on purpose.** The panel calls
+ * `detectDelimiter` and `parseDelimited` itself because it RENDERS the detection: the
+ * delimiter select shows what auto-detection chose (PastePanel.tsx:77), and the
+ * "couldn't tell" hint shows `confidence` against `CONFIDENCE_FLOOR`
+ * (PastePanel.tsx:103-108). Overridden, this function reports `confidence: 1` and the
+ * override as the delimiter — the real detection is gone. It also fuses two memos with
+ * different dependencies (`[text]` for detection, `[text, active]` for rows), so
+ * changing the delimiter would re-run detection for a value the panel discards.
+ *
+ * So: fine for a caller that wants the guess and the rows and nothing else — an import
+ * route, a CLI — and driven as the composed contract by textParse.test.ts:117-133.
+ * Do NOT "simplify" the panel's two calls onto it.
+ */
 export function parseText(
   text: string,
   override?: Delimiter,
