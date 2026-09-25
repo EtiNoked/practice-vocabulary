@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { WordList } from '../state/types'
+import type { ListMember, WordList } from '../state/types'
 import { SavedLists } from './SavedLists'
 
 const list: WordList = {
@@ -108,5 +108,75 @@ describe('the practice line', () => {
     // <a> is not focusable.
     withPractices(() => ({ count: 3, lastPct: 67 }))
     expect(screen.getByRole('button', { name: /3 practices/i }).tagName).toBe('BUTTON')
+  })
+})
+
+/** Sharing on the row (016 Story 4): who else is in it, and what this person may do. */
+describe('sharing', () => {
+  const member = (role: ListMember['role'], name: string, joinedAt: number): ListMember => ({
+    role,
+    displayName: name,
+    email: null,
+    photoURL: null,
+    joinedAt,
+  })
+
+  const shared: WordList = {
+    ...list,
+    sharing: {
+      ownerUid: 'eti',
+      memberUids: ['eti', 'dana'],
+      members: { eti: member('owner', 'Eti', 1), dana: member('viewer', 'Dana', 2) },
+      updatedBy: 'eti',
+    },
+  }
+
+  const renderShared = (props: Partial<Parameters<typeof SavedLists>[0]>) => {
+    const handlers = {
+      onPractise: vi.fn(),
+      onEdit: vi.fn(),
+      onRename: vi.fn(),
+      onDelete: vi.fn(),
+    }
+    render(<SavedLists lists={[shared]} {...handlers} {...props} />)
+    return { ...handlers, user: userEvent.setup() }
+  }
+
+  it('marks a list the owner shares, and lets them share it', async () => {
+    const onShare = vi.fn()
+    const { user } = renderShared({ uid: 'eti', onShare })
+    expect(screen.getByText('Shared')).toBeInTheDocument()
+    expect(screen.getByLabelText('Shared with 2 people')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Share' }))
+    expect(onShare).toHaveBeenCalledWith(shared)
+  })
+
+  it('gives a viewer practice only, and a way to see members and leave', async () => {
+    const onShare = vi.fn()
+    const { user } = renderShared({ uid: 'dana', onShare })
+    expect(screen.getByText('Can practise')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Practise' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument()
+    // A member leaves a shared list; deleting it is the owner's call.
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Members' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Leave…' }))
+    expect(onShare).toHaveBeenCalledWith(shared)
+  })
+
+  it('offers a guest sign-in in place of Share', async () => {
+    const onSignInToShare = vi.fn()
+    const { user } = renderShared({ lists: [list], onSignInToShare })
+    await user.click(screen.getByRole('button', { name: 'Sign in to share' }))
+    expect(onSignInToShare).toHaveBeenCalled()
+  })
+
+  it('changes nothing for a list that has never been shared, where sharing does not exist', () => {
+    renderShared({ lists: [list] })
+    expect(screen.queryByText('Shared')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Practise', 'Edit', 'Rename', 'Delete'])
   })
 })
