@@ -64,86 +64,49 @@ const asAlice = () => testEnv.authenticatedContext(ALICE).firestore()
 const asBob = () => testEnv.authenticatedContext(BOB).firestore()
 const asAnon = () => testEnv.unauthenticatedContext().firestore()
 
-describe('lists — the owner', () => {
-  it('can create, read, update and delete their own list', async () => {
-    const db = asAlice()
-    const ref = doc(db, `users/${ALICE}/lists/l1`)
-    await assertSucceeds(setDoc(ref, aList))
-    await assertSucceeds(getDoc(ref))
-    await assertSucceeds(setDoc(ref, { ...aList, name: 'Renamed' }))
-    await assertSucceeds(deleteDoc(ref))
-  })
+/*
+ * The legacy per-user lists collection (016). Every cloud list now lives in the top-level
+ * `lists` collection (tests/rules/lists.rules.test.ts). This one is kept only so the one-time
+ * move can read and empty it, and nothing new may ever be written here.
+ */
+describe('legacy users/{uid}/lists — read and empty only', () => {
+  const seed = () =>
+    testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${ALICE}/lists/l1`), aList)
+    })
 
-  it('can list their own lists collection', async () => {
+  it('lets the owner read, list and delete what is left there', async () => {
+    await seed()
+    await assertSucceeds(getDoc(doc(asAlice(), `users/${ALICE}/lists/l1`)))
     await assertSucceeds(getDocs(collection(asAlice(), `users/${ALICE}/lists`)))
+    await assertSucceeds(deleteDoc(doc(asAlice(), `users/${ALICE}/lists/l1`)))
   })
-})
 
-describe('lists — another signed-in user', () => {
-  it('cannot read them', async () => {
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), `users/${ALICE}/lists/l1`), aList)
-    })
+  it('REFUSES the owner creating a list there', async () => {
+    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/lists/l2`), aList))
+  })
+
+  it('REFUSES the owner updating a list there', async () => {
+    await seed()
+    await assertFails(updateDoc(doc(asAlice(), `users/${ALICE}/lists/l1`), { name: 'Renamed' }))
+  })
+
+  it('REFUSES another user reading, enumerating or deleting them', async () => {
+    await seed()
     await assertFails(getDoc(doc(asBob(), `users/${ALICE}/lists/l1`)))
-  })
-
-  it('cannot enumerate them', async () => {
     await assertFails(getDocs(collection(asBob(), `users/${ALICE}/lists`)))
-  })
-
-  it('cannot write into them', async () => {
-    await assertFails(setDoc(doc(asBob(), `users/${ALICE}/lists/l1`), aList))
-  })
-
-  it('cannot delete them', async () => {
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), `users/${ALICE}/lists/l1`), aList)
-    })
     await assertFails(deleteDoc(doc(asBob(), `users/${ALICE}/lists/l1`)))
   })
-})
 
-describe('lists — an unauthenticated client', () => {
-  it('cannot read anything', async () => {
+  it('REFUSES an unauthenticated client', async () => {
+    await seed()
     await assertFails(getDoc(doc(asAnon(), `users/${ALICE}/lists/l1`)))
-  })
-
-  it('cannot write anything', async () => {
-    await assertFails(setDoc(doc(asAnon(), `users/${ALICE}/lists/l1`), aList))
   })
 
   it('cannot reach an arbitrary unmatched path', async () => {
     // Proves there is no catch-all rule at the root.
     await assertFails(getDoc(doc(asAnon(), 'somethingElse/x')))
     await assertFails(setDoc(doc(asAnon(), 'somethingElse/x'), { a: 1 }))
-  })
-})
-
-describe('lists — size and shape caps', () => {
-  it('rejects a list with more than 500 pairs', async () => {
-    const pairs = Array.from({ length: 501 }, (_, i) => ({ id: `p${i}`, col1: 'a', col2: 'b' }))
-    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/lists/big`), { name: 'Big', pairs }))
-  })
-
-  it('accepts a list with exactly 500 pairs', async () => {
-    const pairs = Array.from({ length: 500 }, (_, i) => ({ id: `p${i}`, col1: 'a', col2: 'b' }))
-    await assertSucceeds(setDoc(doc(asAlice(), `users/${ALICE}/lists/ok`), { name: 'Ok', pairs }))
-  })
-
-  it('rejects an over-long name', async () => {
-    await assertFails(
-      setDoc(doc(asAlice(), `users/${ALICE}/lists/l1`), { ...aList, name: 'x'.repeat(201) }),
-    )
-  })
-
-  it('rejects an empty name', async () => {
-    await assertFails(setDoc(doc(asAlice(), `users/${ALICE}/lists/l1`), { ...aList, name: '' }))
-  })
-
-  it('rejects pairs that are not a list', async () => {
-    await assertFails(
-      setDoc(doc(asAlice(), `users/${ALICE}/lists/l1`), { name: 'x', pairs: 'nope' }),
-    )
   })
 })
 
