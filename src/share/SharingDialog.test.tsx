@@ -255,6 +255,20 @@ describe('sending a link', () => {
   })
 })
 
+describe('copying an existing link', () => {
+  it('copies a waiting link straight from its row, without reopening the share options', async () => {
+    const { user } = renderDialog({ links: [link({ code: 'older-code', label: 'For Noa' })] })
+    await user.click(within(linksList()[0]!).getByRole('button', { name: 'Copy link' }))
+    expect(await navigator.clipboard.readText()).toBe(joinUrl(ORIGIN, 'older-code'))
+    expect(within(linksList()[0]!).getByRole('button', { name: 'Copied ✓' })).toBeInTheDocument()
+  })
+
+  it('offers no copy on a link that no longer works', () => {
+    renderDialog({ links: [link({ declined: true }), link({ code: 'old', createdAt: NOW - LINK_LIFETIME_MS - 1 })] })
+    for (const row of linksList()) expect(within(row).queryByRole('button', { name: 'Copy link' })).toBeNull()
+  })
+})
+
 describe('link statuses', () => {
   it('shows a waiting link with when it was made', () => {
     renderDialog({ links: [link()] })

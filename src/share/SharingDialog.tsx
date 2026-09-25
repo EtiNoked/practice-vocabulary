@@ -86,6 +86,22 @@ function useCopied(): [boolean, () => void] {
   return [copied, () => setCopied(true)]
 }
 
+/** Copies a link and says so for two seconds. The same button wherever a link can be copied. */
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, markCopied] = useCopied()
+  return (
+    <button
+      type="button"
+      className="btn btn-quiet"
+      onClick={() => {
+        void navigator.clipboard?.writeText(url).then(markCopied, () => {})
+      }}
+    >
+      {copied ? 'Copied ✓' : 'Copy link'}
+    </button>
+  )
+}
+
 /**
  * Full screen, for holding a phone up to someone else's camera. Their camera app opens the
  * link; the app has no scanner of its own and needs none.
@@ -144,7 +160,6 @@ function ShareOptions({
   preview: LinkPreview
   onShowQr: () => void
 }) {
-  const [copied, markCopied] = useCopied()
   const message = shareMessage(preview, url)
   const subject = `Practise "${preview.listName}" with me`
 
@@ -190,15 +205,7 @@ function ShareOptions({
         >
           Email
         </a>
-        <button
-          type="button"
-          className="btn btn-quiet"
-          onClick={() => {
-            void navigator.clipboard?.writeText(url).then(markCopied, () => {})
-          }}
-        >
-          {copied ? 'Copied ✓' : 'Copy link'}
-        </button>
+        <CopyLinkButton url={url} />
         <button type="button" className="btn btn-quiet" onClick={onShowQr}>
           Show QR code
         </button>
@@ -395,6 +402,7 @@ function OwnerView({ list, uid, store, online, origin, now, onMessage }: Omit<Pr
                         <button type="button" className="btn btn-quiet" onClick={() => setActive(link)}>
                           Share again
                         </button>
+                        <CopyLinkButton url={joinUrl(origin, link.code)} />
                         <button
                           type="button"
                           className="btn btn-quiet"
