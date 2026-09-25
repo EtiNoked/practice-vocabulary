@@ -184,7 +184,7 @@ describe('requires-recent-login', () => {
     const result = await reauthenticateAndDelete(services)
     expect(result.ok).toBe(false)
     if (!result.ok && result.reason === 'unknown') {
-      expect(result.message).toMatch(/cancelled/i)
+      expect(result.message).toMatch(/canceled/i)
     }
     expect(services.sdk.deleteUser).not.toHaveBeenCalled()
   })

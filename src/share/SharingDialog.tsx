@@ -11,7 +11,7 @@ const MAX_OPEN_LINKS = 10
 const ROLE_LABEL: Record<ListRole, string> = {
   owner: 'Owner',
   editor: 'Can edit',
-  viewer: 'Can practise',
+  viewer: 'Can practice',
 }
 
 interface Props {
@@ -161,7 +161,7 @@ function ShareOptions({
   onShowQr: () => void
 }) {
   const message = shareMessage(preview, url)
-  const subject = `Practise "${preview.listName}" with me`
+  const subject = `Practice "${preview.listName}" with me`
 
   // Only where the device really has a share sheet. Desktop browsers mostly do not, and a
   // button that does nothing is worse than no button: WhatsApp and Email are always there.
@@ -344,7 +344,7 @@ function OwnerView({ list, uid, store, online, origin, now, onMessage }: Omit<Pr
           {(['editor', 'viewer'] as const).map((r) => (
             <label key={r} className="flex items-center gap-2">
               <input type="radio" name="link-role" checked={role === r} onChange={() => setRole(r)} />
-              {r === 'editor' ? 'Edit and practise' : 'Practise only'}
+              {r === 'editor' ? 'Edit and practice' : 'Practice only'}
             </label>
           ))}
         </fieldset>
@@ -479,8 +479,8 @@ function MemberView({ list, uid, store, onClose, onMessage }: Props) {
       <p className="text-sm text-ink-muted">
         {owner?.displayName ?? 'The owner'} shared this list with you.{' '}
         {role === 'viewer'
-          ? 'You can practise it. To change the words, leave and keep a copy of your own.'
-          : 'You can edit and practise it.'}
+          ? 'You can practice it. To change the words, leave and keep a copy of your own.'
+          : 'You can edit and practice it.'}
       </p>
       <MembersSection list={list} uid={uid} isOwner={false} store={store} onMessage={onMessage} />
       <section className="flex flex-col gap-2 border-t border-line pt-3">

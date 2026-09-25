@@ -194,7 +194,7 @@ function TestDone({
           disabled={result.wrongPairs.length === 0}
           className="min-h-11 rounded border border-line-strong disabled:opacity-40"
         >
-          Practise wrong ones only
+          Practice wrong ones only
         </button>
         {/*
           "Study these", not "Practise these".

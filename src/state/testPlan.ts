@@ -78,7 +78,7 @@ export function describeTest(
 
   const howMany =
     available === 0
-      ? 'nothing to practise yet'
+      ? 'nothing to practice yet'
       : plan.count === null || plan.count >= available
         ? // "all 6" rather than "15 of 6": a cap above the pool asks the whole pool, and
           // repeating the saved number would describe a test that cannot happen.

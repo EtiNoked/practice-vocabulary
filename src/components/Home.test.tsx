@@ -128,7 +128,7 @@ describe('a tile with nothing to act on', () => {
    * offering a button that would do nothing. A dead tile in a 2x2 is worse than a
    * redirecting one: the square is a quarter of the screen either way.
    */
-  it('sends Practice to My lists when no list has been practised (FR-9)', async () => {
+  it('sends Practice to My lists when no list has been practiced (FR-9)', async () => {
     const harness = setup({ brief: brief({ practiceTarget: null }) })
     expect(tile(/^practice/i)).toHaveTextContent(/pick a list/i)
     await harness.user.click(tile(/^practice/i))
@@ -173,7 +173,7 @@ describe('where you stand (FR-4)', () => {
 
   it('invites a first drill when there is no history at all', () => {
     setup({ brief: brief({ average: null, lastPractice: null }) })
-    expect(screen.getByText(/nothing practised yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/nothing practiced yet/i)).toBeInTheDocument()
   })
 
   /*
@@ -197,7 +197,7 @@ describe('where you stand (FR-4)', () => {
     })
     expect(screen.getByRole('status')).toBeInTheDocument()
     expect(screen.queryByText(/none yet/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/nothing practised yet/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/nothing practiced yet/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/nothing to fix/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/pick a list/i)).not.toBeInTheDocument()
   })

@@ -114,11 +114,11 @@ export default function JoinScreen({ code, store, onDone }: Props) {
     body = (
       <>
         <p className="text-lg">
-          <strong>{owner}</strong> invited you to practise <strong>“{preview.listName}”</strong>.
+          <strong>{owner}</strong> invited you to practice <strong>“{preview.listName}”</strong>.
         </p>
         <p className="text-ink-muted">
           {preview.wordCount} {preview.wordCount === 1 ? 'word' : 'words'} · {languagePair(preview)} · you'll be able to{' '}
-          {link.role === 'editor' ? 'edit and practise it' : 'practise it'}
+          {link.role === 'editor' ? 'edit and practice it' : 'practice it'}
         </p>
         {failure && <p role="alert">{FAILURE[failure]}</p>}
         {status === 'signed-in' ? (

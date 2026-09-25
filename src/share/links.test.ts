@@ -52,7 +52,7 @@ describe('the message that gets sent', () => {
     const url = joinUrl('https://vocab.example', 'abc')
     expect(url).toBe('https://vocab.example/?join=abc')
     expect(shareMessage(link().preview, url)).toBe(
-      'Eti invited you to practise "French verbs" (42 words, French → English) in Vocabulary Trainer: https://vocab.example/?join=abc',
+      'Eti invited you to practice "French verbs" (42 words, French → English) in Vocabulary Trainer: https://vocab.example/?join=abc',
     )
   })
 

@@ -43,7 +43,7 @@ export function SyncStatus({ active }: Props) {
       role="status"
       className="bg-surface-sunken p-2 text-center text-sm text-ink"
     >
-      You&rsquo;re offline. You can keep practising — changes will sync to your account when you
+      You&rsquo;re offline. You can keep practicing — changes will sync to your account when you
       reconnect.
     </p>
   )

@@ -24,7 +24,7 @@ export function VoiceWarning({ lang }: Props) {
     >
       <p>
         <strong>No {LANG_NAMES[lang]} voice on this device.</strong> The words are shown as text
-        instead so you can still practise.
+        instead so you can still practice.
       </p>
       <p className="mt-1">
         To add one: <em>iPhone/iPad</em> — Settings → Accessibility → Spoken Content → Voices.{' '}

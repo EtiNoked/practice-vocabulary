@@ -64,7 +64,7 @@ describe('reaching practice', () => {
     expect(s.screen).toBe('ready')
   })
 
-  it('practising a saved list skips the editor', () => {
+  it('practicing a saved list skips the editor', () => {
     const s = reduce(initialState, { type: 'PRACTISE_LIST', list })
     expect(s.screen).toBe('ready')
   })
@@ -79,17 +79,17 @@ describe('reaching practice', () => {
 })
 
 describe('the practice loop', () => {
-  const practising = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
+  const practicing = at(initialState, { type: 'PRACTISE_LIST', list }, { type: 'START' })
 
   it('reveal exposes the answer', () => {
-    const s = reduce(practising, { type: 'REVEAL' })
+    const s = reduce(practicing, { type: 'REVEAL' })
     if (s.screen !== 'practising') throw new Error('unreachable')
     expect(s.session.revealed).toBe(true)
   })
 
   it('marking every card ends the session at results', () => {
     const s = at(
-      practising,
+      practicing,
       { type: 'REVEAL' },
       { type: 'MARK', result: 'right' },
       { type: 'REVEAL' },
@@ -99,7 +99,7 @@ describe('the practice loop', () => {
   })
 
   it('quitting early goes to results with a partial score', () => {
-    const s = at(practising, { type: 'REVEAL' }, { type: 'MARK', result: 'right' }, { type: 'QUIT' })
+    const s = at(practicing, { type: 'REVEAL' }, { type: 'MARK', result: 'right' }, { type: 'QUIT' })
     expect(s.screen).toBe('results')
     if (s.screen !== 'results') throw new Error('unreachable')
     expect(s.session.index).toBe(1)
@@ -125,7 +125,7 @@ describe('restarting from results', () => {
     expect(s.session.marks).toEqual({})
   })
 
-  it('practise-wrong-only keeps just the missed pairs', () => {
+  it('practice-wrong-only keeps just the missed pairs', () => {
     const s = reduce(finished, { type: 'RESTART_WRONG_ONLY' })
     if (s.screen !== 'practising') throw new Error('unreachable')
     expect(s.session.order).toHaveLength(1)
@@ -330,15 +330,15 @@ describe('SWITCH_MODE', () => {
 describe('illegal transitions', () => {
   // The reducer must ignore actions that do not belong to the current screen
   // rather than producing a nonsensical state.
-  it('ignores REVEAL when not practising', () => {
+  it('ignores REVEAL when not practicing', () => {
     expect(reduce(initialState, { type: 'REVEAL' })).toBe(initialState)
   })
 
-  it('ignores MARK when not practising', () => {
+  it('ignores MARK when not practicing', () => {
     expect(reduce(initialState, { type: 'MARK', result: 'right' })).toBe(initialState)
   })
 
-  it('ignores TOGGLE_ANSWER when not practising', () => {
+  it('ignores TOGGLE_ANSWER when not practicing', () => {
     expect(reduce(initialState, { type: 'TOGGLE_ANSWER' })).toBe(initialState)
   })
 
@@ -350,11 +350,11 @@ describe('illegal transitions', () => {
     expect(reduce(initialState, { type: 'CONFIRM_LIST', list })).toBe(initialState)
   })
 
-  it('ignores NEXT when not practising', () => {
+  it('ignores NEXT when not practicing', () => {
     expect(reduce(initialState, { type: 'NEXT' })).toBe(initialState)
   })
 
-  it('ignores PREV when not practising', () => {
+  it('ignores PREV when not practicing', () => {
     expect(reduce(initialState, { type: 'PREV' })).toBe(initialState)
   })
 })
@@ -393,7 +393,7 @@ describe('reaching the review screens', () => {
   })
 })
 
-describe('practising the words you missed', () => {
+describe('practicing the words you missed', () => {
   const missedPairs = [{ id: 'missed-0', col1: 'son', col2: 'zoon' }]
   const source = { kind: 'window', window: 'week' } as const
 

@@ -42,7 +42,7 @@ interface Props {
   onSignInToShare?: () => void
 }
 
-const ROLE_CHIP: Record<string, string> = { editor: 'Can edit', viewer: 'Can practise' }
+const ROLE_CHIP: Record<string, string> = { editor: 'Can edit', viewer: 'Can practice' }
 
 /** Up to three faces and "+N", owner first. */
 function Faces({ list }: { list: WordList }) {
@@ -162,7 +162,7 @@ export function SavedLists({
               onClick={() => onPractise(list)}
               className="btn btn-primary"
             >
-              Practise
+              Practice
             </button>
             {canEdit && (
               <button

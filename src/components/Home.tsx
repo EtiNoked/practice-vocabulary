@@ -155,7 +155,7 @@ export function Home({
           {brief.lastPractice.right} / {brief.lastPractice.total} ({brief.lastPractice.pct}%)
         </p>
       ) : (
-        <p className="text-ink-muted">Nothing practised yet. Pick a list and go.</p>
+        <p className="text-ink-muted">Nothing practiced yet. Pick a list and go.</p>
       )}
 
       {/*

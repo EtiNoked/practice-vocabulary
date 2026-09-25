@@ -134,21 +134,21 @@ describe('a drill recorded before right answers were saved', () => {
   })
 })
 
-describe('practising the misses again', () => {
+describe('practicing the misses again', () => {
   it('offers the drill, counting the words', async () => {
     const { user, onPractiseMisses } = setup()
-    await user.click(screen.getByRole('button', { name: /practise these 1 missed word/i }))
+    await user.click(screen.getByRole('button', { name: /practice these 1 missed word/i }))
     expect(onPractiseMisses).toHaveBeenCalledTimes(1)
   })
 
   it('is disabled when nothing was missed', () => {
     setup({ record: rec({ wrongPairs: [], wrong: 0 }) })
-    expect(screen.getByRole('button', { name: /practise these/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /practice these/i })).toBeDisabled()
   })
 
   it('is disabled with a reason when the list has been deleted', () => {
     setup({ list: null })
-    expect(screen.getByRole('button', { name: /practise these/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /practice these/i })).toBeDisabled()
     expect(screen.getByText(/list has been deleted/i)).toBeInTheDocument()
   })
 })

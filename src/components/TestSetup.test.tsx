@@ -68,7 +68,7 @@ describe('the pool', () => {
     const { user } = setup({ count: () => 0 })
     await user.click(screen.getByRole('button', { name: /chapter 1/i }))
     await user.click(screen.getByRole('button', { name: /words i got wrong/i }))
-    expect(screen.getByRole('status')).toHaveTextContent(/not got any of these wrong/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/haven’t gotten any of these wrong/i)
   })
 })
 

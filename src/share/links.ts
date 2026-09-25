@@ -43,7 +43,7 @@ export function languagePair(preview: Pick<LinkPreview, 'col1Lang' | 'col2Lang'>
 export function shareMessage(preview: LinkPreview, url: string): string {
   const who = preview.ownerName ?? 'Someone'
   const words = `${preview.wordCount} word${preview.wordCount === 1 ? '' : 's'}`
-  return `${who} invited you to practise "${preview.listName}" (${words}, ${languagePair(preview)}) in Vocabulary Trainer: ${url}`
+  return `${who} invited you to practice "${preview.listName}" (${words}, ${languagePair(preview)}) in Vocabulary Trainer: ${url}`
 }
 
 /**

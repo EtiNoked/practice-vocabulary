@@ -98,7 +98,7 @@ export function GameSetup({
             {draft.listIds.length === 0 ? (
               'Pick at least one list to see how many words you have.'
             ) : draft.poolCount === 0 && draft.source === 'missed' ? (
-              'No words to practise here yet — you have not got any of these wrong. Try “All words”.'
+              'No words to practice here yet — you haven’t gotten any of these wrong. Try “All words”.'
             ) : !draft.enough ? (
               <>
                 Only <strong>{draft.poolCount}</strong>{' '}
