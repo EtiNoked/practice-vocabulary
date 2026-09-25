@@ -1,9 +1,25 @@
 # Plan: Sharing a list with someone else
 
 **Feature ID:** 016-list-sharing
-**Status:** DRAFT, revision 2
+**Status:** DRAFT, revision 3 (one `lists` collection)
 **Created:** 2026-09-25
 **Builds on:** `003-user-accounts` (Firestore, Google sign-in, `ListStore` port), `011-test-builder` (saved tests reference lists by id)
+
+## What revision 3 changed
+
+Revision 2 kept private lists at `users/{uid}/lists` and moved a list to a separate `sharedLists`
+collection when it was first shared. Revision 3 puts **every** cloud list in one `lists`
+collection, associated with users by membership. That removes, from the plan:
+
+- the private-to-shared move batch, and the moment where a list could be in both places
+- merging two live queries into one list of lists (except, temporarily, during the move below)
+- rebuilding a private list when the owner stops sharing
+- re-keying a kept copy when its owner rejoins
+- routing every write by "which collection is this list in"
+
+It adds one thing: a **one-time move** of existing cloud lists from `users/{uid}/lists` to `lists`
+(§ Moving existing lists), and it makes the `lists` read rule the one thing keeping every private
+list private.
 
 ## What revision 2 removed
 
@@ -22,25 +38,28 @@ What it adds is small: a QR encoder, the Web Share API, and a join screen that a
 
 ## Technical approach
 
-Three problems, in the order they carry risk:
+Four problems, in the order they carry risk:
 
-1. **A second, membership-based home for lists, and rules that guard roles and joins.** The rules
-   are the app's only server-side check, so they are written and tested first, against the
-   emulator, before any client code.
-2. **Merging two sources into one list of lists.** `ListStore.subscribeLists` keeps its signature
-   and emits more lists. `App` must not learn that a list can live in two places, except where the
-   UI has to say "Leave" instead of "Delete".
-3. **An entry point from outside the app.** `?join=<code>` must survive a sign-in, must work for a
+1. **One membership-based home for every list, and rules that guard roles and joins.** The rules
+   are the app's only server-side check, and after this change the `lists` read rule is the only
+   thing between one user's private list and another user. They are written and tested first,
+   against the emulator, before any client code.
+2. **Moving existing lists without anyone noticing.** Every signed-in user's lists change location
+   once. It must be invisible, idempotent, interruptible and work offline.
+3. **Keeping history attached to a kept copy**, which has a new id (D-11).
+4. **An entry point from outside the app.** `?join=<code>` must survive a sign-in, must work for a
    guest who has never loaded Firebase, and must not collide with the first-sign-in migration
    prompt.
 
 ### Ordering decisions
 
 - **Rules and tests before the adapter**, as in 003.
-- **Adapter before UI**, tested through the emulator in `tests/rules/`, where the list store's
-  adapter tests already live.
-- **Private lists untouched.** Their rules, `listRepo.ts` and `localListStore.ts` do not change, so
-  any regression in private lists is a bug in the merge and only there.
+- **The move ships in the same release as the new store**, not before and not after: the new
+  store reads `lists`, and the move is what fills it. The move runs, and is tested, before any
+  sharing UI exists, so Phase 2 can be merged on its own as a pure storage change with no visible
+  difference.
+- **Guests untouched.** `listRepo.ts` and `localListStore.ts` do not change. The `ListStore` port
+  keeps its exact shape, so `App` cannot tell that cloud lists moved.
 
 ## Architecture
 
@@ -60,7 +79,8 @@ flowchart TD
     end
 
     subgraph Lazy["Lazy chunks"]
-        FsStore[firestoreListStore.ts<br/>merges private + shared]
+        FsStore[firestoreListStore.ts<br/>lists where I am a member]
+        Move[moveLegacyLists.ts<br/>one-time, on sign-in]
         FsShare[firestoreShareStore.ts]
         QR[qr.tsx<br/>encoder → SVG rects]
     end
@@ -73,27 +93,31 @@ flowchart TD
     Join --> Share
     Store -.-> FsStore
     Share -.-> FsShare
-    FsStore --> P[(users/uid/lists)]
-    FsStore --> S[(sharedLists)]
-    FsShare --> S
-    FsShare --> L[(shareLinks)]
+    FsStore --> L[(lists)]
+    Move -->|copy then delete| L
+    Old[(users/uid/lists<br/>read + delete only)] --> Move
+    FsShare --> L
+    FsShare --> K[(shareLinks)]
     FsShare --> F[(listFarewells)]
     SharePanel -->|navigator.share · wa.me · mailto| Out((sharer's own apps))
 
     style Lazy stroke-dasharray: 5 5
+    style Old stroke-dasharray: 2 2
 ```
 
 `ShareStore` is a separate port, not new `ListStore` methods, because the local store has no honest
-implementation of any of it. `useShareStore` returns `null` for a signed-in-less app, and every
-sharing control reads that as "Sign in to share".
+implementation of any of it. `useShareStore` returns `null` for guests, and every sharing control
+reads that as "Sign in to share".
 
 ## Data model
 
 ```
-users/{uid}/lists/{listId}     WordList             unchanged, private lists
-sharedLists/{listId}           WordList + sharing   new; same id the list had when private
-shareLinks/{code}              ShareLink            new; code = 22 chars base64url (128 random bits)
-listFarewells/{listId}_{uid}   Farewell             new; the keep-a-copy offer (D-11)
+lists/{listId}                 WordList + sharing   every cloud list; listId = the existing client uuid
+shareLinks/{code}              ShareLink            code = 22 chars base64url (128 random bits)
+listFarewells/{listId}_{uid}   Farewell             the keep-a-copy offer (D-11)
+users/{uid}                    unchanged
+users/{uid}/sessions|games|tests   unchanged: personal data stays with the person
+users/{uid}/lists/{listId}     LEGACY: read + delete only, emptied by the move (D-14)
 ```
 
 ```ts
@@ -111,6 +135,7 @@ export interface ListMember {
   viaLabel?: string
 }
 
+/** Present on every cloud list. Absent on guests' local lists, which have no members. */
 export interface ListSharing {
   ownerUid: string
   /** Mirrors the keys of `members`. Exists only because Firestore can query array-contains, not map keys. */
@@ -120,12 +145,22 @@ export interface ListSharing {
   updatedBy: string
 }
 
-/** A list is shared iff `sharing` is present. Private lists never carry it. */
 export interface WordList {
   // ...existing fields
   sharing?: ListSharing
+  /**
+   * Ids this list was copied from (D-11). History recorded against any of them counts as this
+   * list's history. Empty or absent for every list that is not a kept copy.
+   */
+  previousIds?: string[]
 }
+
+/** A list is shared iff it has more than one member. Derived, never stored. */
+export const isShared = (l: WordList) => (l.sharing?.memberUids.length ?? 0) > 1
 ```
+
+`sharing` is optional in the type only because guests' local lists never have it. Every document
+in `lists` has it, and the rules require it.
 
 ```ts
 // src/share/types.ts
@@ -159,15 +194,17 @@ export interface Farewell {
 adds *"· 7 of 20 joined"*); used up → not shown, the person is under Members. Keeping *Expired*
 derived is why D-7 needs no cleanup job.
 
-**Why farewells are their own documents** and not a "former members" field on the shared list: a
-removed member must see the list *as it was when they were removed* (D-11), and rules cannot give
-someone access to an old version of a document. A snapshot written in the same batch as the
-removal is the only honest way. It also means a removed member has no access at all to the live
-list, which is the property that matters.
+**Why farewells are still their own documents**, even with one `lists` collection: a removed member
+must see the list *as it was when they were removed* (D-11), and rules cannot give someone access
+to an old version of a document. A snapshot written in the same batch as the removal is the only
+honest way, and it means a removed member has no access at all to the live list.
 
-**Why `sharedLists` is top-level** and not `users/{ownerUid}/lists` with extra rules: a member's
-query would then be a collection-group query across every user's lists, and one wrong rule would
-expose every private list in the database.
+**Why a top-level `lists` and not `users/{ownerUid}/lists` with members added.** That shape keeps
+lists "under" their owner, but a member could then only find them with a collection-group query
+across every user's `lists`, which needs a collection-group index (a console or
+`firestore.indexes.json` change) and a recursive `{path=**}/lists` rule that would apply to every
+list in the database anyway. A top-level collection gives the same single rule with a plain query
+and no index.
 
 ## Rules
 
@@ -184,38 +221,46 @@ function linkLive(link) {
   return link.uses < link.maxUses && !link.declined
     && request.time < link.createdAt + duration.value(14, 'd');
 }
-function sharedList(id) { return get(/databases/$(database)/documents/sharedLists/$(id)).data; }
+function listDoc(id) { return get(/databases/$(database)/documents/lists/$(id)).data; }
 
-match /sharedLists/{listId} {
+match /lists/{listId} {
+  // THE privacy rule for every cloud list, shared or not. Queries must filter on
+  // memberUids array-contains me, or they are refused (rules are not filters).
   allow read: if isMember(resource.data);
 
-  // Created by the owner, alone, in the first-link batch (D-5).
+  // Every list starts private: its creator, alone, as owner. Covers new lists and the move (D-14).
   allow create: if signedIn()
     && request.resource.data.ownerUid == me()
     && request.resource.data.memberUids == [me()]
     && request.resource.data.members.keys().hasOnly([me()])
     && request.resource.data.members[me()].role == 'owner'
-    && contentValid(request.resource.data)
-    && request.resource.data.memberUids.size() <= 20;
+    && request.resource.data.updatedBy == me()
+    && contentValid(request.resource.data);
 
   allow update: if
-       contentEdit()           // owner or editor changes name/pairs/langs, sets updatedBy
+       contentEdit()           // owner or editor changes content fields only, sets updatedBy
     || joinIsValid()           // see below
     || leaveIsValid()          // a non-owner removes exactly themself
-    || ownerManages();         // owner changes a role or removes a member (with a farewell, below)
+    || ownerManages();         // owner changes a role, removes a member (with a farewell), or hands over ownership
 
-  allow delete: if isListOwner(resource.data);   // stop sharing and delete for everyone
+  allow delete: if isListOwner(resource.data);
+}
+
+// Legacy, emptied by the move (D-14). Nothing new may be written here.
+match /users/{uid}/lists/{listId} {
+  allow read, delete: if isOwner(uid);
+  allow create, update: if false;
 }
 
 match /shareLinks/{code} {
   // Readable by anyone who has the code, signed in or not: it holds only the preview, and the
   // code cannot be guessed. This is what lets a guest see who is inviting them before signing in.
   allow get: if true;
-  // Only the creator lists them, and the query must filter on it (rules are not filters).
+  // Only the creator lists them, and the query must filter on it.
   allow list: if signedIn() && resource.data.createdByUid == me();
 
   allow create: if signedIn()
-    && isListOwner(getAfter(/databases/$(database)/documents/sharedLists/$(request.resource.data.listId)).data)
+    && isListOwner(listDoc(request.resource.data.listId))
     && request.resource.data.createdByUid == me()
     && request.resource.data.uses == 0 && request.resource.data.declined == false
     && request.resource.data.maxUses >= 1 && request.resource.data.maxUses <= 20
@@ -227,7 +272,7 @@ match /shareLinks/{code} {
        (signedIn() && linkLive(resource.data)
          && diff().affectedKeys().hasOnly(['uses'])
          && request.resource.data.uses == resource.data.uses + 1
-         && getAfter(/databases/$(database)/documents/sharedLists/$(resource.data.listId))
+         && getAfter(/databases/$(database)/documents/lists/$(resource.data.listId))
               .data.members[me()].viaLink == code)
        // anyone holding a single-use link may decline it
     || (signedIn() && linkLive(resource.data) && resource.data.maxUses == 1
@@ -241,13 +286,18 @@ match /listFarewells/{id} {
   // Written by the owner, in the same batch that removes the member or ends the list.
   allow create: if signedIn()
     && id == request.resource.data.listId + '_' + request.resource.data.uid
-    && isListOwner(sharedList(request.resource.data.listId))
-    && request.resource.data.uid in sharedList(request.resource.data.listId).memberUids
+    && isListOwner(listDoc(request.resource.data.listId))
+    && request.resource.data.uid in listDoc(request.resource.data.listId).memberUids
     && request.resource.data.list.pairs.size() <= 500;
 }
 ```
 
-**The join rule** is the one that matters:
+`contentEdit()` allows only `name`, `pairs`, `col1Lang`, `col2Lang`, `langSource`, `updatedAt`,
+`updatedBy`, plus `previousIds` for the owner. It never allows `ownerUid`, `memberUids` or
+`members`, which is what makes a stale `setDoc` from a member fail instead of silently undoing a
+concurrent join.
+
+**The join rule** is the one that matters for sharing:
 
 ```
 function joinIsValid() {
@@ -278,34 +328,79 @@ Timestamps that the rules compare (`createdAt`) are Firestore server timestamps,
 usual `Date.now()` numbers, because expiry must not trust the client clock. Converted to ms at the
 adapter boundary so the rest of the app still sees numbers.
 
-## Merging private and shared lists
+## Reading and writing lists
 
 ```ts
 subscribeLists(onChange, onError) {
-  let mine: WordList[] = [], shared: WordList[] = [], got = { mine: false, shared: false }
-  const emit = () => got.mine && got.shared &&
-    onChange(dedupeById([...shared, ...mine]).sort((a, b) => b.updatedAt - a.updatedAt))
-  const a = onSnapshot(query(collection(db, listsPath), orderBy('updatedAt', 'desc')), ...)
-  const b = onSnapshot(query(collection(db, 'sharedLists'),
-                             where('memberUids', 'array-contains', uid)), ...)
-  return track(() => { a(); b() })
+  const q = query(collection(db, 'lists'), where('memberUids', 'array-contains', uid))
+  return track(onSnapshot(q, (snap) =>
+    onChange(withLegacy(snap.docs.map(toWordList)).sort((a, b) => b.updatedAt - a.updatedAt)),
+    (e) => onError(toStoreError(e))))
 }
 ```
 
-- **Emit only once both have answered**, or a shared list flickers in a moment after the rest.
-- **Sorted client-side**, so no composite index (`array-contains` + `orderBy` would need one).
-- **Deduped, shared winning.** During the first-link move a snapshot can briefly hold the list in
-  both; never in neither, because both halves come from one committed batch. An emulator test
-  proves it rather than this paragraph.
-- **Writes route by where the list lives**, using a live `Set` of shared ids. `saveList` on a
-  shared id is an `updateDoc` of content fields plus `updatedBy`. Never `setDoc`: that would
-  rewrite `members` from whatever the client last saw and undo a concurrent join. The rules refuse
-  it anyway (the content clause does not allow `members` to change), and a test pins that.
+- **One query.** Private and shared lists come back together, because a private list is just one
+  whose only member is me.
+- **Sorted client-side**, so no composite index (`array-contains` + `orderBy` would need one, and
+  this app has no `firestore.indexes.json`). A user has at most a few dozen lists.
+- **`withLegacy`**: until this user's move has finished (§ Moving existing lists), a second
+  listener on `users/{uid}/lists` feeds in lists not yet copied, deduped by id with `lists` winning.
+  Once the legacy collection is empty the listener is detached and never attached again on this
+  device (a flag in `localStorage`, `pvt.lists.moved.{uid}`).
+- **New list**: `setDoc(lists/{id})` with `sharing` set to me as the only owner. The client uuid
+  is still the document id, so 003's device-to-account copy stays idempotent unchanged.
+- **Existing list**: `updateDoc` of content fields plus `updatedBy`. Never `setDoc`: it would
+  rewrite `members` from whatever this client last saw. The rules refuse that anyway, and a test
+  pins it.
+- `removeList`: owner → delete for everyone (farewells for other members, links deleted); member →
+  leave. `App` reads the role only to choose the confirmation copy (spec Story 6).
 
-## Sharing for the first time (D-5)
+## Moving existing lists (D-14)
 
-One `writeBatch`: set `sharedLists/{id}` (the private list plus `sharing`, owner alone), delete
-`users/{uid}/lists/{id}`, set `shareLinks/{code}`. Then show the QR and share options.
+`moveLegacyLists(services, uid)`, run by `useListStore` after the Firestore store is built, in the
+background, never blocking the first render:
+
+```
+for each doc in users/{uid}/lists:
+  if lists/{id} exists and I am its owner:   delete the legacy doc            (a previous run got halfway)
+  else:                                      batch { set lists/{id} = legacy + sharing(me, owner);
+                                                     delete users/{uid}/lists/{id} }
+```
+
+- **Same id**, so saved tests and every history record keep pointing at the right list.
+- **One batch per list**, so a list is never in neither place. At worst it is briefly in both, and
+  the dedupe hides that.
+- **Idempotent and interruptible.** Re-running finds fewer legacy docs each time and ends with none.
+- **Offline**: the legacy listener serves the cached lists, the move waits for a connection
+  (Firestore queues the batches), and nothing is lost.
+- **A refused copy** (an id already in `lists` owned by someone else, which needs a uuid collision)
+  leaves that list in the legacy location, still readable, and reports it once via the store's
+  `onError`. It is never deleted.
+- **Old tabs** still running the previous build write to `users/{uid}/lists` and are refused by
+  the legacy rule; they show their existing permission toast until reloaded.
+- **Removing the legacy code** (the listener, the move, the legacy rule block) is left to a later
+  cleanup spec, once the Firebase console shows no documents left under any `users/*/lists`.
+
+## Kept copies and history (D-11)
+
+A kept copy is a new list: new uuid, the farewell's words, and `previousIds: [oldId, ...old.previousIds]`.
+History records are append-only (`allow update: if false`) and cannot be re-pointed, so the copy
+claims them instead:
+
+- **One helper**, `listIdsFor(list)` in `src/state/`, returning `[list.id, ...(list.previousIds ?? [])]`.
+- **Every place that matches history to a list** uses it: the per-list practice line in `App`,
+  the My practices filter, and `missedWords` for a list. Today those compare `record.listId === id`
+  in about four places; they become `listIdsFor(list).includes(record.listId)`.
+- **A guard** in `invariants.test.ts`, like the existing `wordKey` one: a new `r.listId ===`
+  comparison outside `listIdsFor` fails the build. Getting this wrong produces no error, only a
+  copy whose history is quietly empty.
+- **Saved tests** are documents and can be edited, so `keepCopy` rewrites this user's saved tests
+  that name the old id to name the new one, in the same batch.
+
+## Sharing a list
+
+No move and no new collection. Making the first link is one batch: create `shareLinks/{code}`.
+The list becomes shared the moment someone joins. Then show the QR and share options.
 
 The share message and URL:
 
@@ -317,7 +412,7 @@ https://{origin}/?join={code}
 - **Share…** calls `navigator.share({ title, text, url })`, shown only when `navigator.canShare`
   says it will work. `AbortError` (the user closed the sheet) is not an error.
 - **WhatsApp**: `https://wa.me/?text={encoded message}`. **Email**: `mailto:?subject=…&body=…`.
-  Both are plain links, so no CSP change (`form-action 'none'` is irrelevant to navigation).
+  Both are plain links, so no CSP change.
 - **Copy link**: `navigator.clipboard.writeText`, with a visible "Copied".
 
 ## QR code
@@ -348,21 +443,19 @@ https://{origin}/?join={code}
   screen or the migration prompt. The join screen replaces the welcome screen for that visit (it
   asks the same question, better). After Join or No thanks, the stored code is cleared, and the
   existing migration prompt may then run.
-- **Rejoin with a kept copy** (spec edge case): if a private list with the same id exists, it is
-  given a new id in the join batch's preceding write, so the merge never has to choose.
 
 ## Leaving, removal, stop sharing, delete (D-11, D-12)
 
 | Action | Who | One batch |
 |---|---|---|
-| Leave | member | remove me from `memberUids`/`members`; if keeping a copy, set `users/me/lists/{id}` |
+| Leave | member | remove me from `memberUids`/`members`; if keeping a copy, create the copy (§ Kept copies) |
 | Remove member | owner | remove them; create `listFarewells/{id}_{them}` (reason `removed`) |
-| Stop sharing | owner | set `users/me/lists/{id}` (no `sharing`); a farewell per other member (`stopped`); delete every link; delete the shared list |
-| Delete for everyone | owner | a farewell per other member (`deleted`); delete every link; delete the shared list |
+| Stop sharing | owner | remove every other member; a farewell per member (`stopped`); delete every link. The list stays where it is, with me as its only member |
+| Delete for everyone | owner | a farewell per other member (`deleted`); delete every link; delete the list |
 
 Farewells are read by the member's own `subscribeFarewells` and shown on My lists:
-**Keep a private copy** (set `users/me/lists/{id}` from `farewell.list`, then delete the farewell)
-or **Dismiss** (delete it). The copy keeps the id, so history and saved tests follow (D-11).
+**Keep a private copy** (create the copy from `farewell.list`, then delete the farewell) or
+**Dismiss** (delete it).
 
 Batches are bounded: at most 19 farewells plus 10 links plus 2 list writes, far under Firestore's
 500-write batch limit.
@@ -381,45 +474,56 @@ Batches are bounded: at most 19 farewells plus 10 links plus 2 list writes, far 
 
 `purgeUserData` gains a step **before** the owned collections:
 
-1. Every shared list where I am not owner: leave.
-2. Every shared list I own: if others remain, one `ownerManages` update making the
-   longest-standing editor (else member) the owner, and removing me; else delete it and its links.
+1. Every list where I am a member but not owner: leave.
+2. Every list I own: if others remain, one `ownerManages` update making the longest-standing
+   editor (else member) the owner, and removing me; else delete it and its links. For a user who
+   never shared, this is just "delete all my lists", the same outcome as today.
 3. Delete every `shareLinks` doc I created, and every `listFarewells` doc addressed to me.
 
-`invariants.test.ts` gets a sibling of its `OWNED_COLLECTIONS` check: every top-level collection
-named in `firestoreShareStore.ts` must be handled in `deleteAccount.ts`. The same trap 008 fell
-into, guarded the same way.
+`OWNED_COLLECTIONS` keeps `'lists'` (the legacy location, in case the move never finished) and the
+other three. `invariants.test.ts` gets a sibling of its `OWNED_COLLECTIONS` check: every top-level
+collection named in `firestoreListStore.ts` or `firestoreShareStore.ts` must be handled in
+`deleteAccount.ts`. The same trap 008 fell into, guarded the same way.
 
 ## Risks
 
 | # | Risk | Mitigation |
 |---|------|-----------|
-| R1 | **Google sign-in is blocked inside in-app browsers** (Instagram, Facebook, some Android messengers open links in an embedded webview; Google refuses OAuth there with `disallowed_useragent`). A WhatsApp link opened in such a view would dead-end at sign-in. | Detect embedded webviews on the join screen and show **Open in your browser** with Copy link, before offering sign-in. Test on WhatsApp for iOS and Android in Task 23. |
-| R2 | A forwarded link lets a stranger in (accepted with D-2). | Single-use by default; owner sees and removes; 14-day expiry; group links have a cap. Stated in the Share panel: "Anyone with this link can join." |
-| R3 | `get: if true` on share links is readable without sign-in. | Holds only the preview; the code is 128 random bits; `list` is creator-only. A rules test asserts a guest cannot list. |
-| R4 | QR code unreadable in dark mode or at small sizes. | Never inverted; minimum 240 px; tested with two phone cameras in Task 23. |
-| R5 | A list moving collections while its editor is open in another of the owner's tabs. | Save routes by the live shared-id set, not by the list the editor opened with. Tested. |
-| R6 | Offline edits by a member replayed after removal or demotion are rejected. | Expected; a toast gives the specific reason, and the keep-a-copy offer carries the last version. |
-| R7 | New runtime dependency. | One, lazy, tiny, MIT; hand-written fallback (NFR5). README's "two runtime dependencies" line updated. |
-| R8 | Blast radius in `App.tsx` (1,100 lines). | Sharing UI in its own components wired by props; `App` gains one hook and one route. |
+| R1 | **Every private list now depends on one rule.** A mistake in `lists` `allow read` exposes lists that were never shared. | The deny suite comes first and is the largest in the file: stranger `get`, stranger query, query without the membership filter, former member, removed member, member of another list. Reviewed on its own before any other rule. |
+| R2 | **The move goes wrong for someone's real lists.** | Copy-then-delete in one batch per list; never delete without a confirmed copy; legacy stays readable; the emulator suite covers first run, re-run, interruption between batches, offline, and a refused copy. Owner checks the console after release (Task 26). |
+| R3 | **Google sign-in is blocked inside in-app browsers** (Instagram, Facebook, some Android messengers; Google refuses OAuth there with `disallowed_useragent`). A WhatsApp link opened in such a view would dead-end at sign-in. | The join screen detects embedded webviews and shows **Open in your browser** with Copy link, before offering sign-in. Tested on WhatsApp for iOS and Android. |
+| R4 | A forwarded link lets a stranger in (accepted with D-2). | Single-use by default; owner sees and removes; 14-day expiry; group links have a cap. Stated in the Share panel: "Anyone with this link can join." |
+| R5 | `get: if true` on share links is readable without sign-in. | Holds only the preview; the code is 128 random bits; `list` is creator-only. A rules test asserts a guest cannot list. |
+| R6 | A kept copy's history quietly empty because one comparison was missed. | `listIdsFor` plus the invariants guard. |
+| R7 | QR code unreadable in dark mode or at small sizes. | Never inverted; minimum 240 px; tested with two phone cameras. |
+| R8 | Offline edits by a member replayed after removal or demotion are rejected. | Expected; a toast gives the specific reason, and the keep-a-copy offer carries the last version. |
+| R9 | Existing tests assume `users/{uid}/lists`. | `tests/rules/` list tests and the `invariants.test.ts` path check are updated in the same task that changes the path, never weakened; each changed assertion names the new path. |
+| R10 | New runtime dependency. | One, lazy, tiny, MIT; hand-written fallback (NFR5). README's "two runtime dependencies" line updated. |
+| R11 | Blast radius in `App.tsx` (1,100 lines). | Sharing UI in its own components wired by props; `App` gains one hook, one route, and the `listIdsFor` calls. |
 
 ## Test strategy
 
-- **Rules** (`tests/rules/firestore.rules.test.ts`, emulator). The deny list is the important half:
-  non-member read; viewer edits content; editor changes a role; member changes `ownerUid`; join
-  without a link; join with a link for another list; join with an expired, declined, used-up or
-  cancelled link; join claiming a different role than the link; link `uses` bumped without a join;
-  two racing joins on a single-use link; guest `list` on links; farewell written by a non-owner or
-  for a non-member; reading someone else's farewell.
-- **Adapter** (`tests/rules/firestoreShareStore.test.ts`, emulator): first-link move, merge order
-  and dedupe, join batch, decline, leave with and without copy, remove with farewell, stop sharing,
-  delete for everyone, rejoin with a kept copy, account deletion handover.
-- **Pure** (`src/share/*.test.ts`): link status derivation at the 14-day boundary; share message
-  text; webview detection over a table of real user agents.
+- **Rules** (`tests/rules/firestore.rules.test.ts`, emulator). The deny list is the important half,
+  and the `lists` read rule leads it (R1): stranger read of a private list; query without
+  `array-contains me`; former member; viewer edits content; editor changes a role; member changes
+  `ownerUid`; create with another member already in; create as non-owner; write to the legacy
+  `users/{uid}/lists`; join without a link; with a link for another list; with an expired,
+  declined, used-up or cancelled link; claiming a different role than the link; link `uses` bumped
+  without a join; two racing joins on a single-use link; guest `list` on links; farewell written by
+  a non-owner or for a non-member; reading someone else's farewell.
+- **Move** (`tests/rules/moveLegacyLists.test.ts`, emulator): first run; re-run is a no-op;
+  interrupted between two lists; offline then online; refused copy leaves the legacy doc; saved
+  tests and sessions still resolve to the moved lists.
+- **Adapter** (`tests/rules/firestoreShareStore.test.ts`, emulator): single-query subscription;
+  legacy dedupe; join batch; decline; leave with and without copy; remove with farewell; stop
+  sharing; delete for everyone; account deletion handover.
+- **Pure** (`src/share/*.test.ts`, `src/state/listIds.test.ts`): link status at the 14-day boundary;
+  share message; webview detection over real user agents; `listIdsFor`.
 - **UI** (Vitest + Testing Library, fake `ShareStore`): Share panel with and without
   `navigator.share`; QR renders an `<svg>` with the right module count; each link status; join
-  screen in its states (guest, ready, own link, already member, unavailable, expired, in-app
-  browser); members panel by role; read-only editor; stale-edit dialog; farewell banner.
+  screen states (guest, ready, own link, already member, unavailable, expired, in-app browser);
+  members panel by role; read-only editor; stale-edit dialog; farewell banner; a kept copy's
+  practice line counts the shared list's drills.
 - **App flow** (`App.join.test.tsx`): `?join=` as a guest → sign in → join → list visible; the
   migration prompt comes after, not on top.
 - **Bundle**: `check-bundle.mjs` green; the QR encoder is not in the eager chunk.

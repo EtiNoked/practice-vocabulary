@@ -4,7 +4,8 @@
 phone up. Whoever opens it signs in with Google (which creates an account if they have none) and
 joins as **Can edit** or **Can practise**. The owner sees each link's status and can cancel it.
 Everyone sees the members. Nobody ever loses their words: whenever a shared list goes away from
-you, you can keep a private copy. No server, no email provider, no secrets.
+you, you can keep a private copy. Every list lives in one `lists` collection, linked to people by
+membership. No server, no email provider, no secrets.
 
 ---
 
@@ -18,7 +19,7 @@ sequenceDiagram
     actor B as Joiner
 
     A->>App: Share "French verbs" · Can practise · "For Dana"
-    App->>FS: batch: move list to sharedLists, create share link
+    App->>FS: create share link (the list stays where it is)
     App-->>A: QR code · Share… · WhatsApp · Email · Copy
     A-->>B: WhatsApp message, email, or QR on screen
     B->>App: opens /?join=code
@@ -35,7 +36,10 @@ sequenceDiagram
 
 | | Before | After |
 |---|---|---|
-| Where a list lives | `users/{uid}/lists` only | Private: unchanged. Shared: `sharedLists/{id}`, same id |
+| Where a list lives | `users/{uid}/lists` | `lists/{id}` for every cloud list, same id, moved once on sign-in |
+| How lists link to people | By path (under your uid) | By membership (`ownerUid`, `memberUids`, a role each) |
+| Private list | A list under your uid | A list whose only member is you |
+| Guests' lists | This browser | This browser (unchanged) |
 | Who can see a list | Its creator | Private: its creator. Shared: its members |
 | How someone is invited | n/a | A link, as a QR code or sent from your own apps |
 | Server code | None | None |
@@ -53,6 +57,18 @@ sequenceDiagram
 | **Declined** | Someone opened it and said no | New link · Remove |
 | **Expired** | 14 days, unused | New link · Remove |
 | *(gone, now under Members)* | Someone joined through it | Change role · Remove member |
+
+---
+
+## Where things are stored
+
+```
+lists/{listId}                   every cloud list: words + owner + members and their roles
+shareLinks/{code}                one per link: role, label, uses, preview for the join screen
+listFarewells/{listId}_{uid}     "keep a copy?" offers for someone who lost access
+users/{uid}/sessions|games|tests your own history and saved tests (unchanged)
+users/{uid}/lists                old location: emptied on first sign-in, then unused
+```
 
 ---
 
@@ -79,7 +95,9 @@ sequenceDiagram
 | The owner stops sharing | "Eti stopped sharing "French verbs" with you." same choice |
 | The owner deletes it | "Eti deleted "French verbs"." same choice |
 
-The copy is the last version you could see, with your practice history and saved tests intact.
+The copy is the last version you could see, as a new list of your own. It remembers the list it
+came from, so your practice history and "words you missed" come with it, and your saved tests are
+switched over to it.
 
 ---
 

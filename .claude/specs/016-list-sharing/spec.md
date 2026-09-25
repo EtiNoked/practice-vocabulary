@@ -1,11 +1,11 @@
 # Spec: Sharing a list with someone else
 
 **ID:** 016-list-sharing
-**Status:** DRAFT, revision 2 (share link and QR code replace email). Two questions open, see the end
+**Status:** DRAFT, revision 3 (one `lists` collection for every list). Two questions open, see the end
 **Created:** 2026-09-25
 **Baseline:** `main` @ `a45a15d`
 **Feature Type:** New capability. New stored data and new security rules. No server code
-**Complexity:** High. The UI is moderate; the risk is in the rules and in moving a list between collections
+**Complexity:** High. The UI is moderate; the risk is in the rules and in the one-time move of existing lists
 **Depends on:** `003-user-accounts` (shipped). Sharing is a signed-in feature.
 **Branch:** `claude/list-sharing-feature-872bcu`
 
@@ -43,6 +43,7 @@ the app can know for certain: whether the link has been **used** (Story 2).
 | Who can accept? | Anyone with the link | D-2 |
 | What can each person do? | Per person: can edit, or can only practise | D-3 |
 | Extras | Keep a copy when leaving; Stop sharing | D-11, D-12 |
+| One place for lists, or two? (revision 3) | One `lists` collection, lists associated with users by membership | D-5, D-14 |
 
 ---
 
@@ -50,12 +51,15 @@ the app can know for certain: whether the link has been **used** (Story 2).
 
 **Every list is private by construction.** Lists live at `users/{uid}/lists/{listId}` and the rules
 grant access with one `isOwner(uid)` check. A list two people can use cannot live under one
-person's uid, so this feature needs a **second home for lists** with a membership rule. That
-reverses 003 A2, recorded below.
+person's uid. Revision 2 answered that with a second collection for shared lists only; revision 3
+instead moves **every** cloud list to one top-level `lists` collection, where each list names its
+owner and members (D-5). A private list is simply a list with one member. That reverses 003 A2 and
+retires `users/{uid}/lists`, both recorded below.
 
 **A list id is already a stable, global uuid.** It is the Firestore document id, saved tests keep
-it in `spec.listIds`, and session records keep it in `listId`. A list can therefore **move** to a
-shared collection without breaking a saved test or a history record, as long as the id is kept.
+it in `spec.listIds`, and session records keep it in `listId`. Existing lists can therefore **move**
+to the new collection without breaking a saved test or a history record, as long as the id is kept
+(D-14).
 
 **The app is a static SPA with a single-page fallback** (`wrangler.jsonc`,
 `not_found_handling: "single-page-application"`). A link like `/?join=<code>` already serves
@@ -68,6 +72,8 @@ shared collection without breaking a saved test or a history record, as long as 
 | Earlier decision | Wording | After 016 |
 |---|---|---|
 | 003 A2 | "A signed-in user's data is private to them. No sharing, no collaboration" | **Amended.** Private lists stay private. A list the owner shares is readable by its members, and writable by its editors, enforced by the rules. |
+| 003 data model | `users/{uid}/lists/{listId}`: everything a user owns under their uid | **Changed for lists only.** Cloud lists move to `lists/{listId}` with `ownerUid` and `memberUids`. Practice history, games and saved tests stay under `users/{uid}`. The old location becomes read-and-delete only, for the move (D-14). |
+| 003 security model | "Everything under `users/{uid}/` collapses the security model into a single recursive rule" | **Amended.** A private list's privacy now comes from the membership rule, not from its path. That rule therefore guards every list, and its deny tests carry more weight than any rule before it (NFR3). |
 | 003 A4 | "Concurrent editing of the same list on two devices at once is rare" | **Amended for shared lists.** Last-write-wins stays, but a stale edit is detected and the user is asked (D-8). |
 | 003 NFR2b | "A signed-in user's data is readable and writable only by that user" | **Amended.** True for everything except shared lists and share links. |
 | 003 Story 8 | Privacy note lists name, email, lists, scores | **Extended.** Members of a shared list see each other's name, email and picture. |
@@ -118,9 +124,11 @@ owner may instead make a **group link** (open question 1) that stays usable unti
 or it reaches its limit. Single-use is the default because it makes the status the owner asked for
 exact: a link is *waiting* or *used by Dana*, never "used by some people".
 
-**D-5. A shared list lives at `sharedLists/{listId}`, keeping its id, and moves there when its first
-link is made.** One batch: create shared, delete private, create link. There is no moment where the
-list exists twice or not at all.
+**D-5. One `lists` collection for every cloud list.** Each list carries `ownerUid`, `memberUids`
+and a `members` map with each person's role. A private list has one member, its owner. Sharing
+never moves a list: it only adds members, and stopping only removes them. "My lists" is one query:
+the lists I am a member of. Personal data (history, games, saved tests) stays under `users/{uid}`,
+because it belongs to one person even when the list does not.
 
 **D-6. Practice history stays per person.** Each member's drills are written to their own
 `users/{uid}/sessions`, exactly as now. Everyone practises the same words; nobody sees anyone
@@ -143,19 +151,27 @@ like every other cap in `firestore.rules`.
 
 **D-11. Nobody loses their words when a shared list goes away from them.** Whenever a member stops
 having the list (they leave, they are removed, the owner stops sharing, or the owner deletes it),
-they are offered **Keep a private copy**. The copy keeps the list's id, so their practice history
-and saved tests carry straight over.
+they are offered **Keep a private copy**. The copy is a new list with its own id (the original may
+still exist), and it remembers the id it came from, so their practice history, their "words you
+missed" and their saved tests carry over to it.
 
 To make that offer possible when the member was not looking at the moment it happened, a removed
 member keeps **read-only access to the last version** until they answer the offer. They cannot
 see any later edit.
 
-**D-12. The owner can Stop sharing.** Every member is shown the keep-a-copy offer, every open link
-stops working, and the owner's list turns back into an ordinary private list with the same id.
+**D-12. The owner can Stop sharing.** Every other member is removed and shown the keep-a-copy
+offer, every open link stops working, and the owner's list is left with one member, which is all a
+private list is. Nothing moves and the owner's list keeps its id.
 
 **D-13. The owner deleting their account does not delete the list from under its members.**
 Ownership passes to the longest-standing member who can edit, or failing that the longest-standing
 member. Only a list with no other members is deleted.
+
+**D-14. Existing cloud lists move once, automatically, on sign-in.** The app copies each
+`users/{uid}/lists/{id}` to `lists/{id}` with the user as owner, then deletes the old document.
+Same id, so saved tests and history are untouched. Safe to re-run and safe to interrupt, like 003's
+device-to-account copy. Until a user's move finishes, the app keeps reading the old location too,
+so no list ever disappears, including offline. Nothing new is ever written to the old location.
 
 ---
 
@@ -241,9 +257,21 @@ member. Only a list with no other members is deleted.
 - [ ] The owner can **Stop sharing** (confirmed, naming how many people): the list becomes private again for the owner, all links stop working
 - [ ] The owner's **Delete** on a shared list says it deletes it for everyone and names how many people
 - [ ] A member who was removed, or whose list was unshared or deleted, sees on **My lists**: *"Dana stopped sharing "French verbs" with you."* **Keep a private copy** / **Dismiss**. The offer waits for them however long they take to come back (D-11)
-- [ ] The kept copy has the same words as the last version they could see, their practice history, and their saved tests still pointing at it
+- [ ] The kept copy has the same words as the last version they could see; its "5 practices" line and "words you missed" include their drills on the shared list; their saved tests now point at the copy
 - [ ] A member's saved tests that used a list they left without a copy behave exactly as 011 does for a deleted list
 - [ ] Deleting my account: I leave every list I am in; lists I own pass to another member (D-13) or are deleted if I am alone; my open links are cancelled
+
+### Story 7: Nothing changes for people who never share
+**As a** signed-in student who never shares anything
+**I want** my lists to be exactly where they were after this ships
+**So that** a feature I do not use cannot cost me anything
+
+**Acceptance Criteria:**
+- [ ] The first sign-in after the update moves my lists without a prompt, a spinner that blocks the app, or any visible change (D-14)
+- [ ] During and after the move, every list, its practice history, its "5 practices" line and my saved tests are exactly as before
+- [ ] Opening the app offline before the move has run still shows all my lists
+- [ ] If the move is interrupted (closed tab, lost connection), the next visit finishes it; no list is ever duplicated or lost
+- [ ] Signed-out lists on the device are untouched
 
 ---
 
@@ -251,18 +279,19 @@ member. Only a list with no other members is deleted.
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR1 | `sharedLists/{listId}` with owner, per-member role and profile, and former-member access | HIGH |
+| FR1 | One `lists/{listId}` collection for every cloud list, with owner, member uids and a per-member role and profile | HIGH |
 | FR2 | `shareLinks/{code}` with a random code, role, label, use limit, status and a list preview | HIGH |
 | FR3 | Rules: members read; owner and editors edit content; only the owner changes membership, except join and leave | HIGH |
 | FR4 | Rules: join only with a waiting, unexpired link for this list, taking exactly the link's role | HIGH |
-| FR5 | First link moves the list from private to shared in one batch, keeping its id | HIGH |
-| FR6 | `subscribeLists` returns private and shared lists as one sorted array | HIGH |
+| FR5 | One-time, idempotent move of `users/{uid}/lists` to `lists`, keeping ids (D-14) | HIGH |
+| FR6 | `subscribeLists` is one query, lists where I am a member (plus the old location until the move finishes) | HIGH |
 | FR7 | Share panel: role, label, create; QR code; share sheet, WhatsApp, Email, Copy, full-screen QR | HIGH |
 | FR8 | Join screen via `?join=<code>`, surviving sign-in, readable before sign-in | HIGH |
 | FR9 | Owner view: link statuses, cancel, share again, new link; members with role change and remove | HIGH |
 | FR10 | Member view: members, role, leave (with or without a copy) | HIGH |
 | FR11 | Keep-a-copy offer after leave, removal, stop sharing and delete (D-11) | HIGH |
 | FR12 | Stop sharing (D-12) | MEDIUM |
+| FR17 | A kept copy inherits history through `previousIds` (D-11) | MEDIUM |
 | FR13 | Stale-edit detection on save for shared lists (D-8) | MEDIUM |
 | FR14 | Read-only editor for "Can practise" members | MEDIUM |
 | FR15 | Account deletion handles shared lists and links (D-13) | HIGH |
@@ -274,8 +303,8 @@ member. Only a list with no other members is deleted.
 |----|-------------|
 | NFR1 | Free tier only, no Cloud Functions, no server code, no secrets (003 NFR1a and NFR6 unchanged). |
 | NFR2 | Signed-out bundle budget unchanged. The QR encoder and all sharing UI are in a lazy chunk; `check-bundle.mjs` still passes. |
-| NFR3 | Every new rule has an allow **and** a deny test. |
-| NFR4 | Private lists behave exactly as today. `listRepo.ts`, `localListStore.ts`, `session.ts`, `parse/` and the `users/{uid}/lists` rule block are not modified. |
+| NFR3 | Every new rule has an allow **and** a deny test. The `lists` read rule gets the strongest suite in the file: it is now the only thing keeping every private list private. |
+| NFR4 | Private lists behave exactly as today from the user's side, although they are stored somewhere new. `listRepo.ts`, `localListStore.ts`, `session.ts` and `parse/` are not modified; guests are untouched. |
 | NFR5 | One new runtime dependency at most: a QR encoder under 10 KB gzipped, MIT, no transitive dependencies, rendering SVG (CSP forbids nothing about inline SVG). Writing an encoder by hand is the fallback. |
 | NFR6 | The QR code is readable in both themes and at 200% zoom, and never the only way to get the link (Copy link is always beside it). |
 
@@ -292,7 +321,10 @@ member. Only a list with no other members is deleted.
 | Member removed while editing | Save fails; the keep-a-copy offer includes their unsaved edits |
 | Member offline edits, then is removed before reconnecting | Queued write rejected on reconnect; the keep-a-copy offer appears with the last version plus a note that their offline changes could not be saved |
 | Owner offline when trying to share | Create link disabled; the link must exist on the server before it is sent |
-| Kept copy's id matches a list they later rejoin | On rejoin the private copy is given a new id first; history stays with the shared one |
+| Member keeps a copy, then rejoins the shared list | Both exist, with different ids; no conflict |
+| Move interrupted halfway | Some lists in each place; both are read and deduped by id; the next sign-in finishes |
+| A list id already exists in `lists` owned by someone else (practically impossible, uuids) | The rules refuse the copy; that one list stays in the old location, still readable, and the error is logged |
+| Old app version still open in another tab after the update | It writes to `users/{uid}/lists`, which the rules now refuse; it shows its existing permission toast. Reloading fixes it |
 | Owner deletes the list with waiting links | All links stop working at once |
 | 20-person or 10-link cap reached | The action is disabled with the reason |
 | QR scanned by a camera app that opens a different browser than the one signed in | Works: they sign in there; nothing depends on the original browser |
