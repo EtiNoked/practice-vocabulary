@@ -1,8 +1,10 @@
 # Quickstart: 016-list-sharing
 
-**TL;DR:** Share a list by email. The recipient joins from the email (signing in with Google first
-if they have no account). The sharer sees each invite's status and can cancel it. Once joined, both
-edit and practise the same list and see each other as members. Scores stay private.
+**TL;DR:** Share a list with a link and a QR code: send it over WhatsApp or email, or hold your
+phone up. Whoever opens it signs in with Google (which creates an account if they have none) and
+joins as **Can edit** or **Can practise**. The owner sees each link's status and can cancel it.
+Everyone sees the members. Nobody ever loses their words: whenever a shared list goes away from
+you, you can keep a private copy. No server, no email provider, no secrets.
 
 ---
 
@@ -13,24 +15,18 @@ sequenceDiagram
     actor A as Owner
     participant App as App (A)
     participant FS as Firestore
-    participant W as Worker
-    participant M as Email
-    actor B as Invitee
+    actor B as Joiner
 
-    A->>App: Share "French verbs" with b@x.com
-    App->>FS: batch: move list to sharedLists, create invite (pending)
-    App->>W: POST /api/invites/:id/send (A's ID token)
-    W->>FS: read + stamp invite (as A, rules decide)
-    W->>M: "A invited you to French verbs" + link
-    App-->>A: Invite sent · just now   [Cancel] [Resend]
-    M-->>B: email
-    B->>App: opens /?invite=id
-    App-->>B: Sign in with Google to join
-    B->>App: signs in (account created if new)
-    App-->>B: French verbs · 42 words · FR→EN   [Join] [Decline]
-    B->>FS: batch: invite accepted + add B to members
-    FS-->>App: live update
-    App-->>A: Members: A (Owner), B
+    A->>App: Share "French verbs" · Can practise · "For Dana"
+    App->>FS: batch: move list to sharedLists, create share link
+    App-->>A: QR code · Share… · WhatsApp · Email · Copy
+    A-->>B: WhatsApp message, email, or QR on screen
+    B->>App: opens /?join=code
+    App->>FS: read link preview (allowed signed-out)
+    App-->>B: Eti invited you to "French verbs" · 42 words · you can practise
+    B->>App: Sign in with Google (account created if new) → Join list
+    App->>FS: batch: link uses +1, add B as viewer
+    FS-->>A: live: link gone, Dana under Members
 ```
 
 ---
@@ -41,36 +37,49 @@ sequenceDiagram
 |---|---|---|
 | Where a list lives | `users/{uid}/lists` only | Private: unchanged. Shared: `sharedLists/{id}`, same id |
 | Who can see a list | Its creator | Private: its creator. Shared: its members |
-| Email | The app never sends any | One Worker route sends invites |
-| Server code | None (assets-only Worker) | One route, `POST /api/invites/:id/send` |
-| Secrets | None | `RESEND_API_KEY`, as a Cloudflare secret |
-| Practice history | Per person | Per person (unchanged, D-5) |
+| How someone is invited | n/a | A link, as a QR code or sent from your own apps |
+| Server code | None | None |
+| Secrets | None | None |
+| Runtime dependencies | react, react-dom | + one tiny QR encoder, lazy-loaded |
+| Practice history | Per person | Per person (unchanged, D-6) |
 
 ---
 
-## Statuses the owner sees
+## What the owner sees for each link
 
 | Status | Means | Actions |
 |---|---|---|
-| **Invite sent · 2 days ago** | Pending, email delivered to the provider | Cancel invitation · Resend |
-| **Email not sent** | Pending, the email failed | Try again · Cancel invitation |
-| **Declined** | They said no | Invite again · Remove |
-| **Expired** | 14 days, no answer | Invite again · Remove |
-| *(gone, now under Members)* | Accepted | Remove member |
+| **Waiting · created 2h ago** | Not used yet | Share again · Cancel link |
+| **Declined** | Someone opened it and said no | New link · Remove |
+| **Expired** | 14 days, unused | New link · Remove |
+| *(gone, now under Members)* | Someone joined through it | Change role · Remove member |
 
 ---
 
 ## Who can do what
 
-| | Owner | Member |
-|---|---|---|
-| Edit words, rename, change languages | ✓ | ✓ |
-| Practise, test, use in games and saved tests | ✓ | ✓ |
-| See members and pending invites | ✓ | ✓ |
-| Invite, cancel, resend | ✓ | (open question D-3) |
-| Remove a member | ✓ | |
-| Delete the list for everyone | ✓ | |
-| Leave | | ✓ |
+| | Owner | Can edit | Can practise |
+|---|---|---|---|
+| Practise, test, games, saved tests | ✓ | ✓ | ✓ |
+| See members | ✓ | ✓ | ✓ |
+| Edit words, rename, languages | ✓ | ✓ | |
+| Keep a private copy | ✓ | ✓ | ✓ |
+| Make and cancel links, change roles, remove | ✓ | | |
+| Stop sharing, delete for everyone | ✓ | | |
+| Leave | | ✓ | ✓ |
+
+---
+
+## When a shared list goes away from you
+
+| What happened | What you see on My lists |
+|---|---|
+| You leave | Asked right then: **Leave and keep a copy** or **Leave** |
+| The owner removes you | "Eti removed you from "French verbs"." **Keep a private copy** / **Dismiss** |
+| The owner stops sharing | "Eti stopped sharing "French verbs" with you." same choice |
+| The owner deletes it | "Eti deleted "French verbs"." same choice |
+
+The copy is the last version you could see, with your practice history and saved tests intact.
 
 ---
 
@@ -78,26 +87,20 @@ sequenceDiagram
 
 ```bash
 npm install
-npm run dev                      # app, with VITE_INVITE_EMAIL=mailto (no provider needed)
+npm run dev                      # app on :5173
 npm run test:rules               # rules + adapters against the emulator
-npx wrangler dev                 # app + Worker; needs .dev.vars with RESEND_API_KEY
 ```
 
-`.dev.vars` (gitignored):
-
-```
-RESEND_API_KEY=re_...
-FIREBASE_PROJECT_ID=your-dev-project
-INVITE_FROM=Vocabulary Trainer <invites@your-domain>
-```
-
-To try the invitee side locally, sign in as a second Google account in a private window and open
-`http://localhost:5173/?invite=<id>` with the id from the Firestore emulator or console.
+To try the joiner side, sign in as a second Google account in a private window and open the link
+the Share panel gives you (it points at `http://localhost:5173/?join=<code>`). To try the QR code
+on a phone, open the app at the **Network** address `npm run dev` prints (it already binds
+`--host`), so the link it makes is reachable from the phone. Signing in there needs that address in
+Firebase's authorised domains.
 
 ---
 
 ## Where to read more
 
-- The why, the decisions and the stories: [`spec.md`](spec.md)
-- Data model, rules, merge, Worker, risks: [`plan.md`](plan.md)
+- The why, decisions and stories: [`spec.md`](spec.md)
+- Data model, rules, merge, QR, join screen, risks: [`plan.md`](plan.md)
 - The ordered build: [`tasks.md`](tasks.md)

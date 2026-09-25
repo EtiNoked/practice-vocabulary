@@ -1,103 +1,114 @@
 # Plan: Sharing a list with someone else
 
 **Feature ID:** 016-list-sharing
-**Status:** DRAFT
+**Status:** DRAFT, revision 2
 **Created:** 2026-09-25
 **Builds on:** `003-user-accounts` (Firestore, Google sign-in, `ListStore` port), `011-test-builder` (saved tests reference lists by id)
 
+## What revision 2 removed
+
+Revision 1 sent email from a new Cloudflare Worker route through Resend. Replacing email with a
+share link and QR code (spec D-1) deletes, from the plan:
+
+- the Worker script, `run_worker_first`, and every line of server code
+- Firebase ID token verification (the riskiest code in revision 1)
+- the email provider account, the verified domain, SPF/DKIM, and the `RESEND_API_KEY` secret
+- the email template and its escaping, and the resend throttle
+- binding invites to an email address, and the "wrong Google account" screen
+- the plan's biggest unknown (R1 in revision 1: whether members can query invites through a `get()`),
+  because links are now only ever queried by their creator
+
+What it adds is small: a QR encoder, the Web Share API, and a join screen that a guest can read.
+
 ## Technical approach
 
-Four separate problems, in the order they carry risk:
+Three problems, in the order they carry risk:
 
-1. **A second, membership-based home for lists, and the rules that guard it.** The rules are the
-   app's only server-side check. Every other part of the feature is only as safe as they are, so
-   they are written and tested first, against the emulator, before any client code exists.
-2. **Merging two sources into one list of lists.** `App` must not learn that a list can live in
-   two places. `ListStore.subscribeLists` keeps its signature and simply emits more lists.
-3. **Sending an email with no backend.** A single Worker route. Small, but it is the app's first
-   server code and its first secret.
-4. **An entry point from outside the app.** `?invite=<id>` must survive a sign-in and must not
-   collide with the first-sign-in migration prompt.
+1. **A second, membership-based home for lists, and rules that guard roles and joins.** The rules
+   are the app's only server-side check, so they are written and tested first, against the
+   emulator, before any client code.
+2. **Merging two sources into one list of lists.** `ListStore.subscribeLists` keeps its signature
+   and emits more lists. `App` must not learn that a list can live in two places, except where the
+   UI has to say "Leave" instead of "Delete".
+3. **An entry point from outside the app.** `?join=<code>` must survive a sign-in, must work for a
+   guest who has never loaded Firebase, and must not collide with the first-sign-in migration
+   prompt.
 
-### The ordering decisions that de-risk this
+### Ordering decisions
 
-- **Rules and their tests before the adapter.** Same reason as 003: nothing else double-checks them.
-  One specific unknown (R1: can a `list` query on `invites` be authorised by a `get()` on the list?)
-  is answered in the very first task, because the answer changes the data model.
-- **The adapter before the UI, tested through the emulator.** `tests/rules/firestoreListStore.test.ts`
-  already runs the adapter against real rules; the sharing adapter joins it.
-- **The Worker behind a feature flag.** Until the Resend domain is verified, the client falls back to
-  `mailto:` (spec D-1 fallback). The whole feature can be built and tested without the email
-  provider existing yet.
-- **Private lists untouched.** `users/{uid}/lists` rules, `listRepo.ts`, `localListStore.ts` do not
-  change. A regression in private lists is therefore a bug in the merge, and only there.
+- **Rules and tests before the adapter**, as in 003.
+- **Adapter before UI**, tested through the emulator in `tests/rules/`, where the list store's
+  adapter tests already live.
+- **Private lists untouched.** Their rules, `listRepo.ts` and `localListStore.ts` do not change, so
+  any regression in private lists is a bug in the merge and only there.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     subgraph UI["UI"]
-        Lists[ListsScreen / SavedLists<br/>Shared badge · avatars]
-        SharePanel[SharePanel<br/>invite · statuses · cancel · members]
-        Invite[InvitationScreen<br/>?invite=id]
-        Banner[PendingInvites banner]
-        Editor[ListEditor<br/>stale-edit check]
+        Lists[ListsScreen / SavedLists<br/>Shared badge · avatars · keep-a-copy offers]
+        SharePanel[SharePanel<br/>role · label · QR · share · link statuses]
+        Members[MembersPanel<br/>roles · remove · leave · stop sharing]
+        Join[JoinScreen<br/>?join=code]
+        Editor[ListEditor<br/>read-only for Can practise · stale-edit check]
     end
 
     subgraph Ports["Ports"]
         Store[["ListStore (unchanged shape)"]]
-        Share[["ShareStore (new, signed-in only)"]]
+        Share[["ShareStore (new, Firestore only)"]]
     end
 
-    subgraph Cloud["Lazy Firebase chunk"]
+    subgraph Lazy["Lazy chunks"]
         FsStore[firestoreListStore.ts<br/>merges private + shared]
         FsShare[firestoreShareStore.ts]
-    end
-
-    subgraph Worker["Cloudflare Worker (new script)"]
-        Route[POST /api/invites/:id/send]
+        QR[qr.tsx<br/>encoder → SVG rects]
     end
 
     Lists --> Store
     Editor --> Store
     SharePanel --> Share
-    Invite --> Share
-    Banner --> Share
+    SharePanel --> QR
+    Members --> Share
+    Join --> Share
     Store -.-> FsStore
     Share -.-> FsShare
     FsStore --> P[(users/uid/lists)]
     FsStore --> S[(sharedLists)]
     FsShare --> S
-    FsShare --> I[(invites)]
-    SharePanel -->|ID token| Route
-    Route -->|caller's ID token, REST| I
-    Route -->|API key secret| Resend[(Resend)]
+    FsShare --> L[(shareLinks)]
+    FsShare --> F[(listFarewells)]
+    SharePanel -->|navigator.share · wa.me · mailto| Out((sharer's own apps))
 
-    style Cloud stroke-dasharray: 5 5
-    style Worker stroke-dasharray: 2 2
+    style Lazy stroke-dasharray: 5 5
 ```
 
-`ShareStore` is a separate port rather than new methods on `ListStore`, because the local store has
-no honest implementation of any of it. `useListStore` returns `share: null` for guests, and every
-sharing control reads that as "Sign in to share" (spec D-10).
+`ShareStore` is a separate port, not new `ListStore` methods, because the local store has no honest
+implementation of any of it. `useShareStore` returns `null` for a signed-in-less app, and every
+sharing control reads that as "Sign in to share".
 
 ## Data model
 
 ```
-users/{uid}/lists/{listId}     WordList                       (unchanged, private lists)
-sharedLists/{listId}           SharedWordList                 (new)
-invites/{inviteId}             Invite                         (new, inviteId = crypto.randomUUID())
+users/{uid}/lists/{listId}     WordList             unchanged, private lists
+sharedLists/{listId}           WordList + sharing   new; same id the list had when private
+shareLinks/{code}              ShareLink            new; code = 22 chars base64url (128 random bits)
+listFarewells/{listId}_{uid}   Farewell             new; the keep-a-copy offer (D-11)
 ```
 
 ```ts
 // src/state/types.ts (additions)
+export type ListRole = 'owner' | 'editor' | 'viewer'   // UI: Owner · Can edit · Can practise
+
 export interface ListMember {
+  role: ListRole
   displayName: string | null
-  email: string
+  email: string | null
   photoURL: string | null
   joinedAt: number
-  /** The invite that let them in. Absent for the owner. The join rule reads it (see Rules). */
-  inviteId?: string
+  /** The link that let them in, for "joined via For Dana" and for the join rule. Absent for the owner. */
+  viaLink?: string
+  viaLabel?: string
 }
 
 export interface ListSharing {
@@ -105,7 +116,7 @@ export interface ListSharing {
   /** Mirrors the keys of `members`. Exists only because Firestore can query array-contains, not map keys. */
   memberUids: string[]
   members: Record<string, ListMember>
-  /** Who saved last, for the stale-edit warning (spec D-6). */
+  /** Who saved last, for the stale-edit warning (D-8). */
   updatedBy: string
 }
 
@@ -118,39 +129,45 @@ export interface WordList {
 
 ```ts
 // src/share/types.ts
-export type InviteStatus = 'pending' | 'accepted' | 'declined'
-
-export interface Invite {
-  id: string
+export interface ShareLink {
+  code: string                // the document id; the secret in the URL
   listId: string
-  /** Lowercased. Compared against request.auth.token.email in the rules. */
-  email: string
-  invitedByUid: string
-  invitedByName: string | null
-  /** Denormalised preview so the invitee sees what they are joining before they can read the list. */
-  listName: string
-  wordCount: number
-  col1Lang: LangCode
-  col2Lang: LangCode
-  status: InviteStatus
-  createdAt: number        // request.time on create; expiry is createdAt + 14 days (D-7)
-  respondedAt?: number
-  /** Email bookkeeping, written by the Worker with the owner's token. */
-  lastEmailAt?: number
-  emailCount: number
-  emailError?: string
+  role: 'editor' | 'viewer'
+  label: string | null        // "For Dana"
+  maxUses: number             // 1 by default; up to 20 for a group link (open question 1)
+  uses: number
+  declined: boolean           // single-use links only
+  createdByUid: string
+  createdAt: number           // server timestamp; expires createdAt + 14 days (D-7)
+  /** What a guest sees on the join screen before they can read the list itself. */
+  preview: { listName: string; ownerName: string | null; wordCount: number; col1Lang: LangCode; col2Lang: LangCode }
+}
+
+export interface Farewell {
+  uid: string
+  listId: string
+  reason: 'removed' | 'stopped' | 'deleted'
+  byName: string | null
+  at: number
+  /** The last version this member could see. A snapshot, so later edits never reach them. */
+  list: WordList
 }
 ```
 
-**Displayed status** is derived, never stored: `pending` + no `lastEmailAt` + `emailError` →
-*Email not sent*; `pending` past 14 days → *Expired*; `pending` → *Invite sent · {when}*;
-`declined` → *Declined*. An accepted invite is not shown at all; its person is under Members.
-Keeping *Expired* derived is what makes D-7 need no cleanup job.
+**Displayed link status is derived, never stored:** `declined` → *Declined*;
+`now > createdAt + 14d` → *Expired*; `uses < maxUses` → *Waiting · created 2h ago* (a group link
+adds *"· 7 of 20 joined"*); used up → not shown, the person is under Members. Keeping *Expired*
+derived is why D-7 needs no cleanup job.
 
-Why `sharedLists` is top-level and not `users/{ownerUid}/lists` with extra rules: a member's
-`subscribeLists` would then need a collection-group query across every user's lists, filtered by
-membership, and one wrong rule would expose every private list in the database. A separate
-collection keeps the private rule exactly as it is.
+**Why farewells are their own documents** and not a "former members" field on the shared list: a
+removed member must see the list *as it was when they were removed* (D-11), and rules cannot give
+someone access to an old version of a document. A snapshot written in the same batch as the
+removal is the only honest way. It also means a removed member has no access at all to the live
+list, which is the property that matters.
+
+**Why `sharedLists` is top-level** and not `users/{ownerUid}/lists` with extra rules: a member's
+query would then be a collection-group query across every user's lists, and one wrong rule would
+expose every private list in the database.
 
 ## Rules
 
@@ -158,235 +175,251 @@ Sketch, not final syntax. Every clause gets an allow and a deny test.
 
 ```
 function signedIn() { return request.auth != null; }
-function myEmail() { return request.auth.token.email.lower(); }
-function verified() { return request.auth.token.email_verified == true; }
-function isMember(list) { return signedIn() && request.auth.uid in list.memberUids; }
-function isListOwner(list) { return signedIn() && request.auth.uid == list.ownerUid; }
-function contentValid(d) {
-  return isNonEmptyString(d.name, 200) && d.pairs is list && d.pairs.size() <= 500;
+function me() { return request.auth.uid; }
+function roleOf(list) { return list.members[me()].role; }
+function isMember(list) { return signedIn() && me() in list.memberUids; }
+function canEdit(list) { return isMember(list) && roleOf(list) in ['owner', 'editor']; }
+function isListOwner(list) { return signedIn() && list.ownerUid == me(); }
+function linkLive(link) {
+  return link.uses < link.maxUses && !link.declined
+    && request.time < link.createdAt + duration.value(14, 'd');
 }
-const CONTENT = ['name','pairs','col1Lang','col2Lang','langSource','updatedAt','updatedBy'];
+function sharedList(id) { return get(/databases/$(database)/documents/sharedLists/$(id)).data; }
 
 match /sharedLists/{listId} {
   allow read: if isMember(resource.data);
 
-  // Created only by the owner, alone, as the first-invite batch (D-4).
+  // Created by the owner, alone, in the first-link batch (D-5).
   allow create: if signedIn()
-    && request.resource.data.ownerUid == request.auth.uid
-    && request.resource.data.memberUids == [request.auth.uid]
-    && request.resource.data.members.keys().hasOnly([request.auth.uid])
-    && contentValid(request.resource.data);
+    && request.resource.data.ownerUid == me()
+    && request.resource.data.memberUids == [me()]
+    && request.resource.data.members.keys().hasOnly([me()])
+    && request.resource.data.members[me()].role == 'owner'
+    && contentValid(request.resource.data)
+    && request.resource.data.memberUids.size() <= 20;
 
   allow update: if
-    // 1. any member edits content, and says so
-    (isMember(resource.data)
-      && diff().affectedKeys().hasOnly(CONTENT)
-      && request.resource.data.updatedBy == request.auth.uid
-      && contentValid(request.resource.data))
-    // 2. join: add exactly myself, with an accepted, unexpired invite to my verified email
-    || (joinIsValid())
-    // 3. leave: a non-owner removes exactly themself
-    || (leaveIsValid())
-    // 4. owner removes another member, or (account deletion) hands ownership to a member
-    || (isListOwner(resource.data) && ownerMembershipChangeIsValid());
+       contentEdit()           // owner or editor changes name/pairs/langs, sets updatedBy
+    || joinIsValid()           // see below
+    || leaveIsValid()          // a non-owner removes exactly themself
+    || ownerManages();         // owner changes a role or removes a member (with a farewell, below)
 
-  allow delete: if isListOwner(resource.data);
+  allow delete: if isListOwner(resource.data);   // stop sharing and delete for everyone
 }
 
-match /invites/{inviteId} {
-  allow get: if signedIn() && (
-      (verified() && resource.data.email == myEmail())
-      || isMember(get(/databases/$(database)/documents/sharedLists/$(resource.data.listId)).data));
-  // Queries: invitee's "my pending invites", and a list's invites for its members (R1).
-  allow list: if signedIn() && (
-      (verified() && resource.data.email == myEmail())
-      || isMember(get(/databases/$(database)/documents/sharedLists/$(resource.data.listId)).data));
+match /shareLinks/{code} {
+  // Readable by anyone who has the code, signed in or not: it holds only the preview, and the
+  // code cannot be guessed. This is what lets a guest see who is inviting them before signing in.
+  allow get: if true;
+  // Only the creator lists them, and the query must filter on it (rules are not filters).
+  allow list: if signedIn() && resource.data.createdByUid == me();
 
   allow create: if signedIn()
     && isListOwner(getAfter(/databases/$(database)/documents/sharedLists/$(request.resource.data.listId)).data)
-    && request.resource.data.invitedByUid == request.auth.uid
-    && request.resource.data.status == 'pending'
-    && request.resource.data.email != myEmail()
-    && request.resource.data.emailCount == 0
-    && memberAndInviteCountWithinCap();           // D-9, see R3
+    && request.resource.data.createdByUid == me()
+    && request.resource.data.uses == 0 && request.resource.data.declined == false
+    && request.resource.data.maxUses >= 1 && request.resource.data.maxUses <= 20
+    && request.resource.data.role in ['editor', 'viewer']
+    && request.resource.data.createdAt == request.time;
 
   allow update: if
-    // invitee answers once, before expiry
-    (verified() && resource.data.email == myEmail() && resource.data.status == 'pending'
-      && request.time < resource.data.createdAt + duration.value(14, 'd')
-      && request.resource.data.status in ['accepted','declined']
-      && diff().affectedKeys().hasOnly(['status','respondedAt']))
-    // owner's email bookkeeping, throttled here, not only in the Worker (FR8)
-    || (resource.data.invitedByUid == request.auth.uid
-      && diff().affectedKeys().hasOnly(['lastEmailAt','emailCount','emailError'])
-      && request.resource.data.emailCount <= resource.data.emailCount + 1
-      && request.resource.data.emailCount <= 4
-      && (!('lastEmailAt' in resource.data) || request.time > resource.data.lastEmailAt + duration.value(10, 'm')));
+       // a join uses it up by exactly one, and only alongside the matching list update
+       (signedIn() && linkLive(resource.data)
+         && diff().affectedKeys().hasOnly(['uses'])
+         && request.resource.data.uses == resource.data.uses + 1
+         && getAfter(/databases/$(database)/documents/sharedLists/$(resource.data.listId))
+              .data.members[me()].viaLink == code)
+       // anyone holding a single-use link may decline it
+    || (signedIn() && linkLive(resource.data) && resource.data.maxUses == 1
+         && diff().affectedKeys().hasOnly(['declined']) && request.resource.data.declined == true);
 
-  allow delete: if resource.data.invitedByUid == request.auth.uid;   // cancel (D-8)
+  allow delete: if signedIn() && resource.data.createdByUid == me();   // cancel
+}
+
+match /listFarewells/{id} {
+  allow read, delete: if signedIn() && resource.data.uid == me();
+  // Written by the owner, in the same batch that removes the member or ends the list.
+  allow create: if signedIn()
+    && id == request.resource.data.listId + '_' + request.resource.data.uid
+    && isListOwner(sharedList(request.resource.data.listId))
+    && request.resource.data.uid in sharedList(request.resource.data.listId).memberUids
+    && request.resource.data.list.pairs.size() <= 500;
 }
 ```
 
-**The join rule** is the one that matters. The member entry carries `inviteId`, so the rule can find
-the invite without a parameter:
+**The join rule** is the one that matters:
 
 ```
 function joinIsValid() {
-  let me = request.auth.uid;
-  let entry = request.resource.data.members[me];
-  let inv = getAfter(/databases/$(database)/documents/invites/$(entry.inviteId)).data;
-  return signedIn() && verified()
-    && !(me in resource.data.memberUids)
-    && request.resource.data.memberUids == resource.data.memberUids.concat([me])
-    && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([me])
-    && diff().affectedKeys().hasOnly(['memberUids','members'])
-    && inv.listId == listId && inv.email == myEmail() && inv.status == 'accepted'
-    && entry.email == myEmail();
+  let entry = request.resource.data.members[me()];
+  let before = get(/databases/$(database)/documents/shareLinks/$(entry.viaLink)).data;
+  let after  = getAfter(/databases/$(database)/documents/shareLinks/$(entry.viaLink)).data;
+  return signedIn()
+    && !(me() in resource.data.memberUids)
+    && request.resource.data.memberUids == resource.data.memberUids.concat([me()])
+    && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([me()])
+    && diff().affectedKeys().hasOnly(['memberUids', 'members'])
+    && before.listId == listId && linkLive(before)
+    && after.uses == before.uses + 1
+    && entry.role == before.role
+    && resource.data.memberUids.size() < 20;
 }
 ```
 
-The client does accept as **one batch**: invite `status → accepted` and list `memberUids`/`members`
-add. `getAfter` sees the invite's post-batch state, so neither write is valid alone. That is what
-makes "accepted but not a member" and "member without an accepted invite" impossible.
+A join is **one batch**: the link's `uses + 1` and the list's new member. Each rule checks the
+other's post-batch state with `getAfter`, so neither write is valid alone. That makes "link used
+but nobody joined" and "joined without using a link" both impossible, and it is what makes two
+people racing for one single-use link safe: the second batch sees `uses == maxUses` and is refused.
 
-`createdAt` and `lastEmailAt` are Firestore timestamps (`serverTimestamp()` on write, rules check
-`== request.time`), not `Date.now()` numbers like the rest of the app. The rules must compare them
-against `request.time`, and a client clock cannot be trusted for expiry. Converted to ms at the
-adapter boundary so the rest of the app sees numbers.
+Role is copied from the link and checked (`entry.role == before.role`), so a joiner cannot promote
+themselves to editor by editing the request.
+
+Timestamps that the rules compare (`createdAt`) are Firestore server timestamps, not the app's
+usual `Date.now()` numbers, because expiry must not trust the client clock. Converted to ms at the
+adapter boundary so the rest of the app still sees numbers.
 
 ## Merging private and shared lists
 
 ```ts
 subscribeLists(onChange, onError) {
-  let privateLists: WordList[] = [], shared: WordList[] = [], ready = { p: false, s: false }
-  const emit = () => ready.p && ready.s &&
-    onChange([...privateLists, ...shared].sort((a, b) => b.updatedAt - a.updatedAt))
-  const a = onSnapshot(query(collection(db, listsPath), orderBy('updatedAt','desc')), ...)
+  let mine: WordList[] = [], shared: WordList[] = [], got = { mine: false, shared: false }
+  const emit = () => got.mine && got.shared &&
+    onChange(dedupeById([...shared, ...mine]).sort((a, b) => b.updatedAt - a.updatedAt))
+  const a = onSnapshot(query(collection(db, listsPath), orderBy('updatedAt', 'desc')), ...)
   const b = onSnapshot(query(collection(db, 'sharedLists'),
-                             where('memberUids','array-contains', uid)), ...)
+                             where('memberUids', 'array-contains', uid)), ...)
   return track(() => { a(); b() })
 }
 ```
 
-- **Emit only once both have answered.** Otherwise a shared list flickers in a moment after the
-  rest, and the "Loading your lists…" rule in `SavedLists` is defeated.
-- **Sorted client-side**, so no composite index is needed (`array-contains` + `orderBy` would need
-  one, and `firestore.indexes.json` does not exist yet).
-- **Writes route by where the list lives.** The adapter keeps a `Set` of shared ids from snapshot
-  `b`. `saveList` on a shared id is an `updateDoc` of `CONTENT` fields only, plus
-  `updatedBy: uid`. It must never `setDoc` a shared list: that would overwrite `members` with
-  whatever the client last saw and silently undo a concurrent join.
-- `removeList` on a shared id: owner → batch delete list + its invites; member → leave. `App`'s
-  confirmation copy differs by role (spec Story 7), so `App` does read `list.sharing` there, and
-  only there.
+- **Emit only once both have answered**, or a shared list flickers in a moment after the rest.
+- **Sorted client-side**, so no composite index (`array-contains` + `orderBy` would need one).
+- **Deduped, shared winning.** During the first-link move a snapshot can briefly hold the list in
+  both; never in neither, because both halves come from one committed batch. An emulator test
+  proves it rather than this paragraph.
+- **Writes route by where the list lives**, using a live `Set` of shared ids. `saveList` on a
+  shared id is an `updateDoc` of content fields plus `updatedBy`. Never `setDoc`: that would
+  rewrite `members` from whatever the client last saw and undo a concurrent join. The rules refuse
+  it anyway (the content clause does not allow `members` to change), and a test pins that.
 
-## Sharing a list for the first time (D-4)
+## Sharing for the first time (D-5)
 
-One `writeBatch`:
+One `writeBatch`: set `sharedLists/{id}` (the private list plus `sharing`, owner alone), delete
+`users/{uid}/lists/{id}`, set `shareLinks/{code}`. Then show the QR and share options.
 
-1. `set sharedLists/{id}` = the private list + `sharing` with the owner as the only member
-2. `delete users/{uid}/lists/{id}`
-3. `set invites/{newId}` pending
-
-Then, outside the batch, `POST /api/invites/{newId}/send`. The invite exists whether or not the
-email goes out, which is what makes *Email not sent · Try again* possible.
-
-Both listeners see the move; for one snapshot the list may be in neither or both. The merge dedupes
-by id (shared wins), and the "both answered" gate means it is never absent from an emitted array
-after the first emit, because the private-removal and shared-add arrive from one committed batch.
-Covered by an emulator test rather than argued.
-
-## Email
-
-`wrangler.jsonc` gains `main: "worker/index.ts"` and `assets.run_worker_first: ["/api/*"]`, so
-every other path is still served as static assets with no Worker invocation (and no cost).
+The share message and URL:
 
 ```
-POST /api/invites/:id/send
-Authorization: Bearer <Firebase ID token>
-
-1. Verify the ID token: RS256 against Google's securetoken JWKs (cached per their Cache-Control),
-   aud == project id, iss == https://securetoken.google.com/<project>, exp in the future.
-2. GET the invite through the Firestore REST API with the SAME bearer token. The rules decide
-   whether this caller may see it. Refuse unless invitedByUid == token.uid and status == pending.
-3. PATCH lastEmailAt / emailCount with the same token. The rules enforce the throttle (FR8);
-   a 403 here means "too soon", returned to the client as 429.
-4. Send via Resend with a fixed template. Only listName and invitedByName are interpolated, both
-   HTML-escaped and length-capped. The link is https://<origin>/?invite=<id>.
-5. On provider failure, PATCH emailError and return 502.
+{ownerName} invited you to practise "{listName}" ({n} words, {French → English}) in Vocabulary Trainer:
+https://{origin}/?join={code}
 ```
 
-- **Why the caller's token and not a service account:** the Worker then holds no power beyond the
-  person calling it (spec NFR6). A service-account key would be a second, far more dangerous secret.
-- **Daily cap per sender** (e.g. 20 invites/day): Cloudflare's rate-limiting binding keyed by uid.
-  The per-invite throttle is in the rules; this one is only about one account spamming many
-  addresses.
-- **CSP**: the Worker is same-origin, so `connect-src 'self'` already covers it. No CSP change.
-- **Feature flag**: `VITE_INVITE_EMAIL=worker|mailto`. `mailto` opens the sharer's mail client with
-  the same text and link, and the invite shows *Invite created* instead of *Invite sent*.
-- **Secrets**: `RESEND_API_KEY` via `wrangler secret put`; `FIREBASE_PROJECT_ID` and
-  `INVITE_FROM` as plain vars. Local dev uses `.dev.vars` (gitignored).
+- **Share…** calls `navigator.share({ title, text, url })`, shown only when `navigator.canShare`
+  says it will work. `AbortError` (the user closed the sheet) is not an error.
+- **WhatsApp**: `https://wa.me/?text={encoded message}`. **Email**: `mailto:?subject=…&body=…`.
+  Both are plain links, so no CSP change (`form-action 'none'` is irrelevant to navigation).
+- **Copy link**: `navigator.clipboard.writeText`, with a visible "Copied".
 
-## The invitation screen
+## QR code
 
-- `main.tsx` reads `?invite=` once, writes it to `sessionStorage` (`pvt.invite.pending`), and
-  replaces the URL (`history.replaceState`) so a refresh or a shared screenshot does not keep it.
-- `appMachine` gains `{ screen: 'invitation'; inviteId: string }` and `OPEN_INVITATION` /
-  `CLOSE_INVITATION`. The machine only routes; loading the invite is the screen's job.
-- Boot order: auth resolves → if a pending invite id is stored, open the invitation screen
-  **before** the welcome screen or migration prompt. A guest sees the sign-in version of the screen,
-  which replaces the welcome screen for that visit (it is the same question, better asked).
-- After Join or Decline, clear the stored id. Then the existing migration prompt may run.
-- The `invariants.test.ts` rule that `appMachine.ts` is pure still holds: no storage access in it.
+- A small MIT encoder (candidate: `uqr`; alternative `qrcode-generator`), used only for its
+  `encode()` matrix. The component draws `<rect>`s itself, so there is no `innerHTML` and nothing
+  for the CSP to object to.
+- Lazy-loaded with the Share panel, never in the eager chunk (NFR2). If both candidates exceed
+  10 KB gzipped, write a byte-mode, version 1 to 6 encoder by hand; the URL is under 60 characters,
+  so it needs nothing more.
+- Error correction **M**, 4-module quiet zone, dark modules on a white square **in both themes**.
+  Many phone cameras fail on inverted QR codes, so dark mode must not invert it (the square is the
+  one place this app deliberately does not follow the theme tokens, and the code says why).
+- Full screen view: the largest square that fits, and it keeps the screen from sleeping where the
+  Wake Lock API exists.
 
-## Stale-edit detection (D-6)
+## The join screen
 
-`ListEditor` already receives the list it opened. For a shared list, on Save, `App` compares the
-opened `updatedAt` with the live list's. If they differ and `updatedBy` is someone else, show:
-*"{name} changed this list since you opened it."* **Keep theirs** (discard, reopen live) /
-**Save mine anyway** (write). This is a client check, not a rules check, so it is advisory; the
-rules only ensure a write is well-formed and by a member. Good enough for a vocabulary list.
+- `main.tsx` reads `?join=` once, stores it in `sessionStorage` (`pvt.join.pending`), and removes
+  it from the URL with `history.replaceState`, so a refresh or a screenshot does not keep it.
+- `appMachine` gains `{ screen: 'join'; code: string }`, `OPEN_JOIN`, `CLOSE_JOIN`. It only routes;
+  loading the link is the screen's job, which keeps `appMachine.ts` pure (`invariants.test.ts`).
+- **A guest is the normal case here**, and a guest has never loaded Firebase. The join screen
+  loads the lazy Firebase chunk itself, reads `shareLinks/{code}` (allowed signed-out), and shows
+  the preview with **Sign in with Google to join**. The eager bundle does not change; only a guest
+  who opens a join link pays for the chunk, and they are about to sign in anyway.
+- Boot order: auth resolves, then a stored join code opens the join screen **before** the welcome
+  screen or the migration prompt. The join screen replaces the welcome screen for that visit (it
+  asks the same question, better). After Join or No thanks, the stored code is cleared, and the
+  existing migration prompt may then run.
+- **Rejoin with a kept copy** (spec edge case): if a private list with the same id exists, it is
+  given a new id in the join batch's preceding write, so the merge never has to choose.
+
+## Leaving, removal, stop sharing, delete (D-11, D-12)
+
+| Action | Who | One batch |
+|---|---|---|
+| Leave | member | remove me from `memberUids`/`members`; if keeping a copy, set `users/me/lists/{id}` |
+| Remove member | owner | remove them; create `listFarewells/{id}_{them}` (reason `removed`) |
+| Stop sharing | owner | set `users/me/lists/{id}` (no `sharing`); a farewell per other member (`stopped`); delete every link; delete the shared list |
+| Delete for everyone | owner | a farewell per other member (`deleted`); delete every link; delete the shared list |
+
+Farewells are read by the member's own `subscribeFarewells` and shown on My lists:
+**Keep a private copy** (set `users/me/lists/{id}` from `farewell.list`, then delete the farewell)
+or **Dismiss** (delete it). The copy keeps the id, so history and saved tests follow (D-11).
+
+Batches are bounded: at most 19 farewells plus 10 links plus 2 list writes, far under Firestore's
+500-write batch limit.
+
+## Stale-edit detection and read-only editing
+
+- `ListEditor` gets `readOnly` when the list is shared and the role is `viewer`: inputs disabled,
+  a line at the top ("Dana shared this list with you to practise. Keep a copy to edit your own."),
+  Save hidden, **Keep a private copy** offered.
+- For editors, on Save `App` compares the opened `updatedAt` with the live list's. If they differ
+  and `updatedBy` is someone else: *"{name} changed this list since you opened it."*
+  **Keep theirs** / **Save mine anyway**. Advisory, client-side; the rules only guarantee the write
+  is well-formed and by someone allowed to edit.
 
 ## Account deletion
 
 `purgeUserData` gains a step **before** the owned collections:
 
-1. For each shared list where I'm a member and not owner: leave.
-2. For each shared list I own: if other members, set `ownerUid` to the earliest `joinedAt` member
-   and remove myself (one update, rule 4); else delete it and its invites.
-3. Delete every invite where `invitedByUid == me`.
+1. Every shared list where I am not owner: leave.
+2. Every shared list I own: if others remain, one `ownerManages` update making the
+   longest-standing editor (else member) the owner, and removing me; else delete it and its links.
+3. Delete every `shareLinks` doc I created, and every `listFarewells` doc addressed to me.
 
-`OWNED_COLLECTIONS` stays per-user paths. `invariants.test.ts` gets a sibling check: every
-top-level collection named in `firestoreShareStore.ts` must be handled in `deleteAccount.ts`,
-the same trap 008 fell into, guarded the same way.
+`invariants.test.ts` gets a sibling of its `OWNED_COLLECTIONS` check: every top-level collection
+named in `firestoreShareStore.ts` must be handled in `deleteAccount.ts`. The same trap 008 fell
+into, guarded the same way.
 
 ## Risks
 
 | # | Risk | Mitigation |
 |---|------|-----------|
-| R1 | Firestore rules for a `list` query with a `get()` that depends on `resource.data.listId` may be rejected ("rules are not filters"), even when the query filters `listId ==`. | Task 1 answers it in the emulator. Fallback: denormalise `memberUids` onto each invite and rule on that; the owner updates invites on membership change. |
-| R2 | `request.auth.token.email` casing differs from what the owner typed. | Lowercase on write; rules compare `.lower()`. Google emails are already lowercase in practice. |
-| R3 | The 10-person cap (D-9) counts pending invites, which the rules cannot count. | Rules cap `memberUids.size() <= 10`. Pending count is client-enforced plus the Worker's daily cap. Stated as advisory. |
-| R4 | A list moving collections mid-edit in another tab of the owner. | The open editor's Save routes by the adapter's live shared-id set, not by the list it opened with. Test it. |
-| R5 | Offline member edits replayed after removal are rejected. | Expected; surfaced as a toast with the specific reason. Nothing else is lost. |
-| R6 | ID token verification without a library. | WebCrypto supports RS256 import from JWK. If it becomes fiddly, `jose` in the Worker only (NFR7). |
-| R7 | Worker cold path adds latency to Send. | One request per invite. Acceptable. |
-| R8 | Email deliverability (spam folder). | Verified sending domain with SPF/DKIM via Resend; plain, short template; the in-app banner (FR14) is the backstop. |
-| R9 | Blast radius in `App.tsx` (1100 lines). | Sharing UI lives in its own components, wired by props; `App` gains one hook (`useShareStore`) and the invitation route. |
+| R1 | **Google sign-in is blocked inside in-app browsers** (Instagram, Facebook, some Android messengers open links in an embedded webview; Google refuses OAuth there with `disallowed_useragent`). A WhatsApp link opened in such a view would dead-end at sign-in. | Detect embedded webviews on the join screen and show **Open in your browser** with Copy link, before offering sign-in. Test on WhatsApp for iOS and Android in Task 23. |
+| R2 | A forwarded link lets a stranger in (accepted with D-2). | Single-use by default; owner sees and removes; 14-day expiry; group links have a cap. Stated in the Share panel: "Anyone with this link can join." |
+| R3 | `get: if true` on share links is readable without sign-in. | Holds only the preview; the code is 128 random bits; `list` is creator-only. A rules test asserts a guest cannot list. |
+| R4 | QR code unreadable in dark mode or at small sizes. | Never inverted; minimum 240 px; tested with two phone cameras in Task 23. |
+| R5 | A list moving collections while its editor is open in another of the owner's tabs. | Save routes by the live shared-id set, not by the list the editor opened with. Tested. |
+| R6 | Offline edits by a member replayed after removal or demotion are rejected. | Expected; a toast gives the specific reason, and the keep-a-copy offer carries the last version. |
+| R7 | New runtime dependency. | One, lazy, tiny, MIT; hand-written fallback (NFR5). README's "two runtime dependencies" line updated. |
+| R8 | Blast radius in `App.tsx` (1,100 lines). | Sharing UI in its own components wired by props; `App` gains one hook and one route. |
 
 ## Test strategy
 
-- **Rules** (`tests/rules/firestore.rules.test.ts`, emulator): every clause, allow and deny. The deny
-  list is the important half: non-member read, member changing `ownerUid`, member adding a second
-  uid, join without invite, join with someone else's invite, join after expiry, join with invite
-  `pending`, invitee editing `emailCount`, owner bypassing the throttle, invite to self.
-- **Adapter** (`tests/rules/firestoreShareStore.test.ts`, emulator): share-move batch, merge
-  ordering and dedupe, accept batch, leave, remove, delete cascade, account deletion transfer.
-- **Worker** (`worker/*.test.ts`, Vitest with `fetch` mocked): bad/expired/wrong-aud token, invite
-  not mine, invite not pending, throttle 403 → 429, provider failure → `emailError`, escaping.
-- **UI** (Vitest + Testing Library, fake `ShareStore`): each status label, cancel confirm, invitation
-  screen in its five states (guest, ready, wrong account, unavailable, expired), stale-edit dialog,
-  Leave vs Delete copy.
-- **App flow** (`App.*.test.tsx`): `?invite=` → sign in → join → list visible; migration prompt
-  after, not on top.
-- **Bundle**: `check-bundle.mjs` unchanged and green.
+- **Rules** (`tests/rules/firestore.rules.test.ts`, emulator). The deny list is the important half:
+  non-member read; viewer edits content; editor changes a role; member changes `ownerUid`; join
+  without a link; join with a link for another list; join with an expired, declined, used-up or
+  cancelled link; join claiming a different role than the link; link `uses` bumped without a join;
+  two racing joins on a single-use link; guest `list` on links; farewell written by a non-owner or
+  for a non-member; reading someone else's farewell.
+- **Adapter** (`tests/rules/firestoreShareStore.test.ts`, emulator): first-link move, merge order
+  and dedupe, join batch, decline, leave with and without copy, remove with farewell, stop sharing,
+  delete for everyone, rejoin with a kept copy, account deletion handover.
+- **Pure** (`src/share/*.test.ts`): link status derivation at the 14-day boundary; share message
+  text; webview detection over a table of real user agents.
+- **UI** (Vitest + Testing Library, fake `ShareStore`): Share panel with and without
+  `navigator.share`; QR renders an `<svg>` with the right module count; each link status; join
+  screen in its states (guest, ready, own link, already member, unavailable, expired, in-app
+  browser); members panel by role; read-only editor; stale-edit dialog; farewell banner.
+- **App flow** (`App.join.test.tsx`): `?join=` as a guest → sign in → join → list visible; the
+  migration prompt comes after, not on top.
+- **Bundle**: `check-bundle.mjs` green; the QR encoder is not in the eager chunk.

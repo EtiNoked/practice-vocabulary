@@ -1,11 +1,11 @@
 # Spec: Sharing a list with someone else
 
 **ID:** 016-list-sharing
-**Status:** DRAFT, awaiting answers to the three open questions at the end
+**Status:** DRAFT, revision 2 (share link and QR code replace email). Two questions open, see the end
 **Created:** 2026-09-25
 **Baseline:** `main` @ `a45a15d`
-**Feature Type:** New capability. New stored data, new security rules, and the app's first server-side code
-**Complexity:** High. The UI is moderate; the risk is in the rules, the data move, and email delivery
+**Feature Type:** New capability. New stored data and new security rules. No server code
+**Complexity:** High. The UI is moderate; the risk is in the rules and in moving a list between collections
 **Depends on:** `003-user-accounts` (shipped). Sharing is a signed-in feature.
 **Branch:** `claude/list-sharing-feature-872bcu`
 
@@ -19,31 +19,47 @@
 > invitation. After the accept, both users can edit and use the same list. Both see the members of
 > the list."
 
-Five things: **invite by email**, **accept (signing up first if needed)**, **invite status and
-cancel for the sharer**, **one list, jointly edited and used**, and **a visible member list**.
+Revised in session, after the first draft:
+
+> "Let's have a barcode that the sharer can send via WhatsApp or email or just show the receiver.
+> Will it be easier?"
+
+**Yes, much easier.** The first draft needed the app's first server code (a Cloudflare Worker
+route), an email provider account, a verified sending domain and a secret key, because the app has
+no backend and 003 NFR6 rules out Firebase's paid email extension. A share link with a QR code
+needs **none of that**: the app makes the link, and the sharer's own phone sends it. WhatsApp,
+email, SMS, or holding the phone up to someone's camera are all the same feature.
+
+What the sharer loses is the app *knowing* the message was delivered. That is replaced by a status
+the app can know for certain: whether the link has been **used** (Story 2).
+
+---
+
+## Answers taken in session
+
+| Question | Answer | Becomes |
+|---|---|---|
+| How is the invite delivered? | A QR code the sharer sends via WhatsApp or email, or shows on screen | D-1 |
+| Who can accept? | Anyone with the link | D-2 |
+| What can each person do? | Per person: can edit, or can only practise | D-3 |
+| Extras | Keep a copy when leaving; Stop sharing | D-11, D-12 |
 
 ---
 
 ## Where the app actually is
 
-Three facts found while reading, and all three change what this feature costs.
-
 **Every list is private by construction.** Lists live at `users/{uid}/lists/{listId}` and the rules
-grant access with a single `isOwner(uid)` check. 003 A2 says so explicitly: *"No sharing, no
-collaboration, no public lists. Per-user isolation is the simplest possible security model."* A list
-two people can edit cannot live under one person's uid, so this feature needs a **second home for
-lists** and a second, membership-based rule. That reverses 003 A2 and is recorded below.
+grant access with one `isOwner(uid)` check. A list two people can use cannot live under one
+person's uid, so this feature needs a **second home for lists** with a membership rule. That
+reverses 003 A2, recorded below.
 
-**The app cannot send an email today, and its own spec forbids the obvious way.** There is no
-backend. 003 NFR6 reads *"Free tier only. The design must not require Cloud Functions or any paid
-plan."* Firebase's email extension runs on Cloud Functions, which need the paid Blaze plan. The app
-is, however, already deployed as a **Cloudflare Worker** (`wrangler.jsonc`), currently assets-only.
-Giving that Worker one small script is the free-tier route to sending mail (plan.md § Email).
+**A list id is already a stable, global uuid.** It is the Firestore document id, saved tests keep
+it in `spec.listIds`, and session records keep it in `listId`. A list can therefore **move** to a
+shared collection without breaking a saved test or a history record, as long as the id is kept.
 
-**A list id is already a stable, global uuid.** It is the Firestore document id, saved tests store
-it in `spec.listIds`, and session records store it in `listId`. So a list can **move** from the
-private collection to a shared one without breaking a single saved test or history record, as long
-as the id is kept. That is what makes the data move cheap.
+**The app is a static SPA with a single-page fallback** (`wrangler.jsonc`,
+`not_found_handling: "single-page-application"`). A link like `/?join=<code>` already serves
+`index.html`, so the entry point costs no deploy change.
 
 ---
 
@@ -51,161 +67,183 @@ as the id is kept. That is what makes the data move cheap.
 
 | Earlier decision | Wording | After 016 |
 |---|---|---|
-| 003 A2 | "A signed-in user's data is private to them. No sharing, no collaboration" | **Amended.** Private lists stay private. A list the owner chooses to share is readable and writable by its members, enforced by the rules. |
-| 003 A4 | "Concurrent editing of the same list on two devices at once is rare" | **Amended for shared lists.** Two people editing one list is the point. Last-write-wins stays, but a stale edit is now detected and the user is asked (D-6). |
-| 003 NFR1a | "No self-hosted backend and no secret credentials in the repo" | **Amended.** One Worker route holds one secret (the email provider key) as a Cloudflare secret. Still nothing secret in the repo. Still no server holding user data. |
-| 003 NFR2b | "A signed-in user's data is readable and writable only by that user" | **Amended.** True for everything except shared lists and invites, which are readable by their members and addressee. |
-| 003 Story 8 | Privacy note lists name, email, lists, scores | **Extended.** Members of a shared list see each other's name, email and picture; an invitee's email address is stored and passed to an email provider. |
+| 003 A2 | "A signed-in user's data is private to them. No sharing, no collaboration" | **Amended.** Private lists stay private. A list the owner shares is readable by its members, and writable by its editors, enforced by the rules. |
+| 003 A4 | "Concurrent editing of the same list on two devices at once is rare" | **Amended for shared lists.** Last-write-wins stays, but a stale edit is detected and the user is asked (D-8). |
+| 003 NFR2b | "A signed-in user's data is readable and writable only by that user" | **Amended.** True for everything except shared lists and share links. |
+| 003 Story 8 | Privacy note lists name, email, lists, scores | **Extended.** Members of a shared list see each other's name, email and picture. |
 
-003 NFR6 (free tier, no Cloud Functions) **survives intact**, and is the reason for D-1.
+003 NFR1a (no self-hosted backend, no secrets) and NFR6 (free tier, no Cloud Functions) **survive
+intact**. Revision 1 of this spec amended NFR1a; revision 2 no longer needs to.
 
 ---
 
 ## Decisions taken
 
-Numbered so the plan and the tasks can cite them instead of re-arguing them. The three marked
-**(open)** are recommendations waiting for the owner's answer; see § Questions.
+Numbered so the plan and the tasks can cite them instead of re-arguing them.
 
-**D-1 (open). Email goes out from the existing Cloudflare Worker, through a transactional email
-provider (Resend).** Free tier on both sides (Workers: 100k requests/day; Resend: 3,000 emails/month),
-no Cloud Functions, and the key lives in a Worker secret. Rejected: the Firebase "Trigger Email"
-extension (needs Blaze, breaks NFR6); `mailto:` from the sharer's own mail client (works with no
-backend, but "we send an email" becomes "you send an email", and nothing can report it as sent).
-`mailto:` is kept as the fallback if the owner declines a provider.
+**D-1. An invite is a share link, shown as a QR code.** The Share panel offers, for one link:
+- **Share…** opens the phone's own share sheet (Web Share API), so WhatsApp, email, SMS, Telegram
+  are all there without the app naming any of them
+- **WhatsApp** and **Email** buttons as well, for desktop browsers with no share sheet
+  (`https://wa.me/?text=` and `mailto:`)
+- **Copy link**
+- **Show QR code**, full screen, for someone standing next to you. Their phone's camera app opens
+  the link; the app needs no scanner of its own
 
-**D-2 (open). An invite is bound to an email address, and only a Google account with that exact
-verified address can accept it.** The link alone is not enough. Safer, because a forwarded email
-cannot hand the list to a stranger; the cost is a person whose Google account uses a different
-address than the one the sharer typed. They get a clear message naming both addresses (Story 4).
+No email is sent by the app. No server, no provider, no secret.
 
-**D-3 (open). Two roles: owner and member.** Every member can edit and practise the list and see
-the members. Only the **owner** (whoever shared it first) can invite, cancel an invite, remove a
-member, or delete the list for everyone. A member can **leave**. Keeps the answer to "who can do
-what" one sentence long; the alternative, any member may invite, is a small rules change later.
+**D-2. Anyone with the link can join.** The link is not tied to an email address. It carries a
+random, unguessable code (122 bits), so it cannot be found by trying; it can only be passed on.
+Two things keep "passed on" contained: the owner sees exactly who joined and can remove them, and
+each link has a limited number of uses (D-4).
 
-**D-4. A shared list lives at `sharedLists/{listId}`, keeping its id, and moves there on its first
-invite.** Not on accept: the invite has to point at a list the invitee can join, and the owner's
-view must not change shape twice. The move is one batch (create shared, delete private, create
-invite), so there is no moment where the list exists twice or not at all.
+**D-3. Per-person roles: Owner, Can edit, Can practise.** The role is chosen when the link is
+made, and the owner can change it for any member later.
 
-**D-5. Practice history stays per person.** Each member's drills are written to their own
-`users/{uid}/sessions`, exactly as now. Both people use the same words; neither sees the other's
-scores. A shared score history is a separate feature with its own privacy question.
+| | Owner | Can edit | Can practise |
+|---|---|---|---|
+| Practise, test, use in games and saved tests | ✓ | ✓ | ✓ |
+| See members | ✓ | ✓ | ✓ |
+| Edit words, rename, change languages | ✓ | ✓ | |
+| Keep a private copy | ✓ | ✓ | ✓ |
+| Make links, cancel links, change roles, remove members | ✓ | | |
+| Stop sharing, delete for everyone | ✓ | | |
+| Leave | | ✓ | ✓ |
 
-**D-6. Concurrent edits: last write wins, but a stale write is caught.** The editor remembers the
-list's `updatedAt` when it opened. If the live list has moved on by the time Save is pressed, the
-user is told who changed it and chooses **Keep theirs** or **Save mine anyway**. No merging, no
-CRDT; a word list is small and the choice is legible.
+"Can practise" is a first-class role, not a degraded one. It is the teacher-to-students case: one
+list, many learners, one person who maintains it.
 
-**D-7. Invites expire after 14 days.** Enforced by the rules on accept, not by a cleanup job (there
-is nowhere to run one). An expired invite shows as **Expired** to the owner, with **Invite again**.
+**D-4. A link is for one person by default.** It is used up by the first person who joins. The
+owner may instead make a **group link** (open question 1) that stays usable until they turn it off
+or it reaches its limit. Single-use is the default because it makes the status the owner asked for
+exact: a link is *waiting* or *used by Dana*, never "used by some people".
 
-**D-8. Cancelling an invite deletes it.** The link then says *"This invitation is no longer
-available"*. A declined invite is kept, so the owner sees **Declined**.
+**D-5. A shared list lives at `sharedLists/{listId}`, keeping its id, and moves there when its first
+link is made.** One batch: create shared, delete private, create link. There is no moment where the
+list exists twice or not at all.
 
-**D-9. At most 10 people per list, members and pending invites together.** A blast-radius cap like
-every other cap in `firestore.rules`, and a spam cap, since each invite sends an email.
+**D-6. Practice history stays per person.** Each member's drills are written to their own
+`users/{uid}/sessions`, exactly as now. Everyone practises the same words; nobody sees anyone
+else's scores.
 
-**D-10. Sharing needs an account; accepting needs one too.** A guest sees **Share** as
-*"Sign in to share"*. An invite link opened signed-out shows who invited them and a **Sign in with
-Google to join** button. For a new person that sign-in *is* account creation, so "create an
-account, then accept" is one tap, not two flows.
+**D-7. Links expire after 14 days** if unused. Enforced by the rules on join, not by a cleanup job.
+An expired link shows **Expired** to the owner, with **New link**.
 
-**D-11. The owner deleting their account does not delete the list from under its members.**
-Ownership passes to the longest-standing member. Only a list with no other members is deleted.
+**D-8. Concurrent edits: last write wins, but a stale write is caught.** The editor remembers the
+list's `updatedAt` when it opened. If the live list moved on before Save, the user is told who
+changed it and picks **Keep theirs** or **Save mine anyway**.
+
+**D-9. At most 20 people per list**, owner included, and at most 10 open links. Blast-radius caps
+like every other cap in `firestore.rules`.
+
+**D-10. Sharing and joining both need a Google account.** A guest sees Share as
+**Sign in to share**. A link opened signed-out shows who is inviting them and to what, and a
+**Sign in with Google to join** button. For someone new, that sign-in *is* account creation, so
+"create an account, then accept" is one tap, not two flows.
+
+**D-11. Nobody loses their words when a shared list goes away from them.** Whenever a member stops
+having the list (they leave, they are removed, the owner stops sharing, or the owner deletes it),
+they are offered **Keep a private copy**. The copy keeps the list's id, so their practice history
+and saved tests carry straight over.
+
+To make that offer possible when the member was not looking at the moment it happened, a removed
+member keeps **read-only access to the last version** until they answer the offer. They cannot
+see any later edit.
+
+**D-12. The owner can Stop sharing.** Every member is shown the keep-a-copy offer, every open link
+stops working, and the owner's list turns back into an ordinary private list with the same id.
+
+**D-13. The owner deleting their account does not delete the list from under its members.**
+Ownership passes to the longest-standing member who can edit, or failing that the longest-standing
+member. Only a list with no other members is deleted.
 
 ---
 
 ## User Stories
 
-### Story 1: Invite someone to a list
+### Story 1: Share a list
 **As a** student with a good word list
-**I want** to share it with a friend by typing their email
+**I want** to send it to a friend however we normally talk
 **So that** we can practise the same words
 
 **Acceptance Criteria:**
-- [ ] Each of my lists, while signed in, has a **Share** action (list row menu and list editor)
-- [ ] Share opens a panel: an email field, **Send invite**, and the list's current members and invites
-- [ ] Sending validates the address, refuses my own address, and refuses an address already a member or already pending
-- [ ] On success the invite appears at once as **Invite sent · just now**
-- [ ] The recipient receives an email naming me, the list, its size and languages, with one **Join the list** button
-- [ ] If the email could not be sent, the invite shows **Email not sent** with **Try again**, and the invite itself still exists
-- [ ] Offline, **Send invite** is disabled with the reason on screen
+- [ ] Each of my lists, while signed in, has a **Share** action (list row and list editor)
+- [ ] Share opens a panel with **Who can join** (Can edit / Can practise), an optional **Label** ("For Dana"), and **Create link**
+- [ ] Creating shows a QR code and **Share…**, **WhatsApp**, **Email**, **Copy link**, **Show QR code**
+- [ ] **Share…** appears only where the device has a share sheet; WhatsApp, Email and Copy are always there
+- [ ] The shared message reads *"{my name} invited you to practise "{list}" ({n} words, {langs}) in Vocabulary Trainer: {link}"*
+- [ ] **Show QR code** fills the screen, is large enough to scan from arm's length, and works in dark mode (always dark modules on a light square)
+- [ ] Offline, **Create link** is disabled with the reason on screen
 - [ ] Signed out, Share reads **Sign in to share** and leads to sign-in
 
-### Story 2: See and manage my invites
+### Story 2: See and manage my links
 **As the** person who shared a list
-**I want** to see what happened to each invite
-**So that** I know who has joined and can take an invite back
+**I want** to see what happened to each link
+**So that** I know who joined and can take a link back
 
 **Acceptance Criteria:**
-- [ ] Each invite shows its address and one status: **Invite sent** (with when), **Email not sent**, **Declined**, **Expired**
-- [ ] A pending invite has **Cancel invitation** and **Resend**
-- [ ] Cancel asks for confirmation, then removes the invite; the link stops working
-- [ ] Resend is limited (once per 10 minutes, 3 times per invite) and says so when unavailable
-- [ ] A **Declined** or **Expired** invite has **Invite again** and **Remove**
-- [ ] When the recipient accepts, the invite disappears from the list and they appear under **Members**
+- [ ] Each link shows its label (or "Link 1", "Link 2"), its role, and one status: **Waiting · created 2h ago**, **Declined**, **Expired**
+- [ ] When someone joins, the link disappears and they appear under **Members**, with *"joined via For Dana"*
+- [ ] A waiting link has **Share again** (reopens the share options and QR) and **Cancel link**
+- [ ] Cancel asks for confirmation; the link then says *"This invitation is no longer available"*
+- [ ] An expired or declined link has **New link** and **Remove**
 - [ ] Status updates live, without reopening the panel
 
-### Story 3: Accept an invite (with or without an account)
-**As** someone who received an invite
-**I want** to join the list from the email
+### Story 3: Join from a link (with or without an account)
+**As** someone who was sent a link or shown a QR code
+**I want** to join in a tap or two
 **So that** I get the list without retyping it
 
 **Acceptance Criteria:**
-- [ ] The email's button opens the app on an **invitation screen**, not the home screen
-- [ ] Signed out: the screen says I've been invited to a shared list and offers **Sign in with Google to join**; after signing in (creating my account if I had none) I land back on the invitation
-- [ ] Signed in: I see who invited me, the list name, word count and languages, and **Join list** / **Decline**
-- [ ] **Join list** adds me as a member and opens **My lists** with the list there, marked shared
-- [ ] **Decline** tells the owner and returns me home; nothing is added
-- [ ] The first-sign-in "copy this device's lists" prompt (003 Story 3) still appears, **after** the invitation, never on top of it
-- [ ] An invite that was cancelled, expired or already used says so plainly, with a way home
-- [ ] Pending invites also appear on **My lists** as a banner, so a lost email does not lose the invite
+- [ ] The link opens the app on a **join screen**, not the home screen
+- [ ] Signed out, it already shows who invited me, the list name, word count and languages, and whether I will be able to edit, with **Sign in with Google to join**
+- [ ] After signing in (creating my account if I had none) I land back on the join screen, not on the home screen
+- [ ] Signed in: **Join list** and **No thanks**
+- [ ] **Join list** adds me with the link's role and opens **My lists** with the list there, marked shared
+- [ ] **No thanks** marks the link declined (the owner sees it) and returns me home
+- [ ] The first-sign-in "copy this device's lists" prompt (003 Story 3) still appears, **after** the join screen, never on top of it
+- [ ] A cancelled, expired or already-used link says so plainly, names the owner, and suggests asking them for a new one
+- [ ] Opening a link for a list I am already in just opens the list
+- [ ] Opening my own link says *"This is your own link"* and offers to show its QR code
 
-### Story 4: The wrong Google account
-**As an** invitee whose Google account uses another address
-**I want** to be told why I cannot accept
-**So that** I am not stuck guessing
-
-**Acceptance Criteria:**
-- [ ] The invitation screen names both addresses: *"This invite was sent to a@x.com. You're signed in as b@y.com."*
-- [ ] It offers **Switch account** (sign out and sign in again) and explains that the sharer can invite b@y.com instead
-- [ ] No list data is shown to the wrong account
-
-### Story 5: Use and edit the list together
+### Story 4: Use and edit the list together
 **As a** member of a shared list
-**I want** to edit and practise it like any of my own
+**I want** it to work like any of my own lists
 **So that** sharing costs nothing in daily use
 
 **Acceptance Criteria:**
-- [ ] A shared list appears in **My lists** beside my private lists, with a **Shared** badge and member avatars
-- [ ] Any member can edit words, rename it, change languages, practise it, test on it, and include it in saved tests and games
+- [ ] A shared list appears in **My lists** beside my private ones, with a **Shared** badge, member avatars, and my role if I cannot edit
+- [ ] Every member can practise it, test on it, and use it in saved tests and games
+- [ ] Owner and editors can edit words, rename it and change languages; for "Can practise" members the editor opens read-only with the reason at the top
 - [ ] An edit by one member appears for the others without a refresh
-- [ ] If someone else saved the list since I opened the editor, Save warns me, names them, and lets me keep theirs or save mine (D-6)
+- [ ] If someone else saved since I opened the editor, Save warns me, names them, and lets me keep theirs or save mine (D-8)
 - [ ] A drill in progress is unaffected by another member's edit (the existing snapshot rule)
-- [ ] My practice history for the list is mine; the "5 practices · last 80%" line counts only my drills (D-5)
+- [ ] My practice history for the list is mine; "5 practices · last 80%" counts only my drills (D-6)
 
-### Story 6: See who is in the list
-**As a** member (owner or not)
+### Story 5: See who is in the list
+**As a** member (any role)
 **I want** to see who shares this list
 **So that** I know who can see and change it
 
 **Acceptance Criteria:**
-- [ ] The Share panel (for the owner) and a **Members** panel (for everyone) list each member's picture, name and email, with **Owner** and **You** marked
-- [ ] Members also see pending invites, as addresses only, without the owner's controls
+- [ ] A **Members** panel, open to every member, lists each person's picture, name, email and role, with **Owner** and **You** marked
+- [ ] The owner sees the same panel with a role picker and **Remove** beside each member
 - [ ] The list row shows up to three avatars and "+N"
 
-### Story 7: Leave, remove, delete
+### Story 6: Leave, remove, stop sharing, delete
 **As a** member or owner
-**I want** to get out of a shared list, or take someone out of it
+**I want** a way out that never loses anyone's words
 **So that** sharing is never a one-way door
 
 **Acceptance Criteria:**
-- [ ] A member has **Leave list**; after confirming, the list disappears from their lists and they from the members
-- [ ] The owner has **Remove** beside each member, with confirmation
-- [ ] The owner's **Delete** on a shared list says it deletes it for everyone and names how many people; a member sees **Leave** where Delete would be
-- [ ] A member's saved tests that used a list they left behave exactly as 011 already does for a deleted list
-- [ ] Deleting my account: I leave every list I'm a member of; lists I own pass to the longest-standing member, or are deleted if I'm alone (D-11); my pending invites are removed
+- [ ] A member has **Leave list**, confirmed with a choice: **Leave and keep a copy** / **Leave**
+- [ ] The owner can **Remove** a member (confirmed)
+- [ ] The owner can **Stop sharing** (confirmed, naming how many people): the list becomes private again for the owner, all links stop working
+- [ ] The owner's **Delete** on a shared list says it deletes it for everyone and names how many people
+- [ ] A member who was removed, or whose list was unshared or deleted, sees on **My lists**: *"Dana stopped sharing "French verbs" with you."* **Keep a private copy** / **Dismiss**. The offer waits for them however long they take to come back (D-11)
+- [ ] The kept copy has the same words as the last version they could see, their practice history, and their saved tests still pointing at it
+- [ ] A member's saved tests that used a list they left without a copy behave exactly as 011 does for a deleted list
+- [ ] Deleting my account: I leave every list I am in; lists I own pass to another member (D-13) or are deleted if I am alone; my open links are cancelled
 
 ---
 
@@ -213,74 +251,69 @@ Ownership passes to the longest-standing member. Only a list with no other membe
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR1 | `sharedLists/{listId}` collection with owner, member uids and a member profile map | HIGH |
-| FR2 | `invites/{inviteId}` collection with a random id, addressee email, status and denormalised preview | HIGH |
-| FR3 | Rules: members read and edit content; only the owner changes membership (except join and leave) | HIGH |
-| FR4 | Rules: join is only possible with an accepted, unexpired invite addressed to the caller's verified email | HIGH |
-| FR5 | First invite moves the list from private to shared in one batch, keeping its id | HIGH |
+| FR1 | `sharedLists/{listId}` with owner, per-member role and profile, and former-member access | HIGH |
+| FR2 | `shareLinks/{code}` with a random code, role, label, use limit, status and a list preview | HIGH |
+| FR3 | Rules: members read; owner and editors edit content; only the owner changes membership, except join and leave | HIGH |
+| FR4 | Rules: join only with a waiting, unexpired link for this list, taking exactly the link's role | HIGH |
+| FR5 | First link moves the list from private to shared in one batch, keeping its id | HIGH |
 | FR6 | `subscribeLists` returns private and shared lists as one sorted array | HIGH |
-| FR7 | Worker route `POST /api/invites/:id/send` verifies the caller, checks the invite, sends one email | HIGH |
-| FR8 | Resend throttle enforced by the rules, not only the Worker | MEDIUM |
-| FR9 | Invitation screen reachable by `?invite=<id>`, surviving sign-in | HIGH |
-| FR10 | Owner view: invite statuses, cancel, resend, invite again, remove member | HIGH |
-| FR11 | Member view: members, pending invites, leave | HIGH |
-| FR12 | Stale-edit detection on save for shared lists | MEDIUM |
-| FR13 | Account deletion handles shared lists and invites (D-11) | HIGH |
-| FR14 | Pending-invite banner on My lists | MEDIUM |
-| FR15 | Privacy note and README updated | MEDIUM |
+| FR7 | Share panel: role, label, create; QR code; share sheet, WhatsApp, Email, Copy, full-screen QR | HIGH |
+| FR8 | Join screen via `?join=<code>`, surviving sign-in, readable before sign-in | HIGH |
+| FR9 | Owner view: link statuses, cancel, share again, new link; members with role change and remove | HIGH |
+| FR10 | Member view: members, role, leave (with or without a copy) | HIGH |
+| FR11 | Keep-a-copy offer after leave, removal, stop sharing and delete (D-11) | HIGH |
+| FR12 | Stop sharing (D-12) | MEDIUM |
+| FR13 | Stale-edit detection on save for shared lists (D-8) | MEDIUM |
+| FR14 | Read-only editor for "Can practise" members | MEDIUM |
+| FR15 | Account deletion handles shared lists and links (D-13) | HIGH |
+| FR16 | Privacy note and README updated | MEDIUM |
 
 ## Non-Functional Requirements
 
 | ID | Requirement |
 |----|-------------|
-| NFR1 | Free tier only (003 NFR6 unchanged). No Cloud Functions. |
-| NFR2 | Signed-out bundle budget unchanged: all sharing code is in the lazy Firebase chunk or its own lazy chunk. `check-bundle.mjs` still passes. |
-| NFR3 | Every new rule has an allow **and** a deny test (the rule stated at the top of `firestore.rules`). |
-| NFR4 | Private lists behave exactly as today. `listRepo.ts`, `localListStore.ts`, `session.ts` and `parse/` are not modified. |
-| NFR5 | The email provider key never reaches the client or the repo. |
-| NFR6 | The Worker holds no user data; every read and write it makes uses the caller's own ID token, so the rules still decide. |
-| NFR7 | No new runtime dependency in the client. The Worker may use one small JWT library if WebCrypto alone proves awkward. |
+| NFR1 | Free tier only, no Cloud Functions, no server code, no secrets (003 NFR1a and NFR6 unchanged). |
+| NFR2 | Signed-out bundle budget unchanged. The QR encoder and all sharing UI are in a lazy chunk; `check-bundle.mjs` still passes. |
+| NFR3 | Every new rule has an allow **and** a deny test. |
+| NFR4 | Private lists behave exactly as today. `listRepo.ts`, `localListStore.ts`, `session.ts`, `parse/` and the `users/{uid}/lists` rule block are not modified. |
+| NFR5 | One new runtime dependency at most: a QR encoder under 10 KB gzipped, MIT, no transitive dependencies, rendering SVG (CSP forbids nothing about inline SVG). Writing an encoder by hand is the fallback. |
+| NFR6 | The QR code is readable in both themes and at 200% zoom, and never the only way to get the link (Copy link is always beside it). |
 
 ## Edge Cases
 
 | Case | Expected behaviour |
 |------|-------------------|
-| Invite to an address that already has a pending invite for this list | Refused client-side: "Already invited" with Resend |
-| Invite to my own address | Refused: "That's you" |
-| Owner edits the list while an invite is pending | Fine; the invite points at the list, the preview on the invite is refreshed on resend |
-| Owner cancels while the invitee has the invite screen open | Join fails; screen says the invite is no longer available |
-| Invitee accepts twice (two tabs) | Second accept is a no-op; both tabs show the list |
-| Invitee is already a member (re-invited after leaving) | Allowed; joining re-adds them |
-| Owner deletes the list with a pending invite | Batch deletes the list and its invites; the link says no longer available |
-| Member removed while editing | Save fails with permission; message says they were removed from the list |
-| Member offline edits, then is removed before reconnecting | Queued write rejected on reconnect; the toast explains it; nothing else lost |
-| Owner offline when trying to share | Share disabled: invites need a connection (the email cannot queue) |
-| Email bounces | Not detectable on the free tier without webhooks; the invite stays **Invite sent**. Documented, not solved |
-| Two members save within the same second | D-6 catches the later one if its editor opened before the earlier save landed |
-| 10-person cap reached | Send invite disabled with the reason |
-| Shared list's name or pairs exceed caps | Same caps as private lists (200 chars, 500 pairs) |
+| Link forwarded to a group chat, first stranger joins | Used up by that person; owner sees them under Members and can remove them (D-2, D-4) |
+| Two people open a single-use link at the same moment | The first join wins; the second is told it was just used |
+| Joiner is already a member | Opens the list; the link is not used up |
+| Joiner is the owner | "This is your own link"; not used up |
+| Owner cancels while someone has the join screen open | Join fails; screen says the link is no longer available |
+| Owner changes a member's role while they are editing | Their Save fails with a clear "you can now only practise this list"; they may keep a copy |
+| Member removed while editing | Save fails; the keep-a-copy offer includes their unsaved edits |
+| Member offline edits, then is removed before reconnecting | Queued write rejected on reconnect; the keep-a-copy offer appears with the last version plus a note that their offline changes could not be saved |
+| Owner offline when trying to share | Create link disabled; the link must exist on the server before it is sent |
+| Kept copy's id matches a list they later rejoin | On rejoin the private copy is given a new id first; history stays with the shared one |
+| Owner deletes the list with waiting links | All links stop working at once |
+| 20-person or 10-link cap reached | The action is disabled with the reason |
+| QR scanned by a camera app that opens a different browser than the one signed in | Works: they sign in there; nothing depends on the original browser |
 
 ---
 
 ## Out of scope
 
-- Sharing with a guest (no account), or by public link without an addressee
-- Read-only members / roles beyond owner and member
-- A shared practice history or leaderboard
+- Delivery by the app itself (email, push). The sharer's own apps deliver the link
+- Sharing with someone who will not make an account
+- A shared practice history, leaderboard or "who practised" view
 - Sharing saved tests or games
-- Push or in-app notifications beyond the pending-invite banner
-- Transfer of ownership by choice (it happens only on account deletion, D-11)
-- Email bounce handling
+- Transfer of ownership by choice (only on account deletion, D-13)
+- In-app QR scanning
 
 ---
 
 ## Questions for the owner
 
-These change the plan if answered differently; everything else has a safe default.
-
-1. **Email transport (D-1).** OK to add a Resend account (free, needs a domain you control to send
-   from) and a script to the Cloudflare Worker? Or should v1 open the sharer's own mail client
-   (`mailto:`) and skip server-side sending?
-2. **Invite binding (D-2).** Must the accepting Google account match the invited address, or should
-   anyone holding the link be able to join?
-3. **Who can invite (D-3).** Owner only, or any member?
+1. **Group links (D-4).** Besides one-person links, should the owner be able to make one link for a
+   whole group (a class), usable by up to 20 people until turned off? Recommended: **yes**, it is
+   small once single-use links exist, and it is the natural way to use "Can practise".
+2. **Changing roles later.** Is it fine that the owner can switch any member between "Can edit" and
+   "Can practise" at any time? Recommended: **yes**.
