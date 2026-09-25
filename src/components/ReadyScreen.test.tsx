@@ -120,7 +120,7 @@ describe('what the screen already did', () => {
   })
 })
 
-describe('practising the words you missed', () => {
+describe('practicing the words you missed', () => {
   const counts = { day: 0, week: 3, month: 7, all: 9 }
 
   it('shows nothing at all when there is nothing missed', () => {

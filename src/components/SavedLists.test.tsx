@@ -39,10 +39,15 @@ describe('SavedLists', () => {
     expect(screen.getByText(/1 word/)).toBeInTheDocument()
   })
 
-  it.each(['practise', 'edit', 'rename', 'delete'] as const)('offers %s', async (action) => {
+  // The label is US English ("Practice"); the handler keeps its internal name (onPractise).
+  it.each([
+    ['practice', 'onPractise'],
+    ['edit', 'onEdit'],
+    ['rename', 'onRename'],
+    ['delete', 'onDelete'],
+  ] as const)('offers %s', async (action, key) => {
     const handlers = setup([list])
-    await handlers.user.click(screen.getByRole('button', { name: new RegExp(action, 'i') }))
-    const key = `on${action[0]!.toUpperCase()}${action.slice(1)}` as keyof typeof handlers
+    await handlers.user.click(screen.getByRole('button', { name: new RegExp(`^${action}$`, 'i') }))
     expect(handlers[key]).toHaveBeenCalledWith(list)
   })
 })
@@ -100,7 +105,7 @@ describe('the practice line', () => {
     // Not "0 practices": a row that has nothing to say should say nothing, rather than
     // adding a line of noise to every list on a new account.
     withPractices(() => null)
-    expect(screen.queryByRole('button', { name: /practice/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /· last/i })).not.toBeInTheDocument()
   })
 
   it('is a button, so it is reachable by keyboard', () => {
@@ -156,8 +161,8 @@ describe('sharing', () => {
   it('gives a viewer practice only, and a way to see members and leave', async () => {
     const onShare = vi.fn()
     const { user } = renderShared({ uid: 'dana', onShare })
-    expect(screen.getByText('Can practise')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Practise' })).toBeInTheDocument()
+    expect(screen.getByText('Can practice')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Practice' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument()
     // A member leaves a shared list; deleting it is the owner's call.
@@ -177,6 +182,6 @@ describe('sharing', () => {
   it('changes nothing for a list that has never been shared, where sharing does not exist', () => {
     renderShared({ lists: [list] })
     expect(screen.queryByText('Shared')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Practise', 'Edit', 'Rename', 'Delete'])
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Practice', 'Edit', 'Rename', 'Delete'])
   })
 })

@@ -28,8 +28,8 @@ interface Props {
 function missedSummary(count: number, source: MissedSource): string {
   const words = `${count} ${count === 1 ? 'word' : 'words'}`
   return source.kind === 'window'
-    ? `Practising ${words} you missed ${WINDOW_PHRASES[source.window]}.`
-    : `Practising the ${words} you missed on ${new Date(source.finishedAt).toLocaleDateString('en-GB')}.`
+    ? `Practicing ${words} you missed ${WINDOW_PHRASES[source.window]}.`
+    : `Practicing the ${words} you missed on ${new Date(source.finishedAt).toLocaleDateString('en-GB')}.`
 }
 
 export function ReadyScreen({
@@ -110,12 +110,12 @@ export function ReadyScreen({
 
       {missed ? (
         <button type="button" onClick={onPractiseFull} className="btn btn-quiet">
-          Practise the full list instead
+          Practice the full list instead
         </button>
       ) : (
         anyMissed && (
           <div className="flex flex-col gap-2">
-            <h2 className="font-semibold">Practise words you missed</h2>
+            <h2 className="font-semibold">Practice words you missed</h2>
             <div className="flex flex-wrap gap-2">
               {REVIEW_WINDOWS.map((w) => (
                 <button

@@ -320,7 +320,7 @@ describe('a game teaches the drill (008 D-3)', () => {
     click(screen.getByRole('button', { name: 'Done' }))
     // Back at the brief, then into the list's ready screen the ordinary way.
     goToSync('My lists')
-    click(screen.getByRole('button', { name: /practise/i }))
+    click(screen.getByRole('button', { name: /^practice$/i }))
 
     // Four words got wrong in a game, offered back on the drill's ready screen.
     const chip = screen.getByRole('button', { name: /All time · 4/ })
@@ -341,7 +341,7 @@ describe('a game teaches the drill (008 D-3)', () => {
     }
     click(screen.getByRole('button', { name: 'Done' }))
     goToSync('My lists')
-    click(screen.getByRole('button', { name: /practise/i }))
+    click(screen.getByRole('button', { name: /^practice$/i }))
     expect(screen.queryByText(/before right answers were saved/i)).not.toBeInTheDocument()
   })
 })

@@ -57,7 +57,7 @@ describe('describeTest', () => {
 
   it('says so when a test selects nothing, even though its lists are alive', () => {
     expect(describeTest(plan({ spec: { listIds: ['A'], source: 'missed' }, count: 15 }), LISTS, 0))
-      .toBe('Chapter 1 · words I got wrong · nothing to practise yet')
+      .toBe('Chapter 1 · words I got wrong · nothing to practice yet')
   })
 })
 

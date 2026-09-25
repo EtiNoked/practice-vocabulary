@@ -84,7 +84,7 @@ describe('signing in', () => {
     })
     renderWelcome(store)
     await userEvent.click(screen.getByRole('button', { name: /sign in with google/i }))
-    expect(screen.getByRole('alert')).toHaveTextContent(/cancelled/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/canceled/i)
   })
 
   it('disables the button while a sign-in is in flight', async () => {

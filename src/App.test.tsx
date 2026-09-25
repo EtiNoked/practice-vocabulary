@@ -38,7 +38,7 @@ beforeEach(() => {
   sessionStorage.clear()
 })
 
-describe('typing a list and practising it', () => {
+describe('typing a list and practicing it', () => {
   it('goes from an empty app to a score', async () => {
     const user = userEvent.setup()
     renderApp()
@@ -66,7 +66,7 @@ describe('typing a list and practising it', () => {
   })
 })
 
-describe('practising a saved list', () => {
+describe('practicing a saved list', () => {
   it('lists it on the home screen and drills it', async () => {
     listRepo.save(seeded)
     const user = userEvent.setup()
@@ -74,7 +74,7 @@ describe('practising a saved list', () => {
     await goTo(user, 'My lists')
 
     expect(screen.getByText('Lesson 3')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
 
     await user.click(screen.getByRole('button', { name: /show answer/i }))
@@ -83,7 +83,7 @@ describe('practising a saved list', () => {
     await user.click(screen.getByRole('button', { name: /right/i }))
 
     expect(screen.getByText(/1 \/ 2/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /practise wrong ones only/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /practice wrong ones only/i })).toBeEnabled()
   })
 
   it('speaks a word for every card, including after marking', async () => {
@@ -91,7 +91,7 @@ describe('practising a saved list', () => {
     const user = userEvent.setup()
     renderApp()
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
@@ -141,7 +141,7 @@ describe('pasting a list', () => {
 
 describe('recording score history', () => {
   const drillToEnd = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /wrong/i }))
@@ -176,7 +176,7 @@ describe('recording score history', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
@@ -193,7 +193,7 @@ describe('recording score history', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /quit/i }))
 
@@ -207,7 +207,7 @@ describe('recording score history', () => {
     await goTo(user, 'My lists')
 
     await drillToEnd(user)
-    await user.click(screen.getByRole('button', { name: /practise wrong ones only/i }))
+    await user.click(screen.getByRole('button', { name: /practice wrong ones only/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
 
@@ -228,7 +228,7 @@ describe('recording score history', () => {
 
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: /delete/i }))
-    expect(screen.queryByRole('button', { name: /^practise$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^practice$/i })).not.toBeInTheDocument()
 
     // The name was captured at drill time, so the record still reads sensibly — which is
     // now provable on the screen that actually shows history.
@@ -238,7 +238,7 @@ describe('recording score history', () => {
   })
 })
 
-describe('practising a Dutch/French list', () => {
+describe('practicing a Dutch/French list', () => {
   const dutchFrench: WordList = {
     id: 'fr1',
     name: 'Frans les 1',
@@ -270,7 +270,7 @@ describe('practising a Dutch/French list', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(screen.getByText(/you'll hear/i)).toHaveTextContent(/French/)
     await user.click(screen.getByRole('button', { name: /^test$/i }))
 
@@ -291,7 +291,7 @@ describe('practising a Dutch/French list', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ voice: 'Amelie' })
   })
@@ -305,7 +305,7 @@ describe('practising a Dutch/French list', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(await screen.findByText(/no french voice on this device/i)).toBeInTheDocument()
   })
 
@@ -315,7 +315,7 @@ describe('practising a Dutch/French list', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ lang: 'nl-NL' })
   })
@@ -343,7 +343,7 @@ describe('practising a Dutch/French list', () => {
  */
 describe('a drill surviving a reload', () => {
   const startDrill = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
   }
 
@@ -393,7 +393,7 @@ describe('a drill surviving a reload', () => {
     const first = renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
 
     first.unmount()
@@ -436,7 +436,7 @@ describe('a drill surviving a reload', () => {
 
 describe('clearing the saved drill', () => {
   const drillToEnd = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /wrong/i }))
@@ -450,7 +450,7 @@ describe('clearing the saved drill', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
 
     expect(drillRepo.load()).not.toBeNull()
@@ -473,7 +473,7 @@ describe('clearing the saved drill', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /quit/i }))
 
@@ -520,7 +520,7 @@ describe('a restored drill and the iOS gesture chain', () => {
     const user = userEvent.setup()
     const first = renderApp()
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: mode }))
     first.unmount()
     speechCalls.length = 0
@@ -560,7 +560,7 @@ describe('a restored drill and the iOS gesture chain', () => {
     const user = userEvent.setup()
     renderApp()
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(screen.queryByText(/resumed/i)).not.toBeInTheDocument()
   })
@@ -573,7 +573,7 @@ describe('a full practice run', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
 
     /*
@@ -604,7 +604,7 @@ describe('a full practice run', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
 
     // Spec A3: the order the list was written in.
@@ -620,7 +620,7 @@ describe('a full practice run', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
 
@@ -641,7 +641,7 @@ describe('a full practice run', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /next/i }))
     await user.click(screen.getByRole('button', { name: /next/i }))
@@ -657,7 +657,7 @@ describe('switching mode from the results screen', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
@@ -676,7 +676,7 @@ describe('switching mode from the results screen', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /next/i }))
     await user.click(screen.getByRole('button', { name: /next/i }))
@@ -698,7 +698,7 @@ describe('covering and uncovering the answer in practice', () => {
   const covered = () => screen.getByText('daughter').getAttribute('aria-hidden') === 'true'
 
   const startPractice = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
   }
 
@@ -768,7 +768,7 @@ describe('covering and uncovering the answer in practice', () => {
   })
 
   // FR-5. A new run is a new decision, however the last one ended.
-  it('covers the answer again when the same list is practised again', async () => {
+  it('covers the answer again when the same list is practiced again', async () => {
     listRepo.save(seeded)
     const user = userEvent.setup()
     renderApp()
@@ -808,7 +808,7 @@ describe('a drill with localStorage refused', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('denied', 'SecurityError')
     })
@@ -1060,7 +1060,7 @@ describe('the navigation menu', () => {
     const user = userEvent.setup()
     renderApp()
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(screen.getByRole('button', { name: /^menu$/i })).toBeInTheDocument()
   })
@@ -1072,7 +1072,7 @@ describe('the navigation menu', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
@@ -1093,7 +1093,7 @@ describe('the navigation menu', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await openMenu(user)
     await user.click(screen.getByRole('menuitem', { name: /my practices/i }))
@@ -1108,7 +1108,7 @@ describe('the navigation menu', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(drillRepo.load()).not.toBeNull()
 
@@ -1118,7 +1118,7 @@ describe('the navigation menu', () => {
   })
 })
 
-describe('practising the words you missed', () => {
+describe('practicing the words you missed', () => {
   const DAY = 86_400_000
 
   /** A finished drill over `seeded`, with the named words marked wrong. */
@@ -1155,7 +1155,7 @@ describe('practising the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(screen.getByRole('button', { name: /today · 0/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /this week · 2/i })).toBeEnabled()
   })
@@ -1168,7 +1168,7 @@ describe('practising the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     // Two were missed; one has been fixed since.
     expect(screen.getByRole('button', { name: /this week · 1/i })).toBeInTheDocument()
   })
@@ -1181,7 +1181,7 @@ describe('practising the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /this week · 1/i }))
     expect(screen.getByText(/1 word you missed in the last week/i)).toBeInTheDocument()
 
@@ -1198,7 +1198,7 @@ describe('practising the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /this week · 1/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
@@ -1216,7 +1216,7 @@ describe('practising the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /this week · 1/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
@@ -1225,7 +1225,7 @@ describe('practising the words you missed', () => {
 
     // Back at the ready screen, the word is gone from every window.
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
   })
 
@@ -1236,7 +1236,7 @@ describe('practising the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /this week · 1/i }))
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()
 
@@ -1267,7 +1267,7 @@ describe('practising the words you missed', () => {
     const user = userEvent.setup()
     renderApp()
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(screen.getByRole('button', { name: /this week · 1/i })).toBeInTheDocument()
   })
 
@@ -1279,7 +1279,7 @@ describe('practising the words you missed', () => {
     const user = userEvent.setup()
     renderApp()
     await goTo(user, 'My lists')
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
   })
 })
@@ -1292,7 +1292,7 @@ describe('reviewing one drill', () => {
     await goTo(user, 'My lists')
 
     // A real drill, one right and one wrong.
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /wrong/i }))
@@ -1307,7 +1307,7 @@ describe('reviewing one drill', () => {
     expect(screen.getByRole('heading', { name: /wrong \(1\)/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /right \(1\)/i })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /practise these 1 missed word/i }))
+    await user.click(screen.getByRole('button', { name: /practice these 1 missed word/i }))
     expect(screen.getByText(/1 word you missed on/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^test$/i }))
@@ -1365,7 +1365,7 @@ describe('the drill keyboard while the menu is open', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
@@ -1384,7 +1384,7 @@ describe('the drill keyboard while the menu is open', () => {
     renderApp()
     await goTo(user, 'My lists')
 
-    await user.click(screen.getByRole('button', { name: /practise/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /^menu$/i }))
@@ -1422,7 +1422,7 @@ describe('the home screen tiles that start a drill', () => {
       ...over,
     })
 
-  it('opens the ready screen for the list you practised last (FR-9)', async () => {
+  it('opens the ready screen for the list you practiced last (FR-9)', async () => {
     listRepo.save(seeded)
     seedRun()
     const user = userEvent.setup()
@@ -1442,7 +1442,7 @@ describe('the home screen tiles that start a drill', () => {
    * `PRACTISE_LIST` would land on a ready screen for words that no longer exist, and the
    * history record outlives the list on purpose (that is why `listName` is denormalised).
    */
-  it('offers no target when the last practised list is gone (FR-9)', () => {
+  it('offers no target when the last practiced list is gone (FR-9)', () => {
     seedRun()
     renderApp()
     expect(screen.getByRole('button', { name: /^practice/i })).toHaveTextContent(/pick a list/i)

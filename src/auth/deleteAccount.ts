@@ -130,7 +130,7 @@ export async function reauthenticateAndDelete(
   } catch (error) {
     const code = errorCode(error)
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-      return { ok: false, reason: 'unknown', message: 'Sign-in cancelled, so nothing was deleted.' }
+      return { ok: false, reason: 'unknown', message: 'Sign-in canceled, so nothing was deleted.' }
     }
     return { ok: false, reason: 'unknown', message: "Couldn't confirm it was you. Try again." }
   }

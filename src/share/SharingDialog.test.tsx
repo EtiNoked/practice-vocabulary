@@ -166,7 +166,7 @@ describe('the owner view', () => {
 describe('creating a link', () => {
   it('makes a one-person link by default', async () => {
     const { store, user } = renderDialog()
-    await user.click(screen.getByRole('radio', { name: 'Practise only' }))
+    await user.click(screen.getByRole('radio', { name: 'Practice only' }))
     await user.type(screen.getByRole('textbox', { name: /label/i }), 'For Dana')
     await user.click(screen.getByRole('button', { name: 'Create link' }))
     expect(store.createLink).toHaveBeenCalledWith(twoPeople, { role: 'viewer', label: 'For Dana', maxUses: 1 })
@@ -345,7 +345,7 @@ describe('the member view', () => {
     expect(screen.getByRole('heading', { name: '“French verbs”' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create link' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Stop sharing' })).not.toBeInTheDocument()
-    expect(screen.getByText(/you can practise it/i)).toBeInTheDocument()
+    expect(screen.getByText(/you can practice it/i)).toBeInTheDocument()
   })
 
   it('shows the members without controls over them', () => {

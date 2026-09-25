@@ -117,7 +117,7 @@ export function TestSetup({
             {draft.listIds.length === 0 ? (
               'Pick at least one list to see how many words you have.'
             ) : draft.poolCount === 0 && draft.source === 'missed' ? (
-              'Nothing to practise here yet — you have not got any of these wrong. Try “All words”.'
+              'Nothing to practice here yet — you haven’t gotten any of these wrong. Try “All words”.'
             ) : draft.poolCount === 0 ? (
               'No words in this selection.'
             ) : (

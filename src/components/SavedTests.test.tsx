@@ -114,6 +114,6 @@ describe('a test that can no longer run', () => {
   it('cannot be started when its lists are alive but select nothing', () => {
     setup([test()], { count: () => 0 })
     expect(screen.getByRole('button', { name: /^test$/i })).toBeDisabled()
-    expect(screen.getByText(/nothing to practise yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/nothing to practice yet/i)).toBeInTheDocument()
   })
 })

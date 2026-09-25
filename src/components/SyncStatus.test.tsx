@@ -29,7 +29,7 @@ describe('SyncStatus', () => {
   it('reassures rather than alarms — practice still works', () => {
     setOnline(false)
     render(<SyncStatus active />)
-    expect(screen.getByRole('status')).toHaveTextContent(/keep practising/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/keep practicing/i)
     expect(screen.getByRole('status')).toHaveTextContent(/sync .* when you reconnect/i)
   })
 

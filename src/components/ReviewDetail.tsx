@@ -82,11 +82,11 @@ export function ReviewDetail({ record, list, onPractiseMisses, onBack }: Props) 
           disabled={misses.length === 0 || deleted}
           className="btn btn-primary btn-lg"
         >
-          Practise these {misses.length} missed {misses.length === 1 ? 'word' : 'words'}
+          Practice these {misses.length} missed {misses.length === 1 ? 'word' : 'words'}
         </button>
         {deleted && (
           <p className="text-sm text-ink-muted">
-            This list has been deleted, so its words cannot be practised again.
+            This list has been deleted, so its words cannot be practiced again.
           </p>
         )}
         {back}

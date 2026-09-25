@@ -16,7 +16,7 @@ export function signInFailureMessage(outcome: SignInOutcome): string | null {
     case 'cancelled':
       // Closing the popup is a normal choice, not a failure. Say nothing louder
       // than this.
-      return 'Sign-in cancelled.'
+      return 'Sign-in canceled.'
     case 'blocked':
       return 'Your browser blocked the sign-in popup. Allow popups for this site, then try again.'
     case 'network':

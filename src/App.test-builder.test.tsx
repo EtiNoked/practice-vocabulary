@@ -137,7 +137,7 @@ describe('building a test over several lists', () => {
     // The ready screen for ONE of the lists now offers its own two misses.
     await goTo(user, 'My lists')
     const firstList = (await screen.findByText('Chapter 1')).closest('li')!
-    await user.click(within(firstList).getByRole('button', { name: /practise/i }))
+    await user.click(within(firstList).getByRole('button', { name: /^practice$/i }))
     expect(await screen.findByRole('button', { name: /All time · 2/i })).toBeInTheDocument()
   })
 })
@@ -265,7 +265,7 @@ describe('a plain list drill is unchanged (011 D-9)', () => {
     await goTo(user, 'My lists')
 
     const row = (await screen.findByText('Chapter 1')).closest('li')!
-    await user.click(within(row).getByRole('button', { name: /practise/i }))
+    await user.click(within(row).getByRole('button', { name: /^practice$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     for (let i = 0; i < 2; i++) {
       await user.click(screen.getByRole('button', { name: /show answer/i }))

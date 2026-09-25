@@ -164,7 +164,7 @@ describe('the live pool count (008 FR-6)', () => {
     const { user } = setup()
     await user.click(listRow('Food'))
     await user.click(screen.getByRole('button', { name: 'Words I got wrong' }))
-    expect(screen.getByRole('status')).toHaveTextContent(/not got any of these wrong/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/haven’t gotten any of these wrong/i)
     expect(start()).toBeDisabled()
   })
 })
