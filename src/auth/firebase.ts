@@ -51,6 +51,7 @@ export interface FirestoreSdk {
   updateDoc: typeof import('firebase/firestore').updateDoc
   deleteDoc: typeof import('firebase/firestore').deleteDoc
   getDocs: typeof import('firebase/firestore').getDocs
+  getDoc: typeof import('firebase/firestore').getDoc
   onSnapshot: typeof import('firebase/firestore').onSnapshot
   query: typeof import('firebase/firestore').query
   where: typeof import('firebase/firestore').where
@@ -117,6 +118,7 @@ async function initialise(): Promise<FirebaseServices> {
       updateDoc: firestoreModule.updateDoc,
       deleteDoc: firestoreModule.deleteDoc,
       getDocs: firestoreModule.getDocs,
+      getDoc: firestoreModule.getDoc,
       onSnapshot: firestoreModule.onSnapshot,
       query: firestoreModule.query,
       where: firestoreModule.where,

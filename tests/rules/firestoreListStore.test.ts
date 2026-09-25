@@ -6,6 +6,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   limit,
@@ -20,6 +21,8 @@ import {
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFirestoreListStore, stripUndefined } from '../../src/storage/firestoreListStore'
+import { moveLegacyLists } from '../../src/storage/moveLegacyLists'
+import { releaseAllLists } from '../../src/storage/listEndings'
 import type { FirebaseServices } from '../../src/auth/firebase'
 import type { SessionRecord, WordList } from '../../src/state/types'
 import type { GameRecord } from '../../src/game/types'
@@ -74,6 +77,7 @@ function servicesFor(uid: string): FirebaseServices {
       updateDoc,
       deleteDoc,
       getDocs,
+      getDoc,
       onSnapshot,
       query,
       where,
@@ -294,6 +298,220 @@ describe('session history', () => {
   })
 })
 
+/** A list document as it is stored since 016: content plus membership. */
+const stored = (list: WordList, members: Record<string, string>, owner = UID) => ({
+  ...list,
+  ownerUid: owner,
+  memberUids: Object.keys(members),
+  members: Object.fromEntries(
+    Object.entries(members).map(([uid, role]) => [
+      uid,
+      { role, displayName: uid, email: null, photoURL: null, joinedAt: 1, ...(role === 'owner' ? {} : { viaLink: 'x' }) },
+    ]),
+  ),
+  updatedBy: owner,
+})
+
+const seedDoc = (path: string, data: object) =>
+  testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), path), data)
+  })
+
+const readDoc = async (path: string) => {
+  let data: Record<string, unknown> | undefined
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    data = (await getDoc(doc(ctx.firestore(), path))).data()
+  })
+  return data
+}
+
+describe('one lists collection (016)', () => {
+  it('creates a new list in lists/ with its creator as the only member and owner', async () => {
+    const store = storeFor()
+    expect(await store.saveList(makeList())).toEqual({ ok: true })
+    const data = await readDoc('lists/l1')
+    expect(data).toMatchObject({ ownerUid: UID, memberUids: [UID], updatedBy: UID, name: 'Lesson 3' })
+    expect((data!.members as Record<string, { role: string }>)[UID]!.role).toBe('owner')
+    expect(await readDoc(`users/${UID}/lists/l1`)).toBeUndefined()
+    await store.dispose()
+  })
+
+  it('emits membership as `sharing`, not as loose fields', async () => {
+    await seedDoc('lists/l1', stored(makeList(), { [UID]: 'owner', bob: 'editor' }))
+    const store = storeFor()
+    const [list] = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+    expect(list!.sharing!.memberUids).toEqual([UID, 'bob'])
+    expect(list!.sharing!.members.bob!.role).toBe('editor')
+    expect(list).not.toHaveProperty('memberUids')
+    await store.dispose()
+  })
+
+  it('shows a list shared with me beside my own', async () => {
+    await seedDoc('lists/mine', stored(makeList({ id: 'mine', updatedAt: 1 }), { [UID]: 'owner' }))
+    await seedDoc('lists/theirs', stored(makeList({ id: 'theirs', updatedAt: 9 }), { bob: 'owner', [UID]: 'viewer' }, 'bob'))
+    await seedDoc('lists/private', stored(makeList({ id: 'private' }), { bob: 'owner' }, 'bob'))
+    const store = storeFor()
+    const lists = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 2)
+    expect(lists.map((l) => l.id)).toEqual(['theirs', 'mine'])
+    await store.dispose()
+  })
+
+  it("an editor's save is an update of the words, and cannot undo a concurrent join", async () => {
+    await seedDoc('lists/l1', stored(makeList(), { bob: 'owner', [UID]: 'editor' }, 'bob'))
+    const store = storeFor()
+    const [list] = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+
+    // Carol joins after this client last saw the list.
+    await seedDoc('lists/l1', stored(makeList(), { bob: 'owner', [UID]: 'editor', carol: 'viewer' }, 'bob'))
+
+    const edited = { ...list!, name: 'Edited', updatedAt: 5 }
+    expect(await store.saveList(edited)).toEqual({ ok: true })
+    const data = await readDoc('lists/l1')
+    expect(data).toMatchObject({ name: 'Edited', updatedBy: UID, ownerUid: 'bob' })
+    expect(data!.memberUids).toEqual(['bob', UID, 'carol'])
+    await store.dispose()
+  })
+
+  it('refuses a "Can practise" member saving, as a permission failure', async () => {
+    await seedDoc('lists/l1', stored(makeList(), { bob: 'owner', [UID]: 'viewer' }, 'bob'))
+    const store = storeFor()
+    const [list] = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+    expect(await store.saveList({ ...list!, name: 'Nope' })).toEqual({ ok: false, reason: 'permission' })
+    await store.dispose()
+  })
+
+  it("a member's delete is leaving: the list stays for everyone else", async () => {
+    await seedDoc('lists/l1', stored(makeList(), { bob: 'owner', [UID]: 'editor' }, 'bob'))
+    const store = storeFor()
+    await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+    expect(await store.removeList('l1')).toEqual({ ok: true })
+    const data = await readDoc('lists/l1')
+    expect(data!.memberUids).toEqual(['bob'])
+    await store.dispose()
+  })
+
+  it("the owner's delete of a shared list leaves every other member a farewell", async () => {
+    await seedDoc('lists/l1', stored(makeList(), { [UID]: 'owner', bob: 'editor' }))
+    const store = storeFor()
+    await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+    expect(await store.removeList('l1')).toEqual({ ok: true })
+    expect(await readDoc('lists/l1')).toBeUndefined()
+    expect(await readDoc('listFarewells/l1_bob')).toMatchObject({ uid: 'bob', reason: 'deleted', listId: 'l1' })
+    await store.dispose()
+  })
+})
+
+describe('the legacy location, until it is moved (016 D-14)', () => {
+  it('shows lists still waiting in users/{uid}/lists, deduped against lists/', async () => {
+    await seedDoc(`users/${UID}/lists/old`, makeList({ id: 'old', updatedAt: 1 }))
+    await seedDoc(`users/${UID}/lists/both`, makeList({ id: 'both', name: 'Legacy copy' }))
+    await seedDoc('lists/both', stored(makeList({ id: 'both', name: 'Moved copy', updatedAt: 5 }), { [UID]: 'owner' }))
+    const store = storeFor()
+    const lists = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 2)
+    expect(lists.map((l) => [l.id, l.name])).toEqual([
+      ['both', 'Moved copy'],
+      ['old', 'Lesson 3'],
+    ])
+    await store.dispose()
+  })
+
+  it('saving a list that is still in the legacy location moves it', async () => {
+    await seedDoc(`users/${UID}/lists/old`, makeList({ id: 'old' }))
+    const store = storeFor()
+    const [list] = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+    expect(await store.saveList({ ...list!, name: 'Edited' })).toEqual({ ok: true })
+    expect(await readDoc('lists/old')).toMatchObject({ name: 'Edited', ownerUid: UID })
+    expect(await readDoc(`users/${UID}/lists/old`)).toBeUndefined()
+    await store.dispose()
+  })
+})
+
+describe('moveLegacyLists', () => {
+  const services = () => servicesFor(UID)
+
+  it('moves every legacy list to lists/, keeping its id and content', async () => {
+    await seedDoc(`users/${UID}/lists/a`, makeList({ id: 'a', name: 'A' }))
+    await seedDoc(`users/${UID}/lists/b`, makeList({ id: 'b', name: 'B' }))
+    expect(await moveLegacyLists(services(), UID)).toEqual({ moved: 2, tidied: 0, refused: [] })
+    expect(await readDoc('lists/a')).toMatchObject({ name: 'A', ownerUid: UID, memberUids: [UID] })
+    expect(await readDoc('lists/b')).toMatchObject({ name: 'B', pairs: makeList().pairs })
+    expect(await readDoc(`users/${UID}/lists/a`)).toBeUndefined()
+    expect(await readDoc(`users/${UID}/lists/b`)).toBeUndefined()
+  })
+
+  it('is a no-op the second time', async () => {
+    await seedDoc(`users/${UID}/lists/a`, makeList({ id: 'a' }))
+    await moveLegacyLists(services(), UID)
+    expect(await moveLegacyLists(services(), UID)).toEqual({ moved: 0, tidied: 0, refused: [] })
+  })
+
+  it('finishes a run that was interrupted after copying but before deleting', async () => {
+    await seedDoc(`users/${UID}/lists/a`, makeList({ id: 'a', name: 'Legacy' }))
+    await seedDoc('lists/a', stored(makeList({ id: 'a', name: 'Already moved and edited' }), { [UID]: 'owner' }))
+    expect(await moveLegacyLists(services(), UID)).toEqual({ moved: 0, tidied: 1, refused: [] })
+    // The copy in lists/ wins: it may have been edited since.
+    expect(await readDoc('lists/a')).toMatchObject({ name: 'Already moved and edited' })
+    expect(await readDoc(`users/${UID}/lists/a`)).toBeUndefined()
+  })
+
+  it("never deletes a legacy list it could not copy (an id taken by someone else's list)", async () => {
+    await seedDoc(`users/${UID}/lists/a`, makeList({ id: 'a' }))
+    await seedDoc('lists/a', stored(makeList({ id: 'a' }), { bob: 'owner' }, 'bob'))
+    expect(await moveLegacyLists(services(), UID)).toEqual({ moved: 0, tidied: 0, refused: ['a'] })
+    expect(await readDoc(`users/${UID}/lists/a`)).toBeDefined()
+    expect(await readDoc('lists/a')).toMatchObject({ ownerUid: 'bob' })
+  })
+
+  it('leaves history and saved tests pointing at the same ids', async () => {
+    const store = storeFor()
+    await seedDoc(`users/${UID}/lists/a`, makeList({ id: 'a' }))
+    await store.recordSession(makeRecord({ listId: 'a' }))
+    await moveLegacyLists(services(), UID)
+    const lists = await nextMatching<WordList[]>((cb) => store.subscribeLists(cb, () => {}), (l) => l.length === 1)
+    const records = await nextMatching<SessionRecord[]>(
+      (cb) => store.subscribeSessions('a', cb, () => {}),
+      (r) => r.length === 1,
+    )
+    expect(records[0]!.listId).toBe(lists[0]!.id)
+    await store.dispose()
+  })
+})
+
+describe('releaseAllLists: account deletion lets go of every list (016 D-13)', () => {
+  it('deletes a list I own alone, as account deletion always did', async () => {
+    await seedDoc('lists/a', stored(makeList({ id: 'a' }), { [UID]: 'owner' }))
+    await releaseAllLists(servicesFor(UID), UID)
+    expect(await readDoc('lists/a')).toBeUndefined()
+  })
+
+  it('leaves a list I am only a member of, which stays for its owner', async () => {
+    await seedDoc('lists/a', stored(makeList({ id: 'a' }), { bob: 'owner', [UID]: 'editor' }, 'bob'))
+    await releaseAllLists(servicesFor(UID), UID)
+    expect(await readDoc('lists/a')).toMatchObject({ ownerUid: 'bob', memberUids: ['bob'] })
+  })
+
+  it('hands a list I own to the longest-standing editor rather than deleting it', async () => {
+    const list = stored(makeList({ id: 'a' }), { [UID]: 'owner', carol: 'viewer', bob: 'editor', dan: 'editor' })
+    list.members.carol!.joinedAt = 1
+    list.members.bob!.joinedAt = 3
+    list.members.dan!.joinedAt = 2
+    await seedDoc('lists/a', list)
+    await releaseAllLists(servicesFor(UID), UID)
+    const data = await readDoc('lists/a')
+    expect(data).toMatchObject({ ownerUid: 'dan' })
+    expect((data!.members as Record<string, { role: string }>).dan!.role).toBe('owner')
+    expect(data!.memberUids).not.toContain(UID)
+  })
+
+  it('removes the links I made and the farewells addressed to me', async () => {
+    await seedDoc('shareLinks/c1', { listId: 'x', createdByUid: UID })
+    await seedDoc(`listFarewells/x_${UID}`, { uid: UID, listId: 'x' })
+    await releaseAllLists(servicesFor(UID), UID)
+    expect(await readDoc('shareLinks/c1')).toBeUndefined()
+    expect(await readDoc(`listFarewells/x_${UID}`)).toBeUndefined()
+  })
+})
+
 describe('dispose', () => {
   it('detaches listeners so a signed-out user stops receiving updates', async () => {
     const store = storeFor()
@@ -306,7 +524,13 @@ describe('dispose', () => {
 
     // Written through a separate context, so the write itself is unaffected.
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), `users/${UID}/lists/late`), makeList({ id: 'late' }))
+      await setDoc(doc(ctx.firestore(), 'lists/late'), {
+        ...makeList({ id: 'late' }),
+        ownerUid: UID,
+        memberUids: [UID],
+        members: { [UID]: { role: 'owner' } },
+        updatedBy: UID,
+      })
     })
     await new Promise((r) => setTimeout(r, 500))
 

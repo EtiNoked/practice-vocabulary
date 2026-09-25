@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { loadFirebase } from '../auth/firebase'
 import { useAuth } from '../auth/useAuth'
-import { createFirestoreListStore } from './firestoreListStore'
+import { createFirestoreListStore, legacyMoved } from './firestoreListStore'
 import { createLocalListStore } from './localListStore'
+import { moveLegacyLists } from './moveLegacyLists'
 import type { ListStore } from './types'
 
 export interface ListStoreState {
@@ -62,7 +63,13 @@ export function useListStore(): ListStoreState {
       adopt(createLocalListStore(), null)
     } else {
       void loadFirebase()
-        .then((services) => adopt(createFirestoreListStore(services, uid), null))
+        .then((services) => {
+          adopt(createFirestoreListStore(services, uid), null)
+          // One-time, in the background (016 D-14). The store reads the legacy location
+          // until this finishes, so nothing waits on it and nothing disappears meanwhile.
+          // A failure is retried on the next sign-in; the lists stay readable where they are.
+          if (!cancelled && !legacyMoved(uid)) void moveLegacyLists(services, uid).catch(() => {})
+        })
         .catch(() =>
           // A cloud store we cannot build must not take the app down with it.
           // Fall back to this device so the user can still work.

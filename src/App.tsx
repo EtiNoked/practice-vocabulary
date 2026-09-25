@@ -35,6 +35,7 @@ import {
   toDrillPairs,
   type ReviewWindow,
 } from './state/missedWords'
+import { aliasMap, canonicalGames, canonicalRecords } from './state/listIds'
 import { buildRunRecords } from './state/sessionRecord'
 import { groupRuns, runLabel } from './state/runGroup'
 import { trendOfRuns } from './state/scoreTrend'
@@ -192,8 +193,20 @@ export default function App() {
    * clear-then-refill cascade and cannot leave a stale frame behind.
    */
   const visibleLists = useMemo(() => (store ? lists : []), [store, lists])
-  const visibleRecords = useMemo(() => (store ? records : []), [store, records])
-  const visibleGames = useMemo(() => (store ? games : []), [store, games])
+  /*
+   * Records are filed under the list that NOW owns their id (016 D-11): a kept copy of a
+   * shared list claims the history recorded against the original. Done once, here, so
+   * every screen below reads one consistent answer. Nothing is written back.
+   */
+  const alias = useMemo(() => aliasMap(visibleLists), [visibleLists])
+  const visibleRecords = useMemo(
+    () => (store ? canonicalRecords(records, alias) : []),
+    [store, records, alias],
+  )
+  const visibleGames = useMemo(
+    () => (store ? canonicalGames(games, alias) : []),
+    [store, games, alias],
+  )
   const visibleTests = useMemo(() => (store ? tests : []), [store, tests])
 
   /**

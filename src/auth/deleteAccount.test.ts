@@ -45,9 +45,13 @@ function fakeServices(options: {
     fs: {
       collection: (_db: unknown, path: string) => ({ path }),
       doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+      // Top-level collections (016) are read through a query; the fake passes the ref through.
+      query: (ref: { path: string }) => ref,
+      where: () => null,
       getDocs: vi.fn(async (ref: { path: string }) => {
         if (getDocsFails) throw authError('unavailable')
         log.push(`read:${ref.path}`)
+        if (!ref.path.includes('/')) return { docs: [] }
         const count = ref.path.endsWith('/lists') ? listDocs : sessionDocs
         return { docs: Array.from({ length: count }, (_, i) => ({ ref: { id: `${i}` } })) }
       }),
@@ -89,6 +93,10 @@ describe('purgeUserData', () => {
     await purgeUserData(services, 'u1')
 
     expect(log.filter((l) => l.startsWith('read:') || l.startsWith('delete:'))).toEqual([
+      // 016: the top-level lists, links and farewells are let go of first.
+      'read:lists',
+      'read:shareLinks',
+      'read:listFarewells',
       'read:users/u1/lists',
       'read:users/u1/sessions',
       'read:users/u1/games',
