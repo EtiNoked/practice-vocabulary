@@ -5,6 +5,7 @@ import App from './App.tsx'
 import { AuthProvider } from './auth/AuthContext.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { initTheme } from './theme/theme.ts'
+import { capturePendingJoin } from './share/pendingJoin.ts'
 
 /*
  * Before `render`, deliberately, and this is the whole reason it is a call here
@@ -18,6 +19,10 @@ import { initTheme } from './theme/theme.ts'
  * has no 'unsafe-inline', and csp.test.ts pins that).
  */
 initTheme()
+
+// A share link's code comes out of the URL before anything renders, so it survives the
+// Google sign-in and a refresh does not carry it along (016).
+capturePendingJoin()
 
 // The boundary sits OUTSIDE AuthProvider, so a throw while resolving auth is
 // caught too — that provider talks to Firebase, which is the least predictable

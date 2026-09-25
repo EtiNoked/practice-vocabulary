@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Home, type Brief } from './components/Home'
 import { ListEditor } from './components/ListEditor'
 import { TestCard } from './components/TestCard'
@@ -35,7 +35,19 @@ import {
   toDrillPairs,
   type ReviewWindow,
 } from './state/missedWords'
-import { aliasMap, canonicalGames, canonicalRecords } from './state/listIds'
+import { aliasMap, canonicalGames, canonicalRecords, isShared, roleOf } from './state/listIds'
+import { FarewellBanner } from './components/FarewellBanner'
+import { useShareStore } from './share/useShareStore'
+import { useOnline } from './share/useOnline'
+import { clearPendingJoin, readPendingJoin } from './share/pendingJoin'
+import type { Farewell } from './share/types'
+
+/*
+ * Lazy, both of them: the QR encoder and every sharing screen stay out of the eager bundle,
+ * so a guest who never shares downloads none of it (016 NFR2).
+ */
+const SharingDialog = lazy(() => import('./share/SharingDialog'))
+const JoinScreen = lazy(() => import('./share/JoinScreen'))
 import { buildRunRecords } from './state/sessionRecord'
 import { groupRuns, runLabel } from './state/runGroup'
 import { trendOfRuns } from './state/scoreTrend'
@@ -99,7 +111,7 @@ export default function App() {
   // localStorage while signed out, Firestore while signed in. Nothing below this
   // line knows or cares which implementation it is holding.
   const { store, error: storeError } = useListStore()
-  const { status: authStatus, user, available: authAvailable } = useAuth()
+  const { status: authStatus, user, available: authAvailable, signIn } = useAuth()
   const migration = useMigration(store, user?.uid ?? null)
 
   // Seeded with the FUNCTION, not its result — the latter re-reads storage on
@@ -208,6 +220,41 @@ export default function App() {
     [store, games, alias],
   )
   const visibleTests = useMemo(() => (store ? tests : []), [store, tests])
+
+  /*
+   * Sharing (016). Null for a guest: their lists live on this device and cannot be shared,
+   * and every sharing control reads null as "Sign in to share".
+   */
+  const shareStore = useShareStore()
+  const online = useOnline()
+  const [farewells, setFarewells] = useState<Farewell[]>([])
+  useEffect(() => shareStore?.subscribeFarewells(setFarewells, () => {}), [shareStore])
+  // Derived, like the other visible* values: a previous account's offers never linger.
+  const visibleFarewells = shareStore ? farewells : []
+
+  /** The list whose Share / Members dialog is open, by id so it always shows the LIVE list. */
+  const [sharingId, setSharingId] = useState<string | null>(null)
+  const sharingList = sharingId ? (visibleLists.find((l) => l.id === sharingId) ?? null) : null
+
+  /** A share link this tab was opened with, parked in main.tsx before the first render. */
+  const [joinCode, setJoinCode] = useState(readPendingJoin)
+
+  /**
+   * When the list being edited was opened, for the stale-edit warning (016 D-8). Only a
+   * shared list can be changed by someone else while it is open.
+   */
+  const editOpened = useRef<{ id: string; updatedAt: number } | null>(null)
+  const [editorKey, setEditorKey] = useState(0)
+  const editingId = state.screen === 'editing' ? (state.listId ?? null) : null
+  useEffect(() => {
+    if (editingId === null) {
+      editOpened.current = null
+      return
+    }
+    if (editOpened.current?.id === editingId) return
+    const live = visibleLists.find((l) => l.id === editingId)
+    editOpened.current = live ? { id: live.id, updatedAt: live.updatedAt } : null
+  }, [editingId, visibleLists])
 
   /**
    * Everything that can say a word was got right or wrong — drills AND games.
@@ -697,6 +744,29 @@ export default function App() {
         : null
   const voiceMissing = ready && promptLang !== null && !hasVoiceFor(promptLang, voices)
 
+  /*
+   * A share link wins over the welcome screen: it asks the same question (sign in or not)
+   * with a reason attached. The first-sign-in migration prompt lives on Home, so it can
+   * only come after this, never on top of it (016 Story 3).
+   */
+  if (joinCode && authAvailable) {
+    return (
+      <main className="min-h-dvh bg-ground text-ink">
+        <Suspense fallback={<p className="p-4 text-ink-muted">Opening the invitation…</p>}>
+          <JoinScreen
+            code={joinCode}
+            store={shareStore}
+            onDone={(listId) => {
+              clearPendingJoin()
+              setJoinCode(null)
+              if (listId || authStatus === 'signed-in') act({ type: 'OPEN_LISTS' })
+            }}
+          />
+        </Suspense>
+      </main>
+    )
+  }
+
   if (showWelcome) {
     return (
       <main className="min-h-dvh bg-ground text-ink">
@@ -840,6 +910,20 @@ export default function App() {
            * the user asked by tapping this particular row.
            */
           onOpenPractices={(list) => act({ type: 'OPEN_REVIEW', listId: list.id })}
+          uid={user?.uid ?? null}
+          {...(shareStore ? { onShare: (list: WordList) => setSharingId(list.id) } : {})}
+          {...(authAvailable && authStatus === 'guest' ? { onSignInToShare: () => void signIn() } : {})}
+          banner={
+            <FarewellBanner
+              farewells={visibleFarewells}
+              onKeep={async (farewell) => {
+                if (!shareStore) return
+                const result = await shareStore.keepCopy(farewell)
+                if (!result.ok) setToast(writeFailureMessage(result.reason))
+              }}
+              onDismiss={(farewell) => void shareStore?.dismiss(farewell)}
+            />
+          }
           onNewList={() => act({ type: 'NEW_LIST' })}
           onPractise={(list) => act({ type: 'PRACTISE_LIST', list })}
           onEdit={(list) => act({ type: 'EDIT_LIST', list })}
@@ -851,7 +935,12 @@ export default function App() {
             if (!result.ok) setToast(writeFailureMessage(result.reason))
           }}
           onDelete={async (list) => {
-            if (!window.confirm(`Delete \u201c${list.name}\u201d?`)) return
+            const others = isShared(list) ? list.sharing!.memberUids.length - 1 : 0
+            const question =
+              others > 0 && roleOf(list, user?.uid ?? null) === 'owner'
+                ? `Delete \u201c${list.name}\u201d for everyone? ${others} ${others === 1 ? 'other person' : 'other people'} will lose it and be offered a copy.`
+                : `Delete \u201c${list.name}\u201d?`
+            if (!window.confirm(question)) return
             if (!store) return
             const result = await store.removeList(list.id)
             if (!result.ok) setToast(writeFailureMessage(result.reason))
@@ -901,6 +990,7 @@ export default function App() {
 
       {state.screen === 'editing' && (
         <ListEditor
+          key={editorKey}
           mode={state.mode}
           initialRows={state.rows}
           {...(state.listId !== undefined ? { listId: state.listId } : {})}
@@ -912,7 +1002,33 @@ export default function App() {
             // from a stored list, so silently dropping their correction if they
             // skipped a Save button would be surprising. A brand-new list is not
             // saved until they ask, via "Save this list" on the next screen.
-            if (state.mode === 'update') void persist(list)
+            if (state.mode === 'update') {
+              /*
+               * Someone else saved this shared list while it was open (016 D-8). Last write
+               * still wins, but only after asking, and naming who would be overwritten.
+               */
+              const live = visibleLists.find((l) => l.id === list.id)
+              const opened = editOpened.current
+              if (
+                live?.sharing &&
+                opened?.id === live.id &&
+                live.updatedAt !== opened.updatedAt &&
+                live.sharing.updatedBy !== user?.uid
+              ) {
+                const who = live.sharing.members[live.sharing.updatedBy]?.displayName ?? 'Someone'
+                if (
+                  !window.confirm(
+                    `${who} changed \u201c${live.name}\u201d since you opened it.\n\nOK saves your version over theirs. Cancel keeps theirs.`,
+                  )
+                ) {
+                  editOpened.current = null
+                  setEditorKey((k) => k + 1)
+                  act({ type: 'EDIT_LIST', list: live })
+                  return
+                }
+              }
+              void persist(list)
+            }
             act({ type: 'CONFIRM_LIST', list })
           }}
           onCancel={() => act({ type: 'CANCEL_EDIT' })}
@@ -1110,6 +1226,21 @@ export default function App() {
             />
           )
         })()}
+
+      {sharingList && shareStore && user && (
+        <Suspense fallback={null}>
+          <SharingDialog
+            list={sharingList}
+            uid={user.uid}
+            store={shareStore}
+            online={online}
+            origin={window.location.origin}
+            now={now}
+            onClose={() => setSharingId(null)}
+            onMessage={setToast}
+          />
+        </Suspense>
+      )}
     </main>
   )
 }

@@ -387,9 +387,13 @@ describe('icons stay decorative, and stay in one file (012 D-7, NFR-5)', () => {
    * exact. It is the one place a hard-coded colour is correct, and `currentColor` would
    * be wrong there.
    *
-   * Listing them by name is the point: a THIRD inline svg has to come here and argue.
+   * `QrCode` (016) draws the share link's QR code. It is content, not decoration (it has a
+   * label and a job), and its two colours are fixed by what reads it: many phone cameras
+   * cannot scan an inverted code, so it must stay dark-on-white in dark mode too.
+   *
+   * Listing them by name is the point: a FOURTH inline svg has to come here and argue.
    */
-  it('inlines an <svg> only in icons.tsx and the two graphics that cannot live there', () => {
+  it('inlines an <svg> only in icons.tsx and the three graphics that cannot live there', () => {
     const withSvg = componentSources()
       .filter(([, src]) => /<svg\b/.test(src))
       .map(([path]) => path)
@@ -398,6 +402,7 @@ describe('icons stay decorative, and stay in one file (012 D-7, NFR-5)', () => {
       '../components/GameCloud.tsx',
       '../components/WelcomeScreen.tsx',
       '../components/icons.tsx',
+      '../share/QrCode.tsx',
     ])
   })
 
