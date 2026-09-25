@@ -1,7 +1,7 @@
 # Spec: Sharing a list with someone else
 
 **ID:** 016-list-sharing
-**Status:** DRAFT, revision 3 (one `lists` collection for every list). Two questions open, see the end
+**Status:** IMPLEMENTED on `claude/list-sharing-feature-872bcu`, revision 3 (one `lists` collection). The two open questions took their recommended defaults; the deploy and device pass are outstanding (tasks.md § Execution status)
 **Created:** 2026-09-25
 **Baseline:** `main` @ `a45a15d`
 **Feature Type:** New capability. New stored data and new security rules. No server code

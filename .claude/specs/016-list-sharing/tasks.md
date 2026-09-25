@@ -175,4 +175,45 @@ nothing on screen has changed.*
 
 ## Execution status
 
-*Not started.*
+| | |
+|---|---|
+| Branch | `claude/list-sharing-feature-872bcu` |
+| Done | Tasks 1-25. Task 26 (deploy and the two-phone device pass) is the owner's |
+| Unit tests | 1517 pass (1417 on `main`) |
+| Emulator tests | 153 pass (72 on `main`): rules, list store, move, release, share store |
+| Eager bundle | 93.3 KB gzipped JS (90.1 KB on `main`), budget 150 KB |
+| QR encoder | `uqr` 0.1.3, 3.9 KB gzipped, lazy with the sharing screens |
+| Invariant | `listRepo.ts`, `localListStore.ts`, `session.ts`, `parse/` byte-identical to `main` |
+
+**Open questions, taken at their recommended defaults:** group links exist (a checkbox, up to
+20 people less those already in); the owner can change anyone's role at any time.
+
+**Deviations from the plan as written:**
+
+- **History for kept copies** goes through one `canonicalRecords` call where `App` receives the
+  records, instead of `listIdsFor` at each of the four call sites plus a guard. Every screen
+  downstream sees the copy's history without knowing copies exist, and there is no second
+  route to guard against.
+- **Account deletion (Task 23)** landed in Phase 2, not Phase 6. Once lists left `users/{uid}`,
+  the old purge no longer reached them, so shipping Phase 2 alone would have stranded every
+  deleted account's lists. `releaseAllLists` and its invariant came with the move.
+- **The join screen** is an early return in `App`, beside the welcome screen, not an
+  `appMachine` screen. It replaces the welcome gate for that visit and the migration prompt lives
+  on Home, so the ordering in Story 3 falls out with no reducer change.
+- **"Can practise" members** do not get a read-only editor (Task 21): Edit and Rename are simply
+  not offered to them, and the Members dialog says how to get an editable copy. Practice mode
+  already shows every word.
+- **Share entry point** is on the list row (Share for the owner, Members and Leave for others),
+  not also inside the editor.
+- **The stale-edit question** uses `window.confirm`, like every other confirmation in the app,
+  rather than a custom two-button dialog. OK saves over theirs; Cancel reopens the editor with
+  their version.
+- **Saving before the first snapshot** tries an update and creates on refusal. An update of a
+  missing document is refused as permission-denied (the rule reads `resource.data`), not
+  not-found, which the plan did not anticipate.
+
+**Still the owner's (Task 26):** `firebase deploy --only firestore:rules` together with the app
+(the new rules refuse the old build's list writes); check in the console that
+`users/{uid}/lists` empties after one sign-in; then the two-phone pass: share over WhatsApp on
+iOS and Android, by email, and by QR in dark mode; join as a brand-new account; edit on one
+device and see it on the other; change a role, remove, stop sharing, keep a copy.
