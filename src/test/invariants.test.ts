@@ -319,6 +319,37 @@ describe('deleting an account deletes everything (011 D-14)', () => {
     const missed = written.filter((name) => !purged.includes(name))
     expect(missed).toEqual([])
   })
+
+  /*
+   * 016 moved lists to the TOP level, outside users/{uid}, where the loop above cannot see
+   * them, and added two more top-level collections. `releaseAllLists` lets go of all three
+   * before the account is deleted. This fails when a store starts writing to a top-level
+   * collection that `releaseAllLists` does not handle, which would otherwise strand those
+   * documents under a uid that can never authenticate again.
+   */
+  it('lets go of every top-level collection the stores write to', () => {
+    const endings = sources['../storage/listEndings.ts'] ?? ''
+    const release = endings.slice(endings.indexOf('export async function releaseAllLists'))
+    expect(release.length).toBeGreaterThan(100)
+
+    const constants: Record<string, string> = { LISTS: 'lists', SHARE_LINKS: 'shareLinks', FAREWELLS: 'listFarewells' }
+    const topLevel = new Set<string>()
+    for (const file of ['../storage/firestoreListStore.ts', '../share/firestoreShareStore.ts', '../storage/listEndings.ts']) {
+      const src = sources[file] ?? ''
+      expect(src).toBeTruthy()
+      for (const m of src.matchAll(/fs\.(?:collection|doc)\(db,\s*(LISTS|SHARE_LINKS|FAREWELLS|'(\w+)')/g)) {
+        topLevel.add(m[2] ?? constants[m[1]!]!)
+      }
+    }
+    expect([...topLevel].sort()).toEqual(['listFarewells', 'lists', 'shareLinks'])
+
+    const handled = [...topLevel].filter(
+      (name) =>
+        release.includes(`'${name}'`) ||
+        Object.entries(constants).some(([k, v]) => v === name && release.includes(k)),
+    )
+    expect(handled.sort()).toEqual([...topLevel].sort())
+  })
 })
 
 describe('icons stay decorative, and stay in one file (012 D-7, NFR-5)', () => {
@@ -356,9 +387,13 @@ describe('icons stay decorative, and stay in one file (012 D-7, NFR-5)', () => {
    * exact. It is the one place a hard-coded colour is correct, and `currentColor` would
    * be wrong there.
    *
-   * Listing them by name is the point: a THIRD inline svg has to come here and argue.
+   * `QrCode` (016) draws the share link's QR code. It is content, not decoration (it has a
+   * label and a job), and its two colours are fixed by what reads it: many phone cameras
+   * cannot scan an inverted code, so it must stay dark-on-white in dark mode too.
+   *
+   * Listing them by name is the point: a FOURTH inline svg has to come here and argue.
    */
-  it('inlines an <svg> only in icons.tsx and the two graphics that cannot live there', () => {
+  it('inlines an <svg> only in icons.tsx and the three graphics that cannot live there', () => {
     const withSvg = componentSources()
       .filter(([, src]) => /<svg\b/.test(src))
       .map(([path]) => path)
@@ -367,6 +402,7 @@ describe('icons stay decorative, and stay in one file (012 D-7, NFR-5)', () => {
       '../components/GameCloud.tsx',
       '../components/WelcomeScreen.tsx',
       '../components/icons.tsx',
+      '../share/QrCode.tsx',
     ])
   })
 

@@ -50,6 +50,7 @@ lists counts as **one** practice for each of them, not three.
 | Other devices | No | Yes |
 | Score history | This browser | Your account |
 | Data sent anywhere | None | Your name, email, lists and scores |
+| Sharing a list | No | Yes, by link or QR code |
 | Offline | Yes | Yes — cached, and changes sync on reconnect |
 
 Signing in for the first time offers to copy this device's lists into your account. It's
@@ -66,7 +67,8 @@ is not recorded. **Delete my account** removes your lists, your history and the 
 itself, permanently.
 
 Your data is readable only by you — enforced by Firestore security rules on the server, not
-by the app. Lists you had before signing in are never touched by any of this.
+by the app — except a list you choose to share, which its members can read too. Lists you had
+before signing in are never touched by any of this.
 
 ### Running it yourself
 
@@ -74,6 +76,36 @@ Sign-in needs a Firebase project. Copy `.env.example` to `.env.local` and fill i
 from **Firebase console → Project settings → Your apps → Web app**. Without them the app
 still runs, signed-out only, and never offers sign-in. Setup is in
 [`.claude/specs/003-user-accounts/quickstart.md`](.claude/specs/003-user-accounts/quickstart.md).
+
+## Sharing a list
+
+Signed in, every list has a **Share** button. Pick what the other person may do, **Edit and
+practise** or **Practise only**, and optionally label the link ("For Dana") so you can tell your
+links apart. **Create link** gives you a QR code and every way to send it: your phone's share
+sheet, **WhatsApp**, **Email**, **Copy link**, or **Show QR code** full screen for someone standing
+next to you. Their phone's camera opens it. The app sends nothing itself: the link goes out from
+your own apps.
+
+Whoever opens it sees who invited them and to what, before signing in. Signing in with Google
+creates their account if they have none, and **Join list** puts the list in their **My lists**.
+A link inside Instagram or Facebook says to open it in a real browser first, because Google
+refuses to sign anyone in there.
+
+| | |
+|---|---|
+| **Who can use a link** | Anyone who has it. A link is used up by the first person who joins, unless you tick **One link for a group** (up to 20 people) |
+| **How long it works** | 14 days, or until it is used, or until you **Cancel link** |
+| **What you see** | Each link as *Waiting*, *Declined* or *Expired*; people who joined move to **Members**, with the link they came through |
+| **Who can do what** | Everyone practises, tests and plays with it. **Can edit** members change words too. Only you invite, change roles, remove people, stop sharing or delete |
+| **Practice history** | Stays personal. Everyone's scores are their own |
+
+Two people editing at once is last-save-wins, but not silently: if someone saved the list since
+you opened it, Save names them and asks whether to keep their version or yours.
+
+**Nobody loses their words.** Leave a list and you are offered a private copy. Get removed, or
+have the owner **Stop sharing** or delete it, and the next time you open **My lists** the same
+offer is waiting, holding the list as you last saw it. A copy keeps your practice history, and
+your saved tests switch over to it.
 
 ## Adding a word list
 
@@ -289,8 +321,17 @@ by device rather than by browser.
 
 ## How it's built
 
-Vite · React · TypeScript (strict) · Tailwind · Vitest. Two runtime dependencies:
-`react` and `react-dom`.
+Vite · React · TypeScript (strict) · Tailwind · Vitest. Three runtime dependencies:
+`react`, `react-dom`, and [`uqr`](https://github.com/unjs/uqr) (3.9 KB gzipped) for the share
+link's QR code. `uqr` is loaded only with the sharing screens, so the eager bundle does not carry it.
+
+**Every cloud list lives in one `lists` collection**, linked to people by membership rather than
+by where it is stored: each list names its `ownerUid`, its `memberUids`, and a role for each
+member. A private list is simply one whose only member is you, so sharing never moves a list, it
+only adds people. That also means [`firestore.rules`](firestore.rules)' membership check is now
+the only thing keeping a private list private, and its deny tests say so. Lists saved before this
+lived under `users/{uid}/lists`; they move over once, in the background, on the next sign-in,
+keeping their ids so history and saved tests are untouched.
 
 Every colour, type size, radius and shadow in the app is defined once, in
 [`src/index.css`](src/index.css), and nothing outside that file names a raw Tailwind

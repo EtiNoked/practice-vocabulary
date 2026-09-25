@@ -1,5 +1,6 @@
 import type { FirebaseServices } from './firebase'
 import type { DeleteOutcome } from './types'
+import { releaseAllLists } from '../storage/listEndings'
 
 /** Firestore's hard limit on writes in one batch. Not a tuning choice. */
 const BATCH_LIMIT = 500
@@ -34,6 +35,8 @@ async function deleteCollection(
  * compiling clean until it is named here too.
  */
 const OWNED_COLLECTIONS = ['lists', 'sessions', 'games', 'tests'] as const
+// `lists` here is the LEGACY per-user location (016 D-14), kept in case this device's move
+// never finished. Current lists live at the top level and are let go by releaseAllLists.
 
 /**
  * Remove everything the user owns, then the user document itself.
@@ -48,6 +51,10 @@ const OWNED_COLLECTIONS = ['lists', 'sessions', 'games', 'tests'] as const
  * anything still under it, permanently.
  */
 export async function purgeUserData(services: FirebaseServices, uid: string): Promise<void> {
+  // FIRST, while the account still exists: lists are not under users/{uid} any more (016),
+  // so they are not covered by the loop below, and only this uid may let go of them.
+  await releaseAllLists(services, uid)
+
   for (const collection of OWNED_COLLECTIONS) {
     await deleteCollection(services, `users/${uid}/${collection}`)
   }

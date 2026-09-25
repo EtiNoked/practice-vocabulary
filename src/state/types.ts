@@ -19,6 +19,49 @@ export interface WordList {
   updatedAt: number
   /** How the list was created. v2 adds 'photo'. */
   origin: 'manual'
+  /**
+   * Who the list belongs to and who shares it (016). Present on every cloud list, because
+   * a cloud list is associated with people by membership rather than by where it is
+   * stored: a private list is one whose only member is its owner.
+   *
+   * Absent on a guest's local lists, which have no members and never leave the device.
+   * Absent means "mine, private" everywhere it is read.
+   */
+  sharing?: ListSharing
+  /**
+   * The ids this list was copied from, when it is a kept copy of a shared list (016 D-11).
+   *
+   * History is append-only and cannot be re-pointed, so the copy claims it instead: records
+   * filed under any of these ids are read as this list's (`canonicalRecords`).
+   */
+  previousIds?: string[]
+}
+
+/** Stored as `owner` / `editor` / `viewer`; shown as Owner / Can edit / Can practise. */
+export type ListRole = 'owner' | 'editor' | 'viewer'
+
+export interface ListMember {
+  role: ListRole
+  displayName: string | null
+  email: string | null
+  photoURL: string | null
+  joinedAt: number
+  /** The share link that let them in. The join rule reads it. Absent for the owner. */
+  viaLink?: string
+  /** That link's label ("For Dana"), kept so the owner can see who came in through which. */
+  viaLabel?: string | null
+}
+
+export interface ListSharing {
+  ownerUid: string
+  /**
+   * Every member, the owner included. Mirrors the keys of `members` and exists only
+   * because Firestore can query `array-contains` on an array but not on a map's keys.
+   */
+  memberUids: string[]
+  members: Record<string, ListMember>
+  /** Who saved last, for the stale-edit warning (016 D-8). */
+  updatedBy: string
 }
 
 export type MarkResult = 'right' | 'wrong'

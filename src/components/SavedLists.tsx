@@ -1,4 +1,5 @@
-import type { WordList } from '../state/types'
+import { isShared, roleOf } from '../state/listIds'
+import type { ListMember, WordList } from '../state/types'
 
 interface Props {
   lists: WordList[]
@@ -27,6 +28,53 @@ interface Props {
   onEdit: (list: WordList) => void
   onRename: (list: WordList) => void
   onDelete: (list: WordList) => void
+  /**
+   * The signed-in user, to read each list's role from (016). Absent for a guest, whose
+   * lists are all their own.
+   */
+  uid?: string | null
+  /**
+   * Open the sharing dialog: Share for an owner, Members for everyone else. Absent where
+   * sharing does not exist at all (no Firebase project).
+   */
+  onShare?: (list: WordList) => void
+  /** Shown instead of Share to a guest (D-10). */
+  onSignInToShare?: () => void
+}
+
+const ROLE_CHIP: Record<string, string> = { editor: 'Can edit', viewer: 'Can practise' }
+
+/** Up to three faces and "+N", owner first. */
+function Faces({ list }: { list: WordList }) {
+  const members = Object.values(list.sharing?.members ?? {}).sort(
+    (a: ListMember, b: ListMember) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : a.joinedAt - b.joinedAt),
+  )
+  const shown = members.slice(0, 3)
+  const more = members.length - shown.length
+  return (
+    <span className="flex items-center" aria-label={`Shared with ${members.length} people`}>
+      {shown.map((m, i) =>
+        m.photoURL ? (
+          <img
+            key={i}
+            src={m.photoURL}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="-ml-1 h-6 w-6 rounded-full border border-surface first:ml-0"
+          />
+        ) : (
+          <span
+            key={i}
+            aria-hidden="true"
+            className="-ml-1 grid h-6 w-6 place-items-center rounded-full border border-surface bg-primary-soft text-xs font-semibold first:ml-0"
+          >
+            {(m.displayName ?? m.email ?? '?').charAt(0).toUpperCase()}
+          </span>
+        ),
+      )}
+      {more > 0 && <span className="ml-1 text-xs text-ink-muted">+{more}</span>}
+    </span>
+  )
 }
 
 const formatDate = (ms: number) => new Date(ms).toLocaleDateString('en-GB')
@@ -41,6 +89,9 @@ export function SavedLists({
   onEdit,
   onRename,
   onDelete,
+  uid = null,
+  onShare,
+  onSignInToShare,
 }: Props) {
   // "No saved lists yet" shown to a signed-in user whose lists are still
   // arriving reads as data loss. Say nothing definite until we know.
@@ -65,6 +116,11 @@ export function SavedLists({
     <ul className="flex flex-col gap-2">
       {lists.map((list) => {
         const summary = practices?.(list.id) ?? null
+        const shared = isShared(list)
+        const role = roleOf(list, uid)
+        // "Can practise" members do not edit or rename; the rules would refuse it anyway.
+        const canEdit = role === 'owner' || role === 'editor'
+        const owner = role === 'owner'
         return (
         <li
           key={list.id}
@@ -77,6 +133,15 @@ export function SavedLists({
               {formatDate(list.updatedAt)}
             </span>
           </div>
+          {shared && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-medium text-ink">Shared</span>
+              <Faces list={list} />
+              {role && role !== 'owner' && (
+                <span className="text-xs text-ink-muted">{ROLE_CHIP[role]}</span>
+              )}
+            </div>
+          )}
           {/*
             A list with no history says nothing rather than "0 practices" — a line of
             noise on every row of a new account, carrying no information.
@@ -99,27 +164,51 @@ export function SavedLists({
             >
               Practise
             </button>
-            <button
-              type="button"
-              onClick={() => onEdit(list)}
-              className="btn btn-quiet"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onRename(list)}
-              className="btn btn-quiet"
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(list)}
-              className="btn btn-quiet"
-            >
-              Delete
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(list)}
+                className="btn btn-quiet"
+              >
+                Edit
+              </button>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => onRename(list)}
+                className="btn btn-quiet"
+              >
+                Rename
+              </button>
+            )}
+            {onShare && (owner || shared) && (
+              <button type="button" onClick={() => onShare(list)} className="btn btn-quiet">
+                {owner ? 'Share' : 'Members'}
+              </button>
+            )}
+            {!onShare && onSignInToShare && (
+              <button type="button" onClick={onSignInToShare} className="btn btn-quiet">
+                Sign in to share
+              </button>
+            )}
+            {/*
+              A member does not delete a shared list, they leave it — through the Members
+              dialog, which offers to keep a copy on the way out (016 D-11).
+            */}
+            {owner || !onShare ? (
+              <button
+                type="button"
+                onClick={() => onDelete(list)}
+                className="btn btn-quiet"
+              >
+                Delete
+              </button>
+            ) : (
+              <button type="button" onClick={() => onShare(list)} className="btn btn-quiet">
+                Leave…
+              </button>
+            )}
           </div>
         </li>
         )

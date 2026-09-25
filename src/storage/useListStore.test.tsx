@@ -31,6 +31,14 @@ vi.mock('./firestoreListStore', () => ({
     dispose: async () => disposeSpy(uid),
   }),
   stripUndefined: <T,>(v: T) => v,
+  legacyMoved: () => legacyMovedFlag,
+}))
+
+// The one-time move of legacy lists (016 D-14) runs in the background after sign-in.
+let legacyMovedFlag = true
+const moveSpy = vi.fn(async (_uid: string) => ({ moved: 0, tidied: 0, refused: [] as string[] }))
+vi.mock('./moveLegacyLists', () => ({
+  moveLegacyLists: (_s: unknown, uid: string) => moveSpy(uid),
 }))
 
 const user: AuthUser = { uid: 'u1', displayName: 'Eti', email: 'e@x.com', photoURL: null }
@@ -137,6 +145,21 @@ describe('signed in', () => {
       __kind: 'firestore',
       uid: 'u1',
     })
+  })
+
+  it('moves legacy lists once, in the background, only until this device has seen them moved', async () => {
+    legacyMovedFlag = false
+    moveSpy.mockClear()
+    const first = renderHook(() => useListStore(), { wrapper: wrapperFor(signedIn()) })
+    await waitFor(() => expect(first.result.current.store).not.toBeNull())
+    expect(moveSpy).toHaveBeenCalledWith('u1')
+    first.unmount()
+
+    legacyMovedFlag = true
+    moveSpy.mockClear()
+    const second = renderHook(() => useListStore(), { wrapper: wrapperFor(signedIn()) })
+    await waitFor(() => expect(second.result.current.store).not.toBeNull())
+    expect(moveSpy).not.toHaveBeenCalled()
   })
 
   it('falls back to local storage when the Firebase chunk will not load', async () => {

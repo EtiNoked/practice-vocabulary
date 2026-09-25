@@ -29,15 +29,18 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(
              ['displayName', 'email', 'photoURL', 'createdAt', 'lastSeenAt']);
 
+      /*
+       * LEGACY (016). Every cloud list now lives in the top-level `lists` collection below.
+       * This one is only read and emptied, by the one-time move in moveLegacyLists.ts.
+       *
+       * Writes are refused rather than merely unused: a list written here after the move
+       * would be invisible to every build that reads `lists`, which is indistinguishable from
+       * losing it. An old tab still running the previous build gets its permission toast
+       * instead, and a reload fixes it.
+       */
       match /lists/{listId} {
         allow read, delete: if isOwner(uid);
-
-        // The caps are about blast radius, not malice: with no server to stop it,
-        // one client bug could otherwise write an unbounded document.
-        allow create, update: if isOwner(uid)
-          && isNonEmptyString(request.resource.data.name, 200)
-          && request.resource.data.pairs is list
-          && request.resource.data.pairs.size() <= 500;
+        allow create, update: if false;
       }
 
       function pairsWithinCap(data, field) {
@@ -114,6 +117,211 @@ service cloud.firestore {
           && request.resource.data.spec.listIds is list
           && request.resource.data.spec.listIds.size() <= 20;
       }
+    }
+
+    /*
+     * Every cloud list (016). Associated with people by MEMBERSHIP, not by path: a private
+     * list is simply one whose only member is its owner, and sharing adds members rather
+     * than moving the list anywhere.
+     *
+     * That makes `allow read` below the ONLY thing keeping every private list private.
+     * Before 016 privacy came from the path (users/{uid}/...); now it comes from this one
+     * membership check. Its deny tests are the most important in tests/rules/.
+     *
+     * Fields, beside the WordList content:
+     *   ownerUid    who owns it; exactly one
+     *   memberUids  every member including the owner. Mirrors the keys of `members`, and
+     *               exists only because a query can use array-contains but not map keys
+     *   members     uid -> { role: 'owner' | 'editor' | 'viewer', profile, viaLink? }
+     *   updatedBy   who saved last (the stale-edit warning)
+     *   previousIds optional; the ids a kept copy came from, so its history follows it
+     */
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return request.auth.uid;
+    }
+
+    function isMember(list) {
+      return signedIn() && me() in list.memberUids;
+    }
+
+    function canEdit(list) {
+      return isMember(list) && list.members[me()].role in ['owner', 'editor'];
+    }
+
+    function isListOwner(list) {
+      return signedIn() && list.ownerUid == me();
+    }
+
+    function listContentValid(data) {
+      return isNonEmptyString(data.name, 200)
+        && data.pairs is list
+        && data.pairs.size() <= 500;
+    }
+
+    function membershipConsistent(data) {
+      return data.memberUids is list
+        && data.memberUids.size() >= 1
+        && data.memberUids.size() <= 20
+        && data.members is map
+        && data.members.keys().toSet() == data.memberUids.toSet()
+        && data.ownerUid in data.memberUids
+        && data.members[data.ownerUid].role == 'owner';
+    }
+
+    function linkLive(link) {
+      return link.uses < link.maxUses
+        && link.declined == false
+        && request.time < link.createdAt + duration.value(14, 'd');
+    }
+
+    // What a member may change by editing the list. Never ownerUid, memberUids or members:
+    // that is what makes a stale whole-document write from a member fail instead of
+    // silently undoing somebody's join.
+    function isContentEdit() {
+      return canEdit(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['name', 'pairs', 'col1Lang', 'col2Lang', 'langSource', 'updatedAt', 'updatedBy'])
+        && request.resource.data.updatedBy == me()
+        && listContentValid(request.resource.data);
+    }
+
+    /*
+     * Joining through a share link. A join is ONE batch: this list gains exactly the caller,
+     * and the link's `uses` goes up by exactly one. Each side checks the other's post-batch
+     * state with getAfter(), so neither write is valid alone, and two people racing for a
+     * single-use link cannot both get in: the second batch sees it used up.
+     *
+     * The role comes from the link and is checked, so a joiner cannot promote themselves.
+     */
+    function isJoin(listId) {
+      let entry = request.resource.data.members[me()];
+      let before = get(/databases/$(database)/documents/shareLinks/$(entry.viaLink)).data;
+      let after = getAfter(/databases/$(database)/documents/shareLinks/$(entry.viaLink)).data;
+      return signedIn()
+        && !(me() in resource.data.memberUids)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'members'])
+        && request.resource.data.memberUids == resource.data.memberUids.concat([me()])
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([me()])
+        && before.listId == listId
+        && linkLive(before)
+        && after.uses == before.uses + 1
+        && entry.role == before.role
+        && request.resource.data.memberUids.size() <= 20;
+    }
+
+    // A non-owner removes exactly themself, and nothing else.
+    function isLeave() {
+      return isMember(resource.data)
+        && !isListOwner(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'members'])
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([me()])
+        && !(me() in request.resource.data.members)
+        && request.resource.data.memberUids.toSet()
+             == resource.data.memberUids.toSet().difference([me()].toSet())
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1;
+    }
+
+    /*
+     * The owner manages membership: changes roles, removes people, or hands the list to
+     * another member (account deletion, D-13). The owner can never ADD anyone: people only
+     * arrive by joining through a link themselves.
+     */
+    function isOwnerManaging() {
+      return isListOwner(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['memberUids', 'members', 'ownerUid'])
+        && resource.data.memberUids.toSet().hasAll(request.resource.data.memberUids)
+        && membershipConsistent(request.resource.data);
+    }
+
+    match /lists/{listId} {
+      allow read: if isMember(resource.data);
+
+      // Every list starts private: its creator, alone, as owner. Covers new lists, kept
+      // copies, and the one-time move of legacy lists.
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == me()
+        && request.resource.data.memberUids == [me()]
+        && membershipConsistent(request.resource.data)
+        && request.resource.data.updatedBy == me()
+        && listContentValid(request.resource.data)
+        && (!('previousIds' in request.resource.data)
+            || (request.resource.data.previousIds is list
+                && request.resource.data.previousIds.size() <= 20));
+
+      allow update: if isContentEdit()
+        || isJoin(listId)
+        || isLeave()
+        || isOwnerManaging();
+
+      allow delete: if isListOwner(resource.data);
+    }
+
+    /*
+     * Share links (016). The document id IS the secret in the URL: 128 random bits, so it
+     * can be passed on but never found by trying.
+     *
+     * `get` is open to anyone, signed in or not. It holds only a preview (list name, owner
+     * name, word count, languages), and it is what lets someone who has never used the app
+     * see who is inviting them before they sign in. `list` is the creator's alone, so the
+     * collection cannot be browsed.
+     */
+    match /shareLinks/{code} {
+      allow get: if true;
+      allow list: if signedIn() && resource.data.createdByUid == me();
+
+      allow create: if signedIn()
+        && isListOwner(get(/databases/$(database)/documents/lists/$(request.resource.data.listId)).data)
+        && request.resource.data.createdByUid == me()
+        && request.resource.data.uses == 0
+        && request.resource.data.declined == false
+        && request.resource.data.maxUses is int
+        && request.resource.data.maxUses >= 1
+        && request.resource.data.maxUses <= 20
+        && request.resource.data.role in ['editor', 'viewer']
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.label == null || isNonEmptyString(request.resource.data.label, 60));
+
+      allow update: if signedIn()
+        && linkLive(resource.data)
+        && (
+          // Used up by one, only in the same batch as the matching join.
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses'])
+            && request.resource.data.uses == resource.data.uses + 1
+            && getAfter(/databases/$(database)/documents/lists/$(resource.data.listId))
+                 .data.members[me()].viaLink == code)
+          // Anyone holding a one-person link may say no thanks. The owner sees "Declined".
+          || (resource.data.maxUses == 1
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['declined'])
+            && request.resource.data.declined == true)
+        );
+
+      // Cancel.
+      allow delete: if signedIn() && resource.data.createdByUid == me();
+    }
+
+    /*
+     * "Keep a copy?" offers (016, D-11). Written by the owner in the SAME batch that removes a
+     * member, stops sharing or deletes the list, while the member is still in it: get() sees
+     * the list as it was before the batch. Holds a snapshot of the list, because the member
+     * must be able to keep the version they last saw and rules cannot grant access to an old
+     * version of a document.
+     */
+    match /listFarewells/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == me();
+
+      allow create: if signedIn()
+        && id == request.resource.data.listId + '_' + request.resource.data.uid
+        && request.resource.data.uid != me()
+        && isListOwner(get(/databases/$(database)/documents/lists/$(request.resource.data.listId)).data)
+        && request.resource.data.uid
+             in get(/databases/$(database)/documents/lists/$(request.resource.data.listId)).data.memberUids
+        && request.resource.data.list.pairs is list
+        && request.resource.data.list.pairs.size() <= 500;
     }
 
     // No catch-all match at the root. Anything not named above is denied, which

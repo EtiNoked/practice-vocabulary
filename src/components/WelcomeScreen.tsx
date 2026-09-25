@@ -95,9 +95,9 @@ export function WelcomeScreen({ onContinueAsGuest }: Props) {
 
       <p className="text-sm text-ink-muted">
         Signing in saves your lists and scores to your Google account so you can use them on your
-        phone and laptop. We store your name, email and your lists. Without signing in, everything
-        stays on this device and nothing is sent anywhere. You can delete your account and all its
-        data at any time.
+        phone and laptop. We store your name, email and your lists. If you share a list, the people
+        in it see your name, email and picture. Without signing in, everything stays on this device
+        and nothing is sent anywhere. You can delete your account and all its data at any time.
       </p>
     </section>
   )
