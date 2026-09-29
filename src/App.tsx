@@ -17,8 +17,7 @@ import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
 import type { DrillMode, SessionRecord, WordList } from './state/types'
 import { speak } from './speech/tts'
-import { useVoices } from './speech/useVoices'
-import { hasVoiceFor } from './speech/tts'
+import { useVoices, voiceMissingFor } from './speech/useVoices'
 import { writeFailureMessage } from './storage/messages'
 import { drillRepo } from './storage/drillRepo'
 import { useListStore } from './storage/useListStore'
@@ -106,7 +105,8 @@ export default function App() {
    * on the first action, which re-establishes the chain.
    */
   const [resumed, setResumed] = useState(restored.resumed)
-  const { voices, ready } = useVoices()
+  const voiceState = useVoices()
+  const { voices } = voiceState
 
   // localStorage while signed out, Firestore while signed in. Nothing below this
   // line knows or cares which implementation it is holding.
@@ -742,7 +742,7 @@ export default function App() {
       : state.screen === 'ready'
         ? state.list.col2Lang
         : null
-  const voiceMissing = ready && promptLang !== null && !hasVoiceFor(promptLang, voices)
+  const voiceMissing = promptLang !== null && voiceMissingFor(promptLang, voiceState)
 
   /*
    * A share link wins over the welcome screen: it asks the same question (sign in or not)
@@ -998,10 +998,9 @@ export default function App() {
           {...(state.langs !== undefined ? { initialLangs: state.langs } : {})}
           {...(state.langSource !== undefined ? { initialLangSource: state.langSource } : {})}
           onConfirm={(list) => {
-            // Editing an already-saved list persists straight away: the user came
-            // from a stored list, so silently dropping their correction if they
-            // skipped a Save button would be surprising. A brand-new list is not
-            // saved until they ask, via "Save this list" on the next screen.
+            // The editor's button says Save, so it saves: a new list as much as an edited
+            // one. It used to read "Start practice" and a new list waited for "Save this
+            // list" on the next screen, which a user who pressed Save would never look for.
             if (state.mode === 'update') {
               /*
                * Someone else saved this shared list while it was open (016 D-8). Last write
@@ -1027,8 +1026,8 @@ export default function App() {
                   return
                 }
               }
-              void persist(list)
             }
+            void persist(list)
             act({ type: 'CONFIRM_LIST', list })
           }}
           onCancel={() => act({ type: 'CANCEL_EDIT' })}

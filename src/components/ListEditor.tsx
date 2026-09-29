@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 import { LANG_CODES, LANG_NAMES, type LangCode } from '../lang/languages'
 import { detectLanguages, type LanguageDetection } from '../parse/languageDetect'
+import { findDuplicates } from '../parse/duplicates'
 import { countComplete, isComplete, normalizeRows } from '../parse/normalize'
 import { isGuessed, SOURCE_RANK, type LangSource, type RawRow } from '../parse/types'
 import type { WordList, WordPair } from '../state/types'
@@ -36,42 +37,52 @@ const nextId = () => `p${Date.now().toString(36)}${(idCounter++).toString(36)}`
 const Row = memo(function Row({
   row,
   index,
+  duplicate,
   onChange,
   onDelete,
 }: {
   row: RawRow
   index: number
+  /** Why this row repeats an earlier one, if it does. A string so memo can compare it. */
+  duplicate: string | undefined
   onChange: (index: number, patch: Partial<RawRow>) => void
   onDelete: (index: number) => void
 }) {
   const incomplete = !isComplete(row) && (row.col1 !== '' || row.col2 !== '')
   return (
-    <li className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-      <input
-        data-cell="col1"
-        aria-label={`Row ${index + 1} column 1`}
-        value={row.col1}
-        onChange={(e) => onChange(index, { col1: e.target.value })}
-        className="min-h-11 flex-1 rounded border border-line-strong px-2"
-      />
-      <input
-        data-cell="col2"
-        aria-label={`Row ${index + 1} column 2`}
-        value={row.col2}
-        onChange={(e) => onChange(index, { col2: e.target.value })}
-        className="min-h-11 flex-1 rounded border border-line-strong px-2"
-      />
-      <span className="w-24 shrink-0 text-xs text-accent">
-        {incomplete ? 'Incomplete' : ''}
-      </span>
-      <button
-        type="button"
-        aria-label={`Delete row ${index + 1}`}
-        onClick={() => onDelete(index)}
-        className="min-h-11 min-w-11 rounded border border-line-strong"
-      >
-        ✕
-      </button>
+    <li className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+        <input
+          data-cell="col1"
+          aria-label={`Row ${index + 1} column 1`}
+          value={row.col1}
+          onChange={(e) => onChange(index, { col1: e.target.value })}
+          className="min-h-11 flex-1 rounded border border-line-strong px-2"
+        />
+        <input
+          data-cell="col2"
+          aria-label={`Row ${index + 1} column 2`}
+          value={row.col2}
+          onChange={(e) => onChange(index, { col2: e.target.value })}
+          className="min-h-11 flex-1 rounded border border-line-strong px-2"
+        />
+        <span className="w-24 shrink-0 text-xs text-accent">
+          {incomplete ? 'Incomplete' : ''}
+        </span>
+        <button
+          type="button"
+          aria-label={`Delete row ${index + 1}`}
+          onClick={() => onDelete(index)}
+          className="min-h-11 min-w-11 rounded border border-line-strong"
+        >
+          ✕
+        </button>
+      </div>
+      {duplicate && (
+        <p role="status" className="text-xs text-accent">
+          Duplicate: {duplicate}
+        </p>
+      )}
     </li>
   )
 })
@@ -177,6 +188,12 @@ export function ListEditor({
 
   const bodyRows = effective.headerConsumed ? rows.slice(1) : rows
   const completeCount = countComplete(bodyRows)
+
+  // A header row names the languages, so it is not a word that can be repeated.
+  const duplicates = useMemo(
+    () => findDuplicates(rows, { skipFirst: effective.headerConsumed }),
+    [rows, effective.headerConsumed],
+  )
 
   /**
    * Set one column's language, moving the other out of the way if it already
@@ -353,6 +370,7 @@ export function ListEditor({
             key={index}
             row={row}
             index={index}
+            duplicate={duplicates.get(index)}
             onChange={handleChange}
             onDelete={handleDelete}
           />
@@ -379,6 +397,12 @@ export function ListEditor({
         </button>
         <span className="text-sm text-ink-muted">
           {completeCount} complete {completeCount === 1 ? 'pair' : 'pairs'}
+          {duplicates.size > 0 && (
+            <span className="text-accent">
+              {' '}
+              · {duplicates.size} {duplicates.size === 1 ? 'duplicate' : 'duplicates'}
+            </span>
+          )}
         </span>
       </div>
 
@@ -401,7 +425,7 @@ export function ListEditor({
           onClick={handleConfirm}
           className="min-h-11 rounded bg-primary px-4 text-primary-ink disabled:opacity-40"
         >
-          Start practice
+          Save
         </button>
         <button
           type="button"

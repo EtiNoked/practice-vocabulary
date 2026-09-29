@@ -146,7 +146,7 @@ describe('saving over someone else’s newer edit (016 D-8)', () => {
   async function openEditor(user: ReturnType<typeof userEvent.setup>) {
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await screen.findByRole('button', { name: /start practice/i })
+    await screen.findByRole('button', { name: /^save$/i })
   }
 
   /** Dana saves while Eti's editor is open. */
@@ -156,7 +156,7 @@ describe('saving over someone else’s newer edit (016 D-8)', () => {
     })
   }
 
-  const confirmButton = () => screen.getByRole('button', { name: /start practice/i })
+  const confirmButton = () => screen.getByRole('button', { name: /^save$/i })
 
   it('asks first, naming who changed it, and keeps theirs on Cancel', async () => {
     const user = userEvent.setup()
