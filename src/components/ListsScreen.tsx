@@ -1,4 +1,5 @@
-import type { ComponentProps, ReactNode } from 'react'
+import { useState, type ComponentProps, type ReactNode } from 'react'
+import { orderLists, readListOrder, writeListOrder, type ListOrder } from '../state/listOrder'
 import { SavedLists } from './SavedLists'
 
 /**
@@ -25,7 +26,13 @@ type Props = ComponentProps<typeof SavedLists> & {
  * `New list` lives here rather than on home since 012 D-1: a verb belongs beside the
  * collection it adds to, which is where someone looking for it already is.
  */
-export function ListsScreen({ onNewList, banner, ...listProps }: Props) {
+export function ListsScreen({ onNewList, banner, lists, ...listProps }: Props) {
+  const [order, setOrder] = useState<ListOrder>(readListOrder)
+  const choose = (next: ListOrder) => {
+    setOrder(next)
+    writeListOrder(next)
+  }
+
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">
       <h1 className="text-2xl font-semibold">My lists</h1>
@@ -36,7 +43,29 @@ export function ListsScreen({ onNewList, banner, ...listProps }: Props) {
         New list
       </button>
 
-      <SavedLists {...listProps} />
+      {lists.length > 1 && (
+        <div role="group" aria-label="Order lists by" className="flex items-center gap-2 text-sm">
+          <span className="text-ink-muted">Order:</span>
+          {(
+            [
+              ['recent', 'Recent'],
+              ['az', 'A to Z'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={order === value}
+              onClick={() => choose(value)}
+              className={order === value ? 'btn btn-primary' : 'btn btn-quiet'}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <SavedLists lists={orderLists(lists, order)} {...listProps} />
     </section>
   )
 }

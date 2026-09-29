@@ -465,3 +465,43 @@ describe('duplicate words', () => {
     expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
   })
 })
+
+describe('sorting the words A to Z', () => {
+  const words = () => cells().filter((c) => c.dataset.cell === 'col1').map((c) => (c as HTMLInputElement).value)
+
+  it('sorts by the first language on request, and only then', async () => {
+    const { user } = setup({
+      initialRows: [
+        { col1: 'pear', col2: 'peer' },
+        { col1: 'Apple', col2: 'appel' },
+        { col1: 'banana', col2: 'banaan' },
+      ],
+    })
+    expect(words()).toEqual(['pear', 'Apple', 'banana'])
+    await user.selectOptions(screen.getByLabelText('Sort the words A to Z'), 'col1')
+    expect(words()).toEqual(['Apple', 'banana', 'pear'])
+  })
+
+  it('can sort by the second language instead, keeping each pair together', async () => {
+    const { user } = setup({
+      initialRows: [
+        { col1: 'sun', col2: 'zon' },
+        { col1: 'apple', col2: 'appel' },
+      ],
+    })
+    await user.selectOptions(screen.getByLabelText('Sort the words A to Z'), 'col2')
+    expect(words()).toEqual(['apple', 'sun'])
+  })
+
+  it('saves the sorted order', async () => {
+    const { user, onConfirm } = setup({
+      initialRows: [
+        { col1: 'b', col2: 'x' },
+        { col1: 'a', col2: 'y' },
+      ],
+    })
+    await user.selectOptions(screen.getByLabelText('Sort the words A to Z'), 'col1')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onConfirm.mock.calls[0]![0].pairs.map((p: { col1: string }) => p.col1)).toEqual(['a', 'b'])
+  })
+})
