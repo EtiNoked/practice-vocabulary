@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from 'react'
 import { LANG_CODES, LANG_NAMES, type LangCode } from '../lang/languages'
 import { detectLanguages, type LanguageDetection } from '../parse/languageDetect'
 import { findDuplicates } from '../parse/duplicates'
+import { sortRows } from '../parse/sortRows'
 import { countComplete, isComplete, normalizeRows } from '../parse/normalize'
 import { isGuessed, SOURCE_RANK, type LangSource, type RawRow } from '../parse/types'
 import type { WordList, WordPair } from '../state/types'
@@ -254,6 +255,19 @@ export function ListEditor({
     })
   }, [])
 
+  /**
+   * A to Z by one column, only when asked: a list kept in a textbook's order is kept that way
+   * until the user chooses otherwise. The header row (if the first row names the languages)
+   * stays on top.
+   */
+  const handleSort = useCallback(
+    (column: 'col1' | 'col2') => {
+      setDirty(true)
+      setRows((current) => sortRows(current, column, { keepFirst: effective.headerConsumed }))
+    },
+    [effective.headerConsumed],
+  )
+
   const handleAddPasted = useCallback((added: RawRow[]) => {
     setDirty(true)
     setRows((current) => {
@@ -395,6 +409,27 @@ export function ListEditor({
         >
           Paste or import a list
         </button>
+        {/*
+          A menu that acts and resets, rather than a sort setting: sorting rewrites the order
+          once, and the rows then stay where they are until the user moves them again.
+        */}
+        <label className="sr-only" htmlFor="sort-rows">
+          Sort the words A to Z
+        </label>
+        <select
+          id="sort-rows"
+          value=""
+          onChange={(e) => {
+            if (e.target.value === 'col1' || e.target.value === 'col2') handleSort(e.target.value)
+          }}
+          className="min-h-11 rounded border border-line-strong px-2"
+        >
+          <option value="" disabled>
+            Sort A to Z…
+          </option>
+          <option value="col1">A to Z by {LANG_NAMES[effective.col1Lang]}</option>
+          <option value="col2">A to Z by {LANG_NAMES[effective.col2Lang]}</option>
+        </select>
         <span className="text-sm text-ink-muted">
           {completeCount} complete {completeCount === 1 ? 'pair' : 'pairs'}
           {duplicates.size > 0 && (

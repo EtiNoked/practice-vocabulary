@@ -68,3 +68,36 @@ describe('ListsScreen', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })
+
+describe('ordering the lists', () => {
+  const named = (id: string, name: string, updatedAt: number): WordList => ({ ...list, id, name, updatedAt })
+  // The store delivers newest-changed first; that is the Recent order.
+  const lists = [named('z', 'Zoo animals', 3), named('a', 'animals at home', 2), named('m', 'Market', 1)]
+  const names = () => screen.getAllByRole('listitem').map((li) => li.querySelector('.font-semibold')!.textContent)
+
+  it('shows the lists as they come (most recently changed first) until A to Z is chosen', async () => {
+    const { user } = setup({ lists })
+    expect(names()).toEqual(['Zoo animals', 'animals at home', 'Market'])
+    expect(screen.getByRole('button', { name: 'Recent' })).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(screen.getByRole('button', { name: 'A to Z' }))
+    expect(names()).toEqual(['animals at home', 'Market', 'Zoo animals'])
+
+    await user.click(screen.getByRole('button', { name: 'Recent' }))
+    expect(names()).toEqual(['Zoo animals', 'animals at home', 'Market'])
+  })
+
+  it('remembers A to Z on this device', async () => {
+    const first = setup({ lists })
+    await first.user.click(screen.getByRole('button', { name: 'A to Z' }))
+    document.body.innerHTML = ''
+    setup({ lists })
+    expect(screen.getByRole('button', { name: 'A to Z' })).toHaveAttribute('aria-pressed', 'true')
+    expect(names()[0]).toBe('animals at home')
+  })
+
+  it('offers no ordering for a single list', () => {
+    setup()
+    expect(screen.queryByRole('group', { name: /order lists/i })).not.toBeInTheDocument()
+  })
+})
