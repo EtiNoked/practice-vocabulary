@@ -27,7 +27,10 @@ export function VoiceWarning({ lang }: Props) {
         instead so you can still practice.
       </p>
       <p className="mt-1">
-        To add one: <em>iPhone/iPad</em> — Settings → Accessibility → Spoken Content → Voices.{' '}
+        To add one: <em>Android</em> — Settings → System → Languages &amp; input → Text-to-speech
+        output → the gear beside the engine → Install voice data (Samsung: Settings → General
+        management → Text-to-speech), then close and reopen the browser.{' '}
+        <em>iPhone/iPad</em> — Settings → Accessibility → Spoken Content → Voices.{' '}
         <em>Mac</em> — System Settings → Accessibility → Spoken Content → System Voice → Manage.{' '}
         <em>Windows</em> — Settings → Time &amp; Language → Language → Add a language.
       </p>

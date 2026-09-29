@@ -67,11 +67,11 @@ describe('typing pairs', () => {
 describe('guards', () => {
   it('disables start until there is at least one complete pair', async () => {
     const { user } = setup()
-    const start = screen.getByRole('button', { name: /start practice/i })
+    const start = screen.getByRole('button', { name: /^save$/i })
     expect(start).toBeDisabled()
     await user.type(cells()[0]!, 'daughter')
     await user.type(cells()[1]!, 'dochter')
-    expect(screen.getByRole('button', { name: /start practice/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
   })
 
   it('flags a row with only one side filled', () => {
@@ -107,7 +107,7 @@ describe('language detection badge', () => {
         { col1: 'daughter', col2: 'dochter' },
       ],
     })
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(screen.queryByText(/guessed/i)).not.toBeInTheDocument()
   })
 
@@ -130,7 +130,7 @@ describe('confirming', () => {
         { col1: 'son', col2: '' },
       ],
     })
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.pairs).toHaveLength(1)
     expect(list.pairs[0]).toMatchObject({ col1: 'daughter', col2: 'dochter' })
@@ -144,7 +144,7 @@ describe('confirming', () => {
         { col1: 'aaa', col2: 'bbb' },
       ],
     })
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.langSource).toBe('header')
     expect(list.col1Lang).toBe('en')
@@ -205,7 +205,7 @@ describe('language selectors', () => {
   it('writes the chosen languages and a manual source on save', async () => {
     const { user, onConfirm } = setup({ initialRows: NL_FR })
     await user.selectOptions(col1Select(), 'fr')
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.langSource).toBe('manual')
     expect(list.col1Lang).toBe('fr')
@@ -245,7 +245,7 @@ describe('language selectors', () => {
       ],
     })
     await user.selectOptions(col2Select(), 'fr')
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     // headerConsumed is a question about the ROWS, so overriding the languages
     // must not re-admit the header as a practisable pair.
@@ -266,7 +266,7 @@ describe('swapping columns', () => {
     })
     await user.click(swap())
     expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.pairs[0]).toMatchObject({ col1: 'dochter', col2: 'daughter' })
     expect(list.col1Lang).toBe('nl')
@@ -279,7 +279,7 @@ describe('swapping columns', () => {
     })
     await user.click(swap())
     await user.click(swap())
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.pairs[0]).toMatchObject({ col1: 'daughter', col2: 'dochter' })
     expect(list.col1Lang).toBe('en')
@@ -335,7 +335,7 @@ describe('reopening a saved list', () => {
 
   it('does not save the fallback guess over them', async () => {
     const { user, onConfirm } = reopen()
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.col1Lang).toBe('nl')
     expect(list.col2Lang).toBe('en')
@@ -345,7 +345,7 @@ describe('reopening a saved list', () => {
   it('swaps a reopened list into languages that match its words', async () => {
     const { user, onConfirm } = reopen()
     await user.click(screen.getByRole('button', { name: /swap columns/i }))
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     // Dutch moved to column 2 — the column that is spoken aloud — so the
     // languages have to move with it.
@@ -363,7 +363,7 @@ describe('reopening a saved list', () => {
       initialRows: [{ col1: 'Nederlands', col2: 'Engels' }, ...UNCALLABLE_NL_EN],
     })
     expect(col1Select().value).toBe('nl')
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.col1Lang).toBe('nl')
     expect(list.col2Lang).toBe('en')
@@ -375,7 +375,7 @@ describe('reopening a saved list', () => {
   it('still lets the selectors override the stored languages', async () => {
     const { user, onConfirm } = reopen()
     await user.selectOptions(col1Select(), 'fr')
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.col1Lang).toBe('fr')
     expect(list.langSource).toBe('manual')
@@ -417,5 +417,51 @@ describe('paste panel integration', () => {
     expect(screen.getByDisplayValue('daughter')).toBeInTheDocument()
     expect(screen.getByDisplayValue('zoon')).toBeInTheDocument()
     expect(screen.getByDisplayValue('oom')).toBeInTheDocument()
+  })
+})
+
+describe('the Save button', () => {
+  it('says Save, for a new list and for an edited one', () => {
+    setup()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /start practice/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('duplicate words', () => {
+  it('warns when a new word repeats an earlier one in a different case', async () => {
+    const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: '', col2: '' }] })
+    await user.type(cells()[2]!, 'Bad')
+    expect(screen.getByText('Duplicate: “Bad” is already in row 1.')).toBeInTheDocument()
+    expect(screen.getByText(/1 duplicate$/)).toBeInTheDocument()
+  })
+
+  it('clears the warning once the word is changed', async () => {
+    const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: 'BAD', col2: 'kwaad' }] })
+    expect(screen.getByText(/Duplicate:/)).toBeInTheDocument()
+    await user.clear(cells()[2]!)
+    await user.type(cells()[2]!, 'evil')
+    expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
+  })
+
+  it('warns but still lets the list be saved, duplicates included', async () => {
+    const { user, onConfirm } = setup({
+      initialRows: [
+        { col1: 'bad', col2: 'slecht' },
+        { col1: 'Bad', col2: 'kwaad' },
+      ],
+    })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onConfirm.mock.calls[0]![0].pairs).toHaveLength(2)
+  })
+
+  it('does not count a header row naming the languages', () => {
+    setup({
+      initialRows: [
+        { col1: 'English', col2: 'Dutch' },
+        { col1: 'english', col2: 'Engels' },
+      ],
+    })
+    expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
   })
 })

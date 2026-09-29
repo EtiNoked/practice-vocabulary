@@ -16,6 +16,27 @@ import { BCP47, type LangCode } from '../lang/languages'
 
 let cachedVoices: SpeechSynthesisVoice[] = []
 
+/**
+ * Whether a language could actually be spoken, as learned from SPEAKING rather than from the
+ * voice list.
+ *
+ * The voice list is only a hint, and on Android it is an unreliable one: Chrome there lists
+ * only the voices already downloaded, sometimes lists none at all, and can still speak a
+ * language through the system engine. So the list alone cannot say a language is missing.
+ * What can is the utterance itself: a language the device truly cannot speak ends in an
+ * error such as `language-unavailable`, and one it can speak fires `start`.
+ */
+type SpeechOutcome = { lang: LangCode; spoken: boolean }
+const outcomeListeners = new Set<(outcome: SpeechOutcome) => void>()
+
+export function onSpeechOutcome(listener: (outcome: SpeechOutcome) => void): () => void {
+  outcomeListeners.add(listener)
+  return () => outcomeListeners.delete(listener)
+}
+
+/** The errors that mean "this device cannot say this", as opposed to "you interrupted it". */
+const UNAVAILABLE = new Set(['language-unavailable', 'voice-unavailable', 'synthesis-unavailable'])
+
 function synth(): SpeechSynthesis | null {
   return typeof globalThis.speechSynthesis === 'undefined' ? null : globalThis.speechSynthesis
 }
@@ -50,6 +71,25 @@ export function loadVoices(timeoutMs = 3000): Promise<SpeechSynthesisVoice[]> {
     const timer = setTimeout(() => finish(speech.getVoices()), timeoutMs)
     speech.addEventListener('voiceschanged', onChange)
   })
+}
+
+/**
+ * Keep the voice list current after the first load.
+ *
+ * `loadVoices` stops waiting after a few seconds, but a slow speech engine (Android's often
+ * is, on a cold start) can deliver its voices later than that. Without this, a language that
+ * arrived late stayed "missing" for the rest of the visit.
+ */
+export function watchVoices(onChange: (voices: SpeechSynthesisVoice[]) => void): () => void {
+  const speech = synth()
+  if (!speech) return () => {}
+  const handler = () => {
+    const voices = speech.getVoices()
+    if (voices.length > 0) cachedVoices = voices
+    onChange(voices)
+  }
+  speech.addEventListener('voiceschanged', handler)
+  return () => speech.removeEventListener('voiceschanged', handler)
 }
 
 /**
@@ -116,5 +156,12 @@ export function speak(
   if (voice) utterance.voice = voice
   // Slightly slower than default: the listener is transcribing, not skimming.
   utterance.rate = 0.9
+  utterance.onstart = () => outcomeListeners.forEach((fn) => fn({ lang, spoken: true }))
+  utterance.onerror = (event) => {
+    // `interrupted` and `canceled` are this module's own cancel() before the next word, and
+    // `not-allowed` is iOS refusing speech outside a tap. None of them says the language
+    // is missing.
+    if (UNAVAILABLE.has(event.error)) outcomeListeners.forEach((fn) => fn({ lang, spoken: false }))
+  }
   speech.speak(utterance)
 }

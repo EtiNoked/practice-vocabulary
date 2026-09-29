@@ -81,13 +81,23 @@ class StubUtterance {
   rate = 1
   pitch = 1
   volume = 1
+  onstart: (() => void) | null = null
+  onerror: ((event: { error: string }) => void) | null = null
   constructor(text: string) {
     this.text = text
   }
 }
 
+/**
+ * The utterances handed to speak(), newest last, so a test can play the part of the device:
+ * `lastUtterance()?.onerror?.({ error: 'language-unavailable' })`.
+ */
+const spokenUtterances: StubUtterance[] = []
+export const lastUtterance = (): StubUtterance | undefined => spokenUtterances[spokenUtterances.length - 1]
+
 beforeEach(() => {
   speechCalls.length = 0
+  spokenUtterances.length = 0
   voicesChangedListeners = []
   setStubVoices([
     { name: 'Google Nederlands', lang: 'nl-NL' },
@@ -98,6 +108,7 @@ beforeEach(() => {
   vi.stubGlobal('SpeechSynthesisUtterance', StubUtterance)
   vi.stubGlobal('speechSynthesis', {
     speak: (u: StubUtterance) => {
+      spokenUtterances.push(u)
       speechCalls.push({
         type: 'speak',
         text: u.text,

@@ -50,7 +50,7 @@ describe('typing a list and practicing it', () => {
     await user.type(cells()[0]!, 'daughter')
     await user.type(cells()[1]!, 'dochter')
 
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(screen.getByText(/you'll hear/i)).toBeInTheDocument()
 
     // The mode tap is what establishes the iOS gesture chain for the session.
@@ -111,7 +111,7 @@ describe('editing a saved list', () => {
     const daughter = screen.getByDisplayValue('daughter')
     await user.clear(daughter)
     await user.type(daughter, 'granddaughter')
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     // Confirming an edit persists immediately — no separate Save step.
     const stored = listRepo.getAll()
@@ -134,7 +134,7 @@ describe('pasting a list', () => {
     await user.click(screen.getByRole('button', { name: /add to list/i }))
 
     expect(screen.getByText(/3 complete pairs/i)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /start practice/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(within(screen.getByRole('main')).getByText(/3 words/i)).toBeInTheDocument()
   })
 })
@@ -901,7 +901,7 @@ async function drillAsSignedIn(user: ReturnType<typeof userEvent.setup>) {
   const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
   await user.type(cells()[0]!, 'daughter')
   await user.type(cells()[1]!, 'dochter')
-  await user.click(screen.getByRole('button', { name: /start practice/i }))
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
   await user.click(screen.getByRole('button', { name: /^test$/i }))
 }
 
@@ -957,7 +957,7 @@ describe('signing out', () => {
 
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: /new list/i }))
-    expect(screen.getByRole('button', { name: /start practice/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /eti/i }))
     await user.click(screen.getByRole('menuitem', { name: /sign out/i }))
@@ -965,7 +965,7 @@ describe('signing out', () => {
 
     // Back at home, not still in the editor of the account that just left.
     expect(screen.getByRole('button', { name: /my lists/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /start practice/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
   })
 
   it('abandons a running drill without recording it', async () => {
@@ -1497,5 +1497,22 @@ describe('the home screen tiles that start a drill', () => {
     const tile = screen.getByRole('button', { name: /^fix your misses/i })
     expect(tile).toBeDisabled()
     expect(tile).toHaveTextContent(/nothing to fix/i)
+  })
+})
+
+describe('saving a new list from the editor', () => {
+  it('stores it when Save is pressed, with no second save step', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: /new list/i }))
+    const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
+    await user.type(cells()[0]!, 'daughter')
+    await user.type(cells()[1]!, 'dochter')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(listRepo.getAll().map((l) => l.pairs.map((p) => p.col2))).toEqual([['dochter']])
+    await goTo(user, 'My lists')
+    expect(screen.getByText(/^1 word ·/)).toBeInTheDocument()
   })
 })
