@@ -6,7 +6,7 @@ import {
   WINDOW_PHRASES,
   type ReviewWindow,
 } from '../state/missedWords'
-import type { DrillMode, WordList } from '../state/types'
+import type { DrillMode, DrillOptions, WordList } from '../state/types'
 
 interface Props {
   list: WordList
@@ -17,6 +17,9 @@ interface Props {
   counts: Record<ReviewWindow, number>
   /** Some history in range predates right-answer recording. */
   degraded: boolean
+  /** Order and Show-the-word, as this list last used them on this device. */
+  options: DrillOptions
+  onOptionsChange: (options: DrillOptions) => void
   onStart: (mode: DrillMode) => void
   onPickWindow: (window: ReviewWindow) => void
   onPractiseFull: () => void
@@ -38,6 +41,8 @@ export function ReadyScreen({
   missed,
   counts,
   degraded,
+  options,
+  onOptionsChange,
   onStart,
   onPickWindow,
   onPractiseFull,
@@ -61,6 +66,94 @@ export function ReadyScreen({
           <strong>{LANG_NAMES[list.col1Lang]}</strong>.
         </p>
       )}
+
+      {/*
+        The run's setup, ABOVE the two start buttons, so it is chosen before starting rather
+        than discovered afterwards: which words, in what order, and whether a test shows the
+        word as well as saying it.
+      */}
+      <section aria-labelledby="words-heading" className="flex flex-col gap-2">
+        <h2 id="words-heading" className="font-semibold">
+          Words
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            aria-pressed={!missed}
+            onClick={missed ? onPractiseFull : undefined}
+            className={!missed ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
+          >
+            All words · {list.pairs.length}
+          </button>
+        </div>
+        {anyMissed && (
+          <>
+            <p className="text-sm text-ink-muted">Or only the words you missed:</p>
+            <div className="flex flex-wrap gap-2">
+              {REVIEW_WINDOWS.map((w) => {
+                const chosen = missed?.source.kind === 'window' && missed.source.window === w
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    // Disabled rather than hidden: a zero tells the user their
+                    // recent misses are cleared, which a missing chip would not.
+                    disabled={counts[w] === 0}
+                    aria-pressed={chosen}
+                    onClick={() => onPickWindow(w)}
+                    className={chosen ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
+                  >
+                    {WINDOW_LABELS[w]} · {counts[w]}
+                  </button>
+                )
+              })}
+            </div>
+            {degraded && (
+              <p className="text-sm text-ink-muted">
+                Some of these drills were recorded before right answers were saved, so a word you
+                have since got right may still appear.
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="order-heading" className="flex flex-col gap-2">
+        <h2 id="order-heading" className="font-semibold">
+          Order
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ['random', 'Random'],
+              ['list', 'List order'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={options.ordering === value}
+              onClick={() => onOptionsChange({ ...options, ordering: value })}
+              className={options.ordering === value ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={options.showWord}
+          onChange={(e) => onOptionsChange({ ...options, showWord: e.target.checked })}
+          className="h-5 w-5"
+        />
+        <span>
+          In Test, show the {LANG_NAMES[list.col2Lang]} word as well as saying it
+        </span>
+      </label>
+      <p className="-mt-3 text-sm text-ink-muted">This list remembers your choices on this device.</p>
 
       {/*
         EITHER button starts its mode's first utterance. On iOS that matters:
@@ -107,40 +200,6 @@ export function ReadyScreen({
           </p>
         </div>
       </div>
-
-      {missed ? (
-        <button type="button" onClick={onPractiseFull} className="btn btn-quiet">
-          Practice the full list instead
-        </button>
-      ) : (
-        anyMissed && (
-          <div className="flex flex-col gap-2">
-            <h2 className="font-semibold">Practice words you missed</h2>
-            <div className="flex flex-wrap gap-2">
-              {REVIEW_WINDOWS.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  // Disabled rather than hidden: a zero tells the user their
-                  // recent misses are cleared, which a missing chip would not.
-                  disabled={counts[w] === 0}
-                  aria-pressed={false}
-                  onClick={() => onPickWindow(w)}
-                  className="btn btn-quiet text-sm"
-                >
-                  {WINDOW_LABELS[w]} · {counts[w]}
-                </button>
-              ))}
-            </div>
-            {degraded && (
-              <p className="text-sm text-ink-muted">
-                Some of these drills were recorded before right answers were saved, so a word you
-                have since got right may still appear.
-              </p>
-            )}
-          </div>
-        )
-      )}
 
       <div className="flex gap-2">
         {/*

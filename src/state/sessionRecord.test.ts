@@ -8,7 +8,7 @@ import type { MarkResult, Session, WordList } from './types'
 /**
  * A session in LIST ORDER, so a test can name the card it is marking.
  *
- * Built in 'practice' mode purely for its ordering — record shaping does not read the
+ * Built with `ordering: 'list'` purely for its ordering — record shaping does not read the
  * mode, and `mark()` is happy to mark any session. A constant rng does NOT give list
  * order: Fisher-Yates with `rng() === 0` swaps every element to the front.
  */
@@ -163,6 +163,7 @@ describe('buildRunRecords — one record per contributing list (011 D-3)', () =>
       noShuffle,
       '',
       'practice',
+      { ordering: 'list' },
     )
     for (const m of marks) s = mark(s, m)
     return s

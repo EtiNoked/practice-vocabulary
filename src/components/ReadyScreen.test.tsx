@@ -27,6 +27,7 @@ const setup = (saved = false, over: Partial<Parameters<typeof ReadyScreen>[0]> =
   const onBack = vi.fn()
   const onPickWindow = vi.fn()
   const onPractiseFull = vi.fn()
+  const onOptionsChange = vi.fn()
   render(
     <ReadyScreen
       list={list}
@@ -34,6 +35,8 @@ const setup = (saved = false, over: Partial<Parameters<typeof ReadyScreen>[0]> =
       missed={null}
       counts={NO_MISSES}
       degraded={false}
+      options={{ ordering: 'random', showWord: false }}
+      onOptionsChange={onOptionsChange}
       onStart={onStart}
       onPickWindow={onPickWindow}
       onPractiseFull={onPractiseFull}
@@ -48,6 +51,7 @@ const setup = (saved = false, over: Partial<Parameters<typeof ReadyScreen>[0]> =
     onBack,
     onPickWindow,
     onPractiseFull,
+    onOptionsChange,
     user: userEvent.setup(),
   }
 }
@@ -185,9 +189,9 @@ describe('once a subset is selected', () => {
     expect(screen.queryByRole('button', { name: /save this list/i })).not.toBeInTheDocument()
   })
 
-  it('offers a way back to the whole list', async () => {
+  it('offers a way back to the whole list, from the same Words choice', async () => {
     const { user, onPractiseFull } = setup(false, { missed })
-    await user.click(screen.getByRole('button', { name: /full list instead/i }))
+    await user.click(screen.getByRole('button', { name: /^all words · 2$/i }))
     expect(onPractiseFull).toHaveBeenCalled()
   })
 
@@ -199,8 +203,39 @@ describe('once a subset is selected', () => {
     expect(onStart).toHaveBeenCalledWith('practice')
   })
 
-  it('does not offer the window chips again', () => {
+  it('keeps the other windows on offer, with the chosen one marked', () => {
     setup(false, { missed, counts: { day: 0, week: 3, month: 7, all: 9 } })
-    expect(screen.queryByRole('button', { name: /this month/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /this week · 3/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /this month · 7/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /^all words/i })).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+describe('setting up the run, before starting it', () => {
+  it('chooses all words by default, and marks it', () => {
+    setup()
+    expect(screen.getByRole('button', { name: /^all words · 2$/i })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('puts the setup above the start buttons', () => {
+    setup(false, { counts: { day: 1, week: 1, month: 1, all: 1 } })
+    const order = screen.getAllByRole('button').map((b) => b.textContent)
+    expect(order.indexOf('All words · 2')).toBeLessThan(order.indexOf('Practice'))
+    expect(order.indexOf('Random')).toBeLessThan(order.indexOf('Test'))
+  })
+
+  it('shows the current order and changes it', async () => {
+    const { user, onOptionsChange } = setup()
+    expect(screen.getByRole('button', { name: 'Random' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'List order' }))
+    expect(onOptionsChange).toHaveBeenCalledWith({ ordering: 'list', showWord: false })
+  })
+
+  it('offers to show the word in a test, naming the language', async () => {
+    const { user, onOptionsChange } = setup(false, { options: { ordering: 'list', showWord: false } })
+    const box = screen.getByRole('checkbox', { name: /in test, show the dutch word/i })
+    expect(box).not.toBeChecked()
+    await user.click(box)
+    expect(onOptionsChange).toHaveBeenCalledWith({ ordering: 'list', showWord: true })
   })
 })

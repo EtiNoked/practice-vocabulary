@@ -5,6 +5,7 @@ import {
   isFinished,
   mark as markSession,
   nextCard,
+  optionsOf,
   otherMode,
   prevCard,
   randomRng,
@@ -24,7 +25,7 @@ import {
 } from './drillRun'
 import type { SavedTest } from './testPlan'
 import type { ReviewWindow } from './missedWords'
-import type { DrillMode, MarkResult, Session, WordList, WordPair } from './types'
+import type { DrillMode, DrillOptions, MarkResult, Session, WordList, WordPair } from './types'
 import { advance as advanceGame, answer as answerGame, isFinished as gameFinished, replay as replayGame, timeOut as timeOutGame } from '../game/game'
 import type { Game, GameSettings } from '../game/types'
 
@@ -160,7 +161,7 @@ export type AppAction =
   | { type: 'CANCEL_EDIT' }
   | { type: 'CONFIRM_LIST'; list: WordList }
   /** Omitting `mode` means test — 001's behaviour, and what every pre-modes caller meant. */
-  | { type: 'START'; mode?: DrillMode }
+  | { type: 'START'; mode?: DrillMode; options?: Partial<DrillOptions> }
   | { type: 'REVEAL' }
   /** Practice-mode's answer cover. A no-op in test mode, which has REVEAL. */
   | { type: 'TOGGLE_ANSWER' }
@@ -310,7 +311,7 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       return {
         screen: 'practising',
         run,
-        session: createSession(runPairs(run), rng, runListId(run), action.mode ?? 'test'),
+        session: createSession(runPairs(run), rng, runListId(run), action.mode ?? 'test', action.options),
       }
     }
 
@@ -401,6 +402,7 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
           rng,
           runListId(state.run),
           otherMode(state.session.mode),
+          optionsOf(state.session),
         ),
       }
 
@@ -466,7 +468,7 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       return {
         screen: 'practising',
         run,
-        session: createSession(runPairs(run), rng, runListId(run), state.session.mode),
+        session: createSession(runPairs(run), rng, runListId(run), state.session.mode, optionsOf(state.session)),
       }
     }
 

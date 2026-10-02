@@ -1,4 +1,4 @@
-import type { DrillMode, MarkResult, Score, Session, WordPair } from './types'
+import { DEFAULT_DRILL_OPTIONS, type DrillMode, type DrillOptions, type MarkResult, type Score, type Session, type WordPair } from './types'
 
 /** A random source in [0, 1). Injected so tests are deterministic. */
 export type Rng = () => number
@@ -55,10 +55,10 @@ export function shuffle<T>(items: readonly T[], rng: Rng): T[] {
  * The pairs are copied rather than referenced: a session must survive its source
  * list being edited or deleted while the drill is running.
  *
- * `mode` decides the ordering, and nothing else here: test shuffles, practice
- * keeps the order the list was written in (spec A3). `rng` stays in the
- * signature for both — it is simply unused for practice — so that callers can
- * stay mode-agnostic rather than each having to know which arguments apply.
+ * `options.ordering` decides the order: `random` shuffles, `list` keeps the order the
+ * list was written (or sorted) in. Random is the default for BOTH modes since the start
+ * screen gained its Order choice; practice used to be list order always (spec A3), which is
+ * still one tap away and is remembered per list.
  *
  * Defaults to 'test' because that is 001's behaviour, which every call site
  * predating modes was written to expect.
@@ -68,13 +68,17 @@ export function createSession(
   rng: Rng,
   listId = '',
   mode: DrillMode = 'test',
+  options: Partial<DrillOptions> = {},
 ): Session {
+  const { ordering, showWord } = { ...DEFAULT_DRILL_OPTIONS, ...options }
   const ids = pairs.map((p) => p.id)
   return {
     mode,
     listId,
     pairs: pairs.map((p) => ({ ...p })),
-    order: mode === 'test' ? shuffle(ids, rng) : ids,
+    order: ordering === 'random' ? shuffle(ids, rng) : ids,
+    ordering,
+    showWord,
     index: 0,
     revealed: false,
     // The ONLY place this is initialised, which is what makes "every new run
@@ -182,12 +186,17 @@ export function score(session: Session): Score {
  * name and the action that drives it.
  */
 export function restartShuffled(session: Session, rng: Rng): Session {
-  return createSession(session.pairs, rng, session.listId, session.mode)
+  return createSession(session.pairs, rng, session.listId, session.mode, optionsOf(session))
 }
 
 /** A fresh drill over only the pairs missed in `session`. */
 export function restartWrongOnly(session: Session, rng: Rng): Session {
-  return createSession(score(session).wrongPairs, rng, session.listId, session.mode)
+  return createSession(score(session).wrongPairs, rng, session.listId, session.mode, optionsOf(session))
+}
+
+/** The start-screen choices a session was dealt with, so a re-run deals the same way. */
+export function optionsOf(session: Session): DrillOptions {
+  return { ordering: session.ordering, showWord: session.showWord }
 }
 
 /**

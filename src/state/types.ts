@@ -81,6 +81,17 @@ export type MarkResult = 'right' | 'wrong'
  */
 export type DrillMode = 'practice' | 'test'
 
+/** The order a drill deals its words in. Chosen on the start screen, remembered per list. */
+export type DrillOrdering = 'random' | 'list'
+
+/** The start screen's choices that are not the mode itself. */
+export interface DrillOptions {
+  ordering: DrillOrdering
+  showWord: boolean
+}
+
+export const DEFAULT_DRILL_OPTIONS: DrillOptions = { ordering: 'random', showWord: false }
+
 export interface Session {
   mode: DrillMode
   listId: string
@@ -103,6 +114,17 @@ export interface Session {
    * empty in practice.
    */
   answersOpen: boolean
+  /**
+   * How the words were dealt, kept so Shuffle & restart, wrong-only and switching mode deal
+   * the same way again. `random` is the default for both modes; `list` keeps the order the
+   * list was written (or sorted) in.
+   */
+  ordering: DrillOrdering
+  /**
+   * Test mode only: show the spoken word as text as well as saying it. Practice always
+   * shows it. Off by default, which is 001's listen-and-answer test.
+   */
+  showWord: boolean
   /**
    * Both stay at their initial values in practice mode rather than being split
    * off into a union member. `score()` on a practice session therefore reports

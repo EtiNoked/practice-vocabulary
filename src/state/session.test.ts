@@ -81,9 +81,24 @@ describe('drill modes', () => {
   })
 
   // Spec A3: studying benefits from the order you wrote the list in.
-  it('practice preserves list order even when handed a shuffling rng', () => {
+  // Random is the default for both modes since the start screen gained its Order choice.
+  it('practice shuffles by default, like test', () => {
     const s = createSession(pairs, seededRng(42), 'l1', 'practice')
-    expect(s.order).toEqual(['1', '2', '3', '4'])
+    expect(s.order).not.toEqual(['1', '2', '3', '4'])
+    expect([...s.order].sort()).toEqual(['1', '2', '3', '4'])
+    expect(s.ordering).toBe('random')
+  })
+
+  it('keeps list order, in either mode, when list order is chosen', () => {
+    for (const mode of ['practice', 'test'] as const) {
+      const s = createSession(pairs, seededRng(42), 'l1', mode, { ordering: 'list' })
+      expect(s.order).toEqual(['1', '2', '3', '4'])
+    }
+  })
+
+  it('does not show the word in a test unless asked to', () => {
+    expect(createSession(pairs, seededRng(42), 'l1', 'test').showWord).toBe(false)
+    expect(createSession(pairs, seededRng(42), 'l1', 'test', { showWord: true }).showWord).toBe(true)
   })
 
   // The counterpart: testing must not reward positional memory.
@@ -125,9 +140,12 @@ describe('drill modes', () => {
    * "Practice again" from the results screen must not silently reshuffle: the
    * mode owns the ordering rule, so a practice restart is still list order.
    */
-  it('restarting a practice session keeps list order', () => {
-    const practice = createSession(pairs, noShuffle, 'l1', 'practice')
-    expect(restartShuffled(practice, seededRng(42)).order).toEqual(['1', '2', '3', '4'])
+  it('restarting keeps the order and show-word choices it was started with', () => {
+    const inOrder = createSession(pairs, noShuffle, 'l1', 'practice', { ordering: 'list' })
+    expect(restartShuffled(inOrder, seededRng(42)).order).toEqual(['1', '2', '3', '4'])
+
+    const shown = createSession(pairs, noShuffle, 'l1', 'test', { showWord: true })
+    expect(restartShuffled(shown, seededRng(42)).showWord).toBe(true)
   })
 })
 
