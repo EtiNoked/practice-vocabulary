@@ -574,6 +574,8 @@ describe('a full practice run', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    // List order, so the first card is known.
+    await user.click(screen.getByRole('button', { name: 'List order' }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
 
     /*
@@ -598,19 +600,33 @@ describe('a full practice run', () => {
     expect(screen.queryByText(/%/)).not.toBeInTheDocument()
   })
 
-  it('keeps list order rather than shuffling', async () => {
+  it('keeps list order when List order is chosen', async () => {
     listRepo.save(seeded)
     const user = userEvent.setup()
     renderApp()
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: 'List order' }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
 
-    // Spec A3: the order the list was written in.
     expect(screen.getByText('dochter')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /next/i }))
     expect(screen.getByText('zoon')).toBeInTheDocument()
+  })
+
+  it('remembers List order for that list, as its default next time', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: 'List order' }))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    expect(screen.getByRole('button', { name: 'List order' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Random' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   // FR-16, and FR-12's Previous. Both are taps, so the gesture chain holds.
@@ -631,7 +647,9 @@ describe('a full practice run', () => {
     await user.click(screen.getByRole('button', { name: /previous/i }))
     const spoken = speechCalls.filter((c) => c.type === 'speak')
     expect(spoken).toHaveLength(3)
-    expect(spoken[2]).toMatchObject({ text: 'dochter' })
+    // Whichever word the random order dealt first.
+    expect(spoken[2]).toMatchObject({ text: (spoken[0] as { text: string }).text })
+    expect(spoken[1]).not.toMatchObject({ text: (spoken[0] as { text: string }).text })
   })
 
   // FR-13: a study run must not turn up in the score history at all.
@@ -697,8 +715,10 @@ describe('switching mode from the results screen', () => {
 describe('covering and uncovering the answer in practice', () => {
   const covered = () => screen.getByText('daughter').getAttribute('aria-hidden') === 'true'
 
+  // In List order, so each test knows which card comes first.
   const startPractice = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: 'List order' }))
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
   }
 
@@ -1240,7 +1260,7 @@ describe('practicing the words you missed', () => {
     await user.click(screen.getByRole('button', { name: /this week · 1/i }))
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /full list instead/i }))
+    await user.click(screen.getByRole('button', { name: /^all words/i }))
     expect(screen.getByRole('button', { name: /saved|save this list/i })).toBeInTheDocument()
     expect(screen.getByText(/you'll hear/i)).toBeInTheDocument()
   })

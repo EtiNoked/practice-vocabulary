@@ -106,7 +106,14 @@ export function TestCard({
           Listen — {LANG_NAMES[subject.col2Lang]}
         </p>
 
-        {voiceMissing && <p className="mt-3 text-word font-bold">{pair.col2}</p>}
+        {/*
+          Shown as text when the device cannot say it, or when the test was started with
+          "Show the word" on. In the second case it steps aside once revealed, because the
+          answer block below repeats it right next to the translation.
+        */}
+        {(voiceMissing || (session.showWord && !session.revealed)) && (
+          <p className="mt-3 text-word font-bold">{pair.col2}</p>
+        )}
 
         {session.revealed ? (
           <div className="mt-4 flex flex-col gap-2">

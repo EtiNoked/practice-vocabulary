@@ -23,11 +23,11 @@ const list: WordList = {
 
 const noShuffle = () => 0.999999999
 
-const setup = (voiceMissing = false, resumed = false) => {
+const setup = (voiceMissing = false, resumed = false, showWord = false) => {
   const onReveal = vi.fn()
   const onMark = vi.fn()
   const onQuit = vi.fn()
-  const session = createSession(list.pairs, noShuffle, list.id)
+  const session = createSession(list.pairs, noShuffle, list.id, 'test', { showWord })
   const utils = render(
     <TestCard
       subject={list}
@@ -181,5 +181,19 @@ describe('quitting', () => {
     const { user, onQuit } = setup()
     await user.click(screen.getByRole('button', { name: /quit/i }))
     expect(onQuit).toHaveBeenCalled()
+  })
+})
+
+describe('Show the word (chosen on the start screen)', () => {
+  it('hides the spoken word by default: a test is listen and answer', () => {
+    const { session } = setup()
+    const word = session.pairs.find((p) => p.id === session.order[0])!.col2
+    expect(screen.queryByText(word)).not.toBeInTheDocument()
+  })
+
+  it('shows the spoken word as text when the test was started with it on', () => {
+    const { session } = setup(false, false, true)
+    const word = session.pairs.find((p) => p.id === session.order[0])!.col2
+    expect(screen.getByText(word)).toBeInTheDocument()
   })
 })

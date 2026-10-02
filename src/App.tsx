@@ -15,7 +15,8 @@ import { MigratePrompt } from './components/MigratePrompt'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
-import type { DrillMode, SessionRecord, WordList } from './state/types'
+import { DEFAULT_DRILL_OPTIONS, type DrillMode, type DrillOptions, type SessionRecord, type WordList } from './state/types'
+import { readDrillPrefs, writeDrillPrefs } from './storage/drillPrefs'
 import { speak } from './speech/tts'
 import { useVoices, voiceMissingFor } from './speech/useVoices'
 import { writeFailureMessage } from './storage/messages'
@@ -291,6 +292,22 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now())
 
   const readyList = state.screen === 'ready' ? state.list : null
+
+  /*
+   * The start screen's Order and Show-the-word choices, remembered per list on this device
+   * and made that list's default next time. A missed-words subset shares its list's id, so
+   * it shares the list's choices too.
+   */
+  const [changedOptions, setChangedOptions] = useState<{ id: string; options: DrillOptions } | null>(null)
+  const readyOptions = useMemo(
+    () =>
+      readyList
+        ? changedOptions?.id === readyList.id
+          ? changedOptions.options
+          : readDrillPrefs(readyList.id)
+        : DEFAULT_DRILL_OPTIONS,
+    [readyList, changedOptions],
+  )
 
   /**
    * How many words each window would drill, for the chips on the ready screen.
@@ -1045,7 +1062,12 @@ export default function App() {
           }
           counts={missedForReady?.counts ?? { day: 0, week: 0, month: 0, all: 0 }}
           degraded={missedForReady?.degraded ?? false}
-          onStart={(mode) => act({ type: 'START', mode })}
+          options={readyOptions}
+          onOptionsChange={(options) => {
+            setChangedOptions({ id: state.list.id, options })
+            writeDrillPrefs(state.list.id, options)
+          }}
+          onStart={(mode) => act({ type: 'START', mode, options: readyOptions })}
           onPickWindow={pickWindow}
           onPractiseFull={() => act({ type: 'PRACTISE_FULL' })}
           onSave={() => void persist(state.list)}

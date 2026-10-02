@@ -151,11 +151,19 @@ describe('starting in a mode', () => {
     expect(s.session.mode).toBe('test')
   })
 
-  it('starts a practice drill in list order', () => {
-    const s = reduce(ready, { type: 'START', mode: 'practice' })
+  it('starts a practice drill in list order when that is chosen', () => {
+    const s = reduce(ready, { type: 'START', mode: 'practice', options: { ordering: 'list' } })
     if (s.screen !== 'practising') throw new Error('unreachable')
     expect(s.session.mode).toBe('practice')
     expect(s.session.order).toEqual(['p1', 'p2'])
+    expect(s.session.ordering).toBe('list')
+  })
+
+  it('starts a drill in random order by default, and carries Show the word', () => {
+    const s = reduce(ready, { type: 'START', mode: 'test', options: { showWord: true } })
+    if (s.screen !== 'practising') throw new Error('unreachable')
+    expect(s.session.ordering).toBe('random')
+    expect(s.session.showWord).toBe(true)
   })
 })
 

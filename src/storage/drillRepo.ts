@@ -155,6 +155,10 @@ function read(now: number): RestoredDrill | null {
          * covered rather than open.
          */
         answersOpen: payload.session.answersOpen === true,
+        // Coerced for the same reason: a drill parked before these existed is still a
+        // drill worth resuming. Its order is already dealt; these only shape a re-run.
+        ordering: payload.session.ordering === 'list' ? 'list' : 'random',
+        showWord: payload.session.showWord === true,
       },
       // COERCED, not rejected. Throwing away a drill in progress over this one
       // label would be a worse outcome than logging it as a full run — the same
