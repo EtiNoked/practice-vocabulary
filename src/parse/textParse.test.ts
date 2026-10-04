@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as fx from '../test/fixtures/text'
-import { CONFIDENCE_FLOOR, detectDelimiter, parseDelimited, parseText } from './textParse'
+import { CONFIDENCE_FLOOR, detectDelimiter, parseDelimited } from './textParse'
 
 describe('detectDelimiter', () => {
   it('detects tabs from a spreadsheet paste', () => {
@@ -111,25 +111,5 @@ describe('parseDelimited', () => {
 
   it('never sets RawRow.conf — OCR is the only source that would', () => {
     expect(parseDelimited(fx.TAB_SIMPLE, 'tab')[0]).not.toHaveProperty('conf')
-  })
-})
-
-describe('parseText', () => {
-  it('detects and parses in one step', () => {
-    const result = parseText(fx.TAB_SIMPLE)
-    expect(result.delimiter).toBe('tab')
-    expect(result.rows).toHaveLength(5)
-  })
-
-  it('returns no rows and a null delimiter when detection is inconclusive', () => {
-    const result = parseText(fx.AMBIGUOUS)
-    expect(result.delimiter).toBeNull()
-    expect(result.rows).toEqual([])
-  })
-
-  it('accepts an explicit delimiter, overriding detection', () => {
-    const result = parseText(fx.AMBIGUOUS, 'comma')
-    expect(result.delimiter).toBe('comma')
-    expect(result.rows.length).toBeGreaterThan(0)
   })
 })

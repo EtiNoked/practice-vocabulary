@@ -1,4 +1,4 @@
-import { isShared, roleOf } from '../state/listIds'
+import { canEditList, isShared, roleOf } from '../state/listIds'
 import type { ListMember, WordList } from '../state/types'
 
 interface Props {
@@ -119,7 +119,7 @@ export function SavedLists({
         const shared = isShared(list)
         const role = roleOf(list, uid)
         // "Can practise" members do not edit or rename; the rules would refuse it anyway.
-        const canEdit = role === 'owner' || role === 'editor'
+        const canEdit = canEditList(list, uid)
         const owner = role === 'owner'
         return (
         <li
