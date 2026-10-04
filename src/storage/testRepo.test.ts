@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_TESTS } from '../state/testPlan'
+import { POOL_SOURCES } from '../state/wordPool'
 import type { SavedTest } from '../state/testPlan'
 import { SCHEMA_VERSION, TEST_STORAGE_KEY, testRepo } from './testRepo'
 
@@ -100,6 +101,24 @@ describe('the read is total', () => {
       tests: [test(), { id: 'bad' }, { ...test({ id: 't3' }), spec: null }],
     })
     expect(testRepo.getAll().map((t) => t.id)).toEqual(['t1'])
+  })
+
+  it('keeps a test saved under each of the four sources (014)', () => {
+    // These strings are a storage format, not just a label. A source the
+    // validator does not know about is a saved test silently dropped on read.
+    putRaw({
+      schemaVersion: SCHEMA_VERSION,
+      tests: POOL_SOURCES.map((source, i) => test({ id: `s${i}`, spec: { listIds: ['A'], source } })),
+    })
+    expect(testRepo.getAll()).toHaveLength(POOL_SOURCES.length)
+  })
+
+  it('still drops a test whose source is not one of them', () => {
+    putRaw({
+      schemaVersion: SCHEMA_VERSION,
+      tests: [{ ...test(), spec: { listIds: ['A'], source: 'whatever' } }],
+    })
+    expect(testRepo.getAll()).toEqual([])
   })
 
   it('returns [] when storage itself is refused', () => {

@@ -323,8 +323,9 @@ describe('a game teaches the drill (008 D-3)', () => {
     click(screen.getByRole('button', { name: /^practice$/i }))
 
     // Four words got wrong in a game, offered back on the drill's ready screen.
-    const chip = screen.getByRole('button', { name: /All time · 4/ })
-    expect(chip).toBeEnabled()
+    // The source button reads its widest window until one is narrowed, so this
+    // is the all-time count without having to open the window row first.
+    expect(screen.getByRole('button', { name: /^words i got wrong · 4$/i })).toBeEnabled()
   })
 
   it('does not claim history is degraded — no game predates right-answer recording', async () => {

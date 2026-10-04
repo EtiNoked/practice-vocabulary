@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { collectMissed, missedCounts, toDrillPairs, wordKey } from './missedWords'
+import {
+  collectMissed,
+  collectNew,
+  missedCounts,
+  newCount,
+  renumberPairs,
+  toDrillPairs,
+  wordKey,
+} from './missedWords'
 import type { MissSource } from './missedWords'
 import type { SessionRecord, WordList, WordPair } from './types'
 
@@ -329,5 +337,81 @@ describe('MissSource — the structural minimum collectMissed actually reads (00
   it('is satisfied structurally by SessionRecord, so no call site had to change', () => {
     const record: MissSource = rec(NOW - DAY, [pair('p1', 'daughter', 'dochter')], [])
     expect(record.listId).toBe('l1')
+  })
+})
+
+describe('collectNew — the words there is no record of (014)', () => {
+  const fresh = (records: SessionRecord[], over: Partial<Parameters<typeof collectNew>[1]> = {}) =>
+    collectNew(records, { listId: 'l1', list, ...over })
+
+  it('calls every word new when nothing has ever been practised', () => {
+    expect(fresh([]).words.map((w) => w.col2)).toEqual(['dochter', 'zoon', 'oom'])
+  })
+
+  it('drops a word the moment it has been asked, right or wrong', () => {
+    const records = [
+      rec(NOW - DAY, [pair('x1', 'daughter', 'dochter')], [pair('x2', 'son', 'zoon')]),
+    ]
+    expect(fresh(records).words.map((w) => w.col2)).toEqual(['oom'])
+  })
+
+  it('keeps the list’s own order rather than ranking them', () => {
+    // A missed set sorts worst-first; words never seen have nothing to rank by.
+    expect(fresh([]).words.map((w) => w.id)).toEqual(['p1', 'p2', 'p3'])
+  })
+
+  it('ignores the window entirely — a word asked a year ago is not new', () => {
+    const ancient = [rec(NOW - 400 * DAY, [pair('x1', 'uncle', 'oom')], [])]
+    // 'month' would exclude this record from a missed set; it still counts here.
+    expect(fresh(ancient).words.map((w) => w.col2)).toEqual(['dochter', 'zoon'])
+  })
+
+  it('reads records of OTHER lists as no history at all', () => {
+    const elsewhere = [rec(NOW - DAY, [pair('x1', 'uncle', 'oom')], [], { listId: 'other' })]
+    expect(fresh(elsewhere).words).toHaveLength(3)
+  })
+
+  it('matches on what a word says, so an edit elsewhere loses nothing', () => {
+    // The same words under completely different pair ids, as ListEditor re-mints them.
+    const records = [rec(NOW - DAY, [pair('zzz', 'DAUGHTER', 'Dochter ')], [])]
+    expect(fresh(records).words.map((w) => w.col2)).toEqual(['zoon', 'oom'])
+  })
+
+  it('yields nothing for a deleted list — there are no words to be new', () => {
+    expect(fresh([], { list: null }).words).toEqual([])
+  })
+
+  it('flags a history that predates right-answer recording', () => {
+    expect(fresh([rec(NOW - DAY, [pair('x1', 'uncle', 'oom')], null)]).degraded).toBe(true)
+    expect(fresh([rec(NOW - DAY, [pair('x1', 'uncle', 'oom')], [])]).degraded).toBe(false)
+  })
+
+  it('counts the records it considered, so "never practised" reads apart from "nothing new"', () => {
+    expect(fresh([]).records).toBe(0)
+    expect(fresh([rec(NOW - DAY, [], [])]).records).toBe(1)
+  })
+
+  it('is the complement of history: a new word and a missed word cannot be both', () => {
+    const records = [rec(NOW - DAY, [pair('x1', 'daughter', 'dochter')], [])]
+    const stillWrong = missed(records).words.map((w) => w.pair.col2)
+    const neverAsked = fresh(records).words.map((w) => w.col2)
+    expect(stillWrong).toEqual(['dochter'])
+    expect(neverAsked).not.toContain('dochter')
+  })
+
+  it('counts the same thing newCount reports', () => {
+    expect(newCount([], { listId: 'l1', list })).toBe(3)
+  })
+})
+
+describe('renumberPairs', () => {
+  it('re-mints ids over an assembled subset, so two sources cannot collide', () => {
+    const assembled = [pair('missed-0', 'son', 'zoon'), pair('p1', 'daughter', 'dochter')]
+    expect(renumberPairs(assembled).map((p) => p.id)).toEqual(['missed-0', 'missed-1'])
+  })
+
+  it('is the one implementation toDrillPairs also uses', () => {
+    const words = missed([rec(NOW - DAY, [pair('zzz', 'son', 'zoon')], [])]).words
+    expect(toDrillPairs(words)).toEqual(renumberPairs(words.map((w) => w.pair)))
   })
 })

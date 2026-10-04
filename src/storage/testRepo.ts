@@ -1,4 +1,5 @@
 import { MAX_TESTS, type SavedTest } from '../state/testPlan'
+import { isPoolSource } from '../state/wordPool'
 import type { WriteResult } from './types'
 
 /**
@@ -44,7 +45,7 @@ function isSavedTest(value: unknown): value is SavedTest {
     typeof spec === 'object' &&
     spec !== null &&
     Array.isArray(spec.listIds) &&
-    (spec.source === 'all' || spec.source === 'missed') &&
+    isPoolSource(spec.source) &&
     (t.count === null || typeof t.count === 'number') &&
     typeof t.updatedAt === 'number'
   )

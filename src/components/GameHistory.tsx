@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { byDay } from '../state/dayLabel'
 import { bandBorder } from '../state/scoreBand'
+import { POOL_SOURCE_PHRASES, isPoolSource } from '../state/wordPool'
 import { gameLabel } from '../game/gameRecord'
 import type { GameRecord } from '../game/types'
 
@@ -105,7 +106,15 @@ function Row({ record }: { record: GameRecord }) {
       <span className="font-medium">{gameLabel(record)}</span>
       <span className="text-sm text-ink-muted">
         {record.correct} / {record.asked} · {record.points} pts
-        {record.source === 'missed' && ' · missed words only'}
+        {/*
+          Guarded by `isPoolSource` and not just `!== 'all'`, because `gameRepo`
+          deliberately does not validate this field — a record written by a build
+          that had no `source` reaches here as undefined, and an unguarded index
+          would print "· undefined" on a real history row.
+        */}
+        {isPoolSource(record.source) &&
+          record.source !== 'all' &&
+          ` · ${POOL_SOURCE_PHRASES[record.source]}`}
         {record.partial && ' · stopped early'}
       </span>
     </div>

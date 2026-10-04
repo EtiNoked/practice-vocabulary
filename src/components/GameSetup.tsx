@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { LANG_NAMES } from '../lang/languages'
-import { poolLanguages, type PoolSpec } from '../state/wordPool'
+import { POOL_SOURCE_EMPTY, poolLanguages, type PoolSpec } from '../state/wordPool'
 import type { WordList } from '../state/types'
 import { PoolPicker } from './PoolPicker'
 import { usePoolDraft, type PoolLimits } from './usePoolDraft'
@@ -97,8 +97,8 @@ export function GameSetup({
           <p role="status" className="rounded-lg bg-surface-sunken p-3">
             {draft.listIds.length === 0 ? (
               'Pick at least one list to see how many words you have.'
-            ) : draft.poolCount === 0 && draft.source === 'missed' ? (
-              'No words to practice here yet — you haven’t gotten any of these wrong. Try “All words”.'
+            ) : draft.poolCount === 0 && draft.source !== 'all' ? (
+              `No words to play with yet — ${POOL_SOURCE_EMPTY[draft.source]} Try “All words”.`
             ) : !draft.enough ? (
               <>
                 Only <strong>{draft.poolCount}</strong>{' '}

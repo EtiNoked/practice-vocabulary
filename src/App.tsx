@@ -3,7 +3,7 @@ import { Home, type Brief } from './components/Home'
 import { ListEditor } from './components/ListEditor'
 import { TestCard } from './components/TestCard'
 import { StudyCard } from './components/StudyCard'
-import { ReadyScreen } from './components/ReadyScreen'
+import { ReadyScreen, type SubsetCounts } from './components/ReadyScreen'
 import { ReviewScreen } from './components/ReviewScreen'
 import { ReviewDetail } from './components/ReviewDetail'
 import { NavMenu } from './components/NavMenu'
@@ -14,7 +14,14 @@ import { ResultsScreen } from './components/ResultsScreen'
 import { MigratePrompt } from './components/MigratePrompt'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
-import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
+import {
+  initialState,
+  isMistakesOnly,
+  reduce,
+  type AppAction,
+  type AppState,
+  type SubsetSource,
+} from './state/appMachine'
 import {
   DEFAULT_DRILL_OPTIONS,
   promptSpeaks,
@@ -38,7 +45,10 @@ import { useMigration } from './storage/useMigration'
 import { currentPair } from './state/session'
 import {
   collectMissed,
+  collectNew,
   missedCounts,
+  REVIEW_WINDOWS,
+  renumberPairs,
   toDrillPairs,
   type ReviewWindow,
 } from './state/missedWords'
@@ -53,6 +63,18 @@ import type { Farewell } from './share/types'
  * Lazy, both of them: the QR encoder and every sharing screen stay out of the eager bundle,
  * so a guest who never shares downloads none of it (016 NFR2).
  */
+/**
+ * What the ready screen is handed while its list is not the live one — a
+ * brand-new, unsaved list has no history to count, and `subsetForReady` is null
+ * until there is a `ready` screen to count for. A frozen constant rather than a
+ * literal in the JSX so the prop does not change identity on every render.
+ */
+const EMPTY_SUBSET_COUNTS: SubsetCounts = {
+  missed: { day: 0, week: 0, month: 0, all: 0 },
+  missedNew: { day: 0, week: 0, month: 0, all: 0 },
+  unseen: 0,
+}
+
 const SharingDialog = lazy(() => import('./share/SharingDialog'))
 const JoinScreen = lazy(() => import('./share/JoinScreen'))
 import { buildRunRecords } from './state/sessionRecord'
@@ -61,7 +83,12 @@ import { trendOfRuns } from './state/scoreTrend'
 import { GameSetup } from './components/GameSetup'
 import { GameCloud } from './components/GameCloud'
 import { GameResults } from './components/GameResults'
-import { buildWordPool, poolSize, type PoolSpec } from './state/wordPool'
+import {
+  buildWordPool,
+  countsTowardsAverage,
+  poolSize,
+  type PoolSpec,
+} from './state/wordPool'
 import { canRedraw, poolSubject, runFromPool, type TestPlan } from './state/drillRun'
 import { TestSetup } from './components/TestSetup'
 import type { SavedTest } from './state/testPlan'
@@ -323,17 +350,40 @@ export default function App() {
    * counts agree on one instant. Four chips computed against four different
    * milliseconds is how you get a count of 12 and a drill of 11.
    */
-  const missedForReady = useMemo(() => {
+  const subsetForReady = useMemo(() => {
     if (!readyList) return null
     const list = liveList(readyList)
+    const missed = missedCounts(missSources, { listId: readyList.id, now, list })
+    const unseen = collectNew(missSources, { listId: readyList.id, list })
+
     return {
-      counts: missedCounts(missSources, { listId: readyList.id, now, list }),
-      degraded: collectMissed(missSources, {
-        listId: readyList.id,
-        window: 'all',
-        now,
-        list,
-      }).degraded,
+      counts: {
+        missed,
+        /*
+         * ADDED, not re-counted, and that is exact rather than a shortcut: a
+         * missed word has a record and a new word does not, so the two sets are
+         * disjoint by definition and their union can only be the sum. Running
+         * `buildWordPool` four more times to learn the same four numbers would
+         * also reintroduce the thing the single `now` exists to prevent.
+         */
+        missedNew: Object.fromEntries(
+          REVIEW_WINDOWS.map((w) => [w, missed[w] + unseen.words.length]),
+        ) as Record<ReviewWindow, number>,
+        unseen: unseen.words.length,
+      },
+      /*
+       * Either blindness lights the one note. `collectNew` reports the same
+       * missing `rightPairs` that `collectMissed` does, so OR-ing them is not
+       * two conditions but one fact asked twice.
+       */
+      degraded:
+        unseen.degraded ||
+        collectMissed(missSources, {
+          listId: readyList.id,
+          window: 'all',
+          now,
+          list,
+        }).degraded,
     }
   }, [readyList, missSources, liveList, now])
 
@@ -588,17 +638,25 @@ export default function App() {
              * which must not flatter the average either.
              */
             action.type === 'START_RUN'
-            ? action.run.plan?.spec.source === 'missed'
+            ? action.run.plan && !countsTowardsAverage(action.run.plan.spec.source)
               ? 'wrong-only'
               : 'full'
             : action.type === 'START'
             ? /*
-               * A missed-words drill is a harder subset and must not flatter the
+               * A mistakes-only drill is a harder subset and must not flatter the
                * average — the same reasoning that made RESTART_WRONG_ONLY its own
                * run kind. `state` here is the PRE-action state, which is `ready`
                * at the moment START is dispatched, so the subset is still visible.
+               *
+               * MISTAKES-ONLY, not every subset (014). A *wrong & new* or *new
+               * words* run is ordinary practice over part of a list, no more
+               * self-selected than a 15-of-34 test — holding those back would
+               * leave the trend with almost nothing feeding it. `session` is the
+               * misses of one finished drill, so it is mistakes-only by
+               * construction. `countsTowardsAverage` states the same rule for a
+               * pool run, and the two must not disagree.
                */
-              state.screen === 'ready' && state.missed
+              state.screen === 'ready' && isMistakesOnly(state.subset?.source)
               ? 'wrong-only'
               : 'full'
             : action.type === 'RESTART_SHUFFLED' || action.type === 'SWITCH_MODE'
@@ -658,27 +716,46 @@ export default function App() {
     [state, speakCurrent, store, sessionMode, voices],
   )
 
-  const pickWindow = useCallback(
-    (window: ReviewWindow) => {
+  /**
+   * Turn the ready screen's chosen source into the pairs it names.
+   *
+   * The screen hands back WHICH subset and this builds it — the same division
+   * `START_RUN` and `START_GAME` keep, and for the same reason: assembling a
+   * pool needs the live lists and every record, which a pure reducer does not
+   * have and must not acquire.
+   *
+   * It does NOT go through `buildWordPool`, though the sources are its sources.
+   * That module folds a word that appears in two lists into one entry and
+   * re-mints ids against a pool; here there is exactly one list, and the missed
+   * half has to arrive in `collectMissed`'s worst-first order, which a pool
+   * does not preserve. Converging the two is 008's deferred job and still is.
+   */
+  const pickSubset = useCallback(
+    (source: SubsetSource) => {
       if (state.screen !== 'ready') return
       const list = liveList(state.list)
-      const set = collectMissed(missSources, {
-        listId: state.list.id,
-        window,
-        // The SAME `now` the chips were counted against. Reading the clock again
-        // here is how a chip says 12 and the drill deals 11.
-        now,
-        list,
-      })
-      // The chip is already disabled at zero; this is the belt to that pair of
+
+      // The SAME `now` the buttons were counted against. Reading the clock again
+      // here is how a button says 12 and the drill deals 11.
+      const missed = (window: ReviewWindow) =>
+        collectMissed(missSources, { listId: state.list.id, window, now, list }).words.map(
+          (w) => w.pair,
+        )
+      const unseen = () => collectNew(missSources, { listId: state.list.id, list }).words
+
+      const pairs =
+        source.kind === 'new'
+          ? unseen()
+          : source.kind === 'window'
+            ? source.source === 'missed'
+              ? missed(source.window)
+              : [...missed(source.window), ...unseen()]
+            : /* 'session' is Review's, and never reaches here. */ []
+
+      // The button is already disabled at zero; this is the belt to that pair of
       // braces, and it keeps the reducer from ever seeing an empty drill.
-      if (set.words.length === 0) return
-      act({
-        type: 'PRACTISE_MISSED',
-        list,
-        pairs: toDrillPairs(set.words),
-        source: { kind: 'window', window },
-      })
+      if (pairs.length === 0) return
+      act({ type: 'PRACTISE_SUBSET', list, pairs: renumberPairs(pairs), source })
     },
     [state, missSources, liveList, act, now],
   )
@@ -1070,13 +1147,13 @@ export default function App() {
         <ReadyScreen
           list={state.list}
           saved={savedIds.has(state.list.id) || visibleLists.some((l) => l.id === state.list.id)}
-          missed={
-            state.missed
-              ? { count: state.missed.pairs.length, source: state.missed.source }
+          subset={
+            state.subset
+              ? { count: state.subset.pairs.length, source: state.subset.source }
               : null
           }
-          counts={missedForReady?.counts ?? { day: 0, week: 0, month: 0, all: 0 }}
-          degraded={missedForReady?.degraded ?? false}
+          counts={subsetForReady?.counts ?? EMPTY_SUBSET_COUNTS}
+          degraded={subsetForReady?.degraded ?? false}
           options={readyOptions}
           voiceMissing={voiceMissing}
           onOptionsChange={(options) => {
@@ -1084,7 +1161,7 @@ export default function App() {
             writeDrillPrefs(state.list.id, options)
           }}
           onStart={(mode) => act({ type: 'START', mode, options: readyOptions })}
-          onPickWindow={pickWindow}
+          onPickSubset={pickSubset}
           onPractiseFull={() => act({ type: 'PRACTISE_FULL' })}
           onSave={() => void persist(state.list)}
           /* Back goes to the section this screen was reached from (012 D-8). */
@@ -1254,7 +1331,7 @@ export default function App() {
                 })
                 if (set.words.length === 0) return
                 act({
-                  type: 'PRACTISE_MISSED',
+                  type: 'PRACTISE_SUBSET',
                   list,
                   pairs: toDrillPairs(set.words),
                   source: { kind: 'session', finishedAt: record.finishedAt },
