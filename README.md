@@ -141,6 +141,32 @@ an English voice is worse than being asked.
 Got the columns the wrong way round? **Swap columns ⇄** exchanges the words and
 their languages together.
 
+### A suggested translation
+
+Each row carries a **🌐** button that offers the other half of the pair: type `dochter` in
+the **Word** box, press it, and `daughter` is offered for the **Meaning** box beside it,
+with **Use** and **Dismiss**. A row where only the meaning is filled runs the other way.
+
+**It never writes into the cell by itself.** A one-word translation is a guess between the
+senses a word has — `de bank` is both a bench and a bank, and only the person holding the
+textbook knows which one the list means — so the suggestion sits next to the row until you
+accept it. Accepting one is an ordinary edit: you can type over it, and nothing is saved
+until you press Save. Fill in both sides and the button checks your answer instead of
+replacing it, saying so when it agrees with you.
+
+**Your words still never leave your device.** The translation runs on the device itself,
+against a model the browser downloads once — the app sends nothing to a translation
+service, and the privacy promise at the top of this file is unchanged. The cost is that
+only browsers with the built-in [Translator API][translator-api] have it, which today means
+Chrome and Edge. Everywhere else the button simply isn't there, rather than being there and
+failing. It also isn't there when both columns are the same language, because then there is
+nothing to translate.
+
+The first use of a language pair downloads that model, which can take a moment; the row
+says so, with a percentage, rather than looking like a button that did nothing.
+
+[translator-api]: https://developer.mozilla.org/en-US/docs/Web/API/Translator
+
 ## Practising
 
 The list's start screen sets the run up above the **Practice** and **Test** buttons:

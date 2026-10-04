@@ -1,5 +1,7 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LANG_CODES, LANG_NAMES, type LangCode } from '../lang/languages'
+import { translate } from '../translate/translator'
+import { useTranslationReady } from '../translate/useTranslation'
 import { detectLanguages, type LanguageDetection } from '../parse/languageDetect'
 import { findDuplicates } from '../parse/duplicates'
 import { sortRows } from '../parse/sortRows'
@@ -32,6 +34,27 @@ let idCounter = 0
 const nextId = () => `p${Date.now().toString(36)}${(idCounter++).toString(36)}`
 
 /**
+ * What the one row currently being translated has to say for itself.
+ *
+ * At most one row holds this at a time, and every other row is passed `undefined`,
+ * which is what lets an object prop live alongside `memo`: the identity changes for
+ * the active row and stays `undefined` — and so compares equal — for the rest.
+ */
+interface RowTranslation {
+  /** Which cell the suggestion is for. */
+  column: 'col1' | 'col2'
+  /** What the row is doing right now, shown while it does it. */
+  busy?: string
+  /** The translation on offer, awaiting Use or Dismiss. */
+  suggestion?: string
+  /** The language the suggestion is in, named so the offer says what it is. */
+  label?: string
+  /** The suggestion is what the cell already says, so there is nothing to apply. */
+  matches?: boolean
+  error?: string
+}
+
+/**
  * One row of the table. Memoised so a keystroke re-renders a single row rather
  * than a 200-row list.
  */
@@ -39,17 +62,30 @@ const Row = memo(function Row({
   row,
   index,
   duplicate,
+  canTranslate,
+  translation,
   onChange,
   onDelete,
+  onTranslate,
+  onUseSuggestion,
+  onDismissSuggestion,
 }: {
   row: RawRow
   index: number
   /** Why this row repeats an earlier one, if it does. A string so memo can compare it. */
   duplicate: string | undefined
+  /** Whether this browser can translate this list's pair of languages at all. */
+  canTranslate: boolean
+  /** Set only on the row being translated; `undefined` everywhere else. */
+  translation: RowTranslation | undefined
   onChange: (index: number, patch: Partial<RawRow>) => void
   onDelete: (index: number) => void
+  onTranslate: (index: number) => void
+  onUseSuggestion: () => void
+  onDismissSuggestion: () => void
 }) {
   const incomplete = !isComplete(row) && (row.col1 !== '' || row.col2 !== '')
+  const empty = row.col1.trim() === '' && row.col2.trim() === ''
   return (
     <li className="flex flex-col gap-1">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -76,6 +112,18 @@ const Row = memo(function Row({
         <span className="w-24 shrink-0 text-xs text-accent">
           {incomplete ? 'Incomplete' : ''}
         </span>
+        {canTranslate && (
+          <button
+            type="button"
+            aria-label={`Translate row ${index + 1}`}
+            title="Suggest a translation for this row"
+            disabled={empty || translation?.busy !== undefined}
+            onClick={() => onTranslate(index)}
+            className="min-h-11 min-w-11 rounded border border-line-strong disabled:opacity-40"
+          >
+            🌐
+          </button>
+        )}
         <button
           type="button"
           aria-label={`Delete row ${index + 1}`}
@@ -90,6 +138,51 @@ const Row = memo(function Row({
           Duplicate: {duplicate}
         </p>
       )}
+      {translation?.busy !== undefined && (
+        <p role="status" className="text-xs text-ink-muted">
+          {translation.busy}
+        </p>
+      )}
+      {translation?.error !== undefined && (
+        <p role="status" className="text-xs text-accent">
+          {translation.error}
+        </p>
+      )}
+      {/*
+        The suggestion never writes itself into the cell. A machine translation of a
+        single word is a guess between senses the word has — "de bank" is a bench and
+        a bank, and only the person holding the textbook knows which one this list
+        means — so it is offered next to the row and applied by a deliberate click.
+      */}
+      {translation?.suggestion !== undefined &&
+        (translation.matches ? (
+          <p role="status" className="text-xs text-ink-muted">
+            Suggested {translation.label}: “{translation.suggestion}” — the same as what you
+            have.
+          </p>
+        ) : (
+          <div role="status" className="flex flex-wrap items-center gap-2 text-xs">
+            <span>
+              Suggested {translation.label}: <strong>{translation.suggestion}</strong>
+            </span>
+            <button
+              type="button"
+              aria-label={`Use the suggestion for row ${index + 1}`}
+              onClick={onUseSuggestion}
+              className="min-h-11 rounded bg-primary px-3 text-primary-ink"
+            >
+              Use
+            </button>
+            <button
+              type="button"
+              aria-label={`Dismiss the suggestion for row ${index + 1}`}
+              onClick={onDismissSuggestion}
+              className="min-h-11 rounded border border-line-strong px-3"
+            >
+              Dismiss
+            </button>
+          </div>
+        ))}
     </li>
   )
 })
@@ -196,6 +289,109 @@ export function ListEditor({
   const bodyRows = effective.headerConsumed ? rows.slice(1) : rows
   const completeCount = countComplete(bodyRows)
 
+  /**
+   * The one suggestion in flight, or on offer, at any moment.
+   *
+   * Singular on purpose. Translating is a click, not a background sweep, and a
+   * single pending offer is both what the user has in their head and what keeps
+   * `index` meaningful — see the operations below that clear it when the rows move
+   * underneath it.
+   */
+  const [translation, setTranslation] = useState<({ index: number } & RowTranslation) | null>(null)
+
+  /**
+   * Rows and the pending suggestion, readable from a click handler without becoming
+   * a dependency of one.
+   *
+   * `handleTranslate` needs the row it was clicked on. Taking `rows` as a dependency
+   * would mint a new callback on every keystroke and hand all 200 memoised rows a new
+   * prop — undoing the very thing `Row`'s `memo` is there for. The same goes for
+   * reading the pending suggestion back when Use is clicked.
+   */
+  const rowsRef = useRef(rows)
+  const translationRef = useRef(translation)
+  useEffect(() => {
+    rowsRef.current = rows
+  }, [rows])
+  useEffect(() => {
+    translationRef.current = translation
+  }, [translation])
+
+  /** Distinguishes the reply to the latest click from a slower earlier one. */
+  const requestRef = useRef(0)
+
+  const canTranslate = useTranslationReady(effective.col2Lang, effective.col1Lang)
+
+  /**
+   * Offer a translation for one row.
+   *
+   * Direction follows the ROLES the fields have, never where they are drawn: `col2` is
+   * the word being learned and `col1` is what it means. So a filled word is translated
+   * into its meaning — which fills the blank in the common case of typing the foreign
+   * words first, and second-guesses the answer when both are filled. Only a row whose
+   * word is still empty runs the other way.
+   *
+   * Stating it in roles is what let 017 reverse the drawn order without touching a line
+   * of this: since the word is now drawn FIRST, the same rule reads as "fill the box to
+   * the right", which is also the direction someone typing a list expects.
+   */
+  const handleTranslate = useCallback(
+    (index: number) => {
+      const row = rowsRef.current[index]
+      if (!row) return
+
+      const toCol1 = row.col2.trim() !== ''
+      const source = toCol1 ? row.col2 : row.col1
+      if (source.trim() === '') return
+
+      const column = toCol1 ? 'col1' : 'col2'
+      const from = toCol1 ? effective.col2Lang : effective.col1Lang
+      const to = toCol1 ? effective.col1Lang : effective.col2Lang
+
+      const request = ++requestRef.current
+      const current = () => requestRef.current === request
+      setTranslation({ index, column, busy: 'Translating…' })
+
+      void translate(source, from, to, (loaded) => {
+        // First use of a language pair downloads a model, which can be tens of
+        // megabytes. Silence for that long reads as a button that did nothing.
+        if (current()) {
+          setTranslation({
+            index,
+            column,
+            busy: `Downloading the translator… ${Math.round(loaded * 100)}%`,
+          })
+        }
+      })
+        .then((text) => {
+          if (!current()) return
+          const existing = (rowsRef.current[index]?.[column] ?? '').trim()
+          setTranslation({
+            index,
+            column,
+            suggestion: text,
+            label: LANG_NAMES[to],
+            matches: existing !== '' && existing.toLowerCase() === text.toLowerCase(),
+          })
+        })
+        .catch(() => {
+          if (!current()) return
+          setTranslation({
+            index,
+            column,
+            error: 'Could not translate that just now. Type it yourself, or try again.',
+          })
+        })
+    },
+    [effective.col1Lang, effective.col2Lang],
+  )
+
+  const handleDismissSuggestion = useCallback(() => {
+    // Bumped so a reply still in flight cannot resurrect what was just dismissed.
+    requestRef.current++
+    setTranslation(null)
+  }, [])
+
   // A header row names the languages, so it is not a word that can be repeated.
   const duplicates = useMemo(
     () => findDuplicates(rows, { skipFirst: effective.headerConsumed }),
@@ -217,11 +413,15 @@ export function ListEditor({
    */
   const chooseLang = useCallback((column: 'col1' | 'col2', lang: LangCode) => {
     setDirty(true)
+    // A suggestion is a translation BETWEEN two named languages, and it announces
+    // which. Renaming one of them leaves it describing itself wrongly — and on a list
+    // just set to the same language on both sides, offering a translation at all.
+    handleDismissSuggestion()
     setOverride((current) => {
       const base = current ?? { col1: effective.col1Lang, col2: effective.col2Lang }
       return { ...base, [column]: lang }
     })
-  }, [effective.col1Lang, effective.col2Lang])
+  }, [effective.col1Lang, effective.col2Lang, handleDismissSuggestion])
 
   /**
    * Exchange both the column contents and their languages.
@@ -235,6 +435,8 @@ export function ListEditor({
    */
   const handleSwap = useCallback(() => {
     setDirty(true)
+    // A suggestion names a row and a column, and swapping moves what is in both.
+    handleDismissSuggestion()
     // Spread the row so RawRow.conf survives — it is reserved for the OCR path.
     setRows((current) => current.map((r) => ({ ...r, col1: r.col2, col2: r.col1 })))
     // Functional, like the rows above: two swaps that land in one batch must
@@ -244,7 +446,7 @@ export function ListEditor({
       const base = current ?? { col1: effective.col1Lang, col2: effective.col2Lang }
       return { col1: base.col2, col2: base.col1 }
     })
-  }, [effective.col1Lang, effective.col2Lang])
+  }, [effective.col1Lang, effective.col2Lang, handleDismissSuggestion])
 
   const handleChange = useCallback((index: number, patch: Partial<RawRow>) => {
     setDirty(true)
@@ -258,13 +460,32 @@ export function ListEditor({
     })
   }, [])
 
-  const handleDelete = useCallback((index: number) => {
-    setDirty(true)
-    setRows((current) => {
-      const next = current.filter((_, i) => i !== index)
-      return next.length > 0 ? next : [emptyRow()]
-    })
-  }, [])
+  /**
+   * Accept the pending suggestion into its cell.
+   *
+   * Routed through `handleChange` rather than writing the row itself, so an accepted
+   * suggestion is in every way an ordinary edit: it marks the list dirty and grows
+   * the table if it landed in the last row, exactly as typing the word would have.
+   */
+  const handleUseSuggestion = useCallback(() => {
+    const pending = translationRef.current
+    if (!pending || pending.suggestion === undefined) return
+    handleChange(pending.index, { [pending.column]: pending.suggestion })
+    setTranslation(null)
+  }, [handleChange])
+
+  const handleDelete = useCallback(
+    (index: number) => {
+      setDirty(true)
+      // The suggestion holds a row INDEX, and deleting shifts every index after it.
+      handleDismissSuggestion()
+      setRows((current) => {
+        const next = current.filter((_, i) => i !== index)
+        return next.length > 0 ? next : [emptyRow()]
+      })
+    },
+    [handleDismissSuggestion],
+  )
 
   /**
    * A to Z by the word column — the first one, the one read aloud — and only when asked: a
@@ -273,17 +494,25 @@ export function ListEditor({
    */
   const handleSort = useCallback(() => {
     setDirty(true)
+    // Sorting moves rows past each other, so a suggestion's index no longer points
+    // at the row it was offered for.
+    handleDismissSuggestion()
     setRows((current) => sortRows(current, 'col2', { keepFirst: effective.headerConsumed }))
-  }, [effective.headerConsumed])
+  }, [effective.headerConsumed, handleDismissSuggestion])
 
-  const handleAddPasted = useCallback((added: RawRow[]) => {
-    setDirty(true)
-    setRows((current) => {
-      // Drop a trailing blank row so pasted rows do not leave a gap.
-      const kept = current.filter((r) => r.col1.trim() !== '' || r.col2.trim() !== '')
-      return [...kept, ...added, emptyRow()]
-    })
-  }, [])
+  const handleAddPasted = useCallback(
+    (added: RawRow[]) => {
+      setDirty(true)
+      // Pasting drops blank rows before appending, which shifts the rows below.
+      handleDismissSuggestion()
+      setRows((current) => {
+        // Drop a trailing blank row so pasted rows do not leave a gap.
+        const kept = current.filter((r) => r.col1.trim() !== '' || r.col2.trim() !== '')
+        return [...kept, ...added, emptyRow()]
+      })
+    },
+    [handleDismissSuggestion],
+  )
 
   function handleCancel() {
     if (dirty && !window.confirm('Discard your unsaved changes?')) return
@@ -384,6 +613,7 @@ export function ListEditor({
         <span className="flex-1">Word — spoken aloud</span>
         <span className="flex-1">Meaning — the answer</span>
         <span className="w-24" />
+        {canTranslate && <span className="w-11" />}
         <span className="w-11" />
       </div>
 
@@ -394,8 +624,13 @@ export function ListEditor({
             row={row}
             index={index}
             duplicate={duplicates.get(index)}
+            canTranslate={canTranslate}
+            translation={translation?.index === index ? translation : undefined}
             onChange={handleChange}
             onDelete={handleDelete}
+            onTranslate={handleTranslate}
+            onUseSuggestion={handleUseSuggestion}
+            onDismissSuggestion={handleDismissSuggestion}
           />
         ))}
       </ul>
