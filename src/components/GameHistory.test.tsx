@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
+import { makeGameRecord } from '../test/fixtures/words'
 import { GameHistory } from './GameHistory'
 import { gameLabel } from '../game/gameRecord'
 import type { GameRecord } from '../game/types'
@@ -18,19 +19,15 @@ const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h)
 /** A fixed 'now', so day headings never depend on when the suite runs. */
 const NOW = at(2026, 9, 6, 9)
 
-const game = (over: Partial<GameRecord> = {}): GameRecord => ({
-  id: 'g1',
-  finishedAt: at(2026, 9, 6, 8),
-  listIds: ['a'],
-  listNames: ['Lesson 3'],
-  source: 'all',
-  correct: 8,
-  asked: 10,
-  points: 64,
-  available: 100,
-  partial: false,
-  ...over,
-})
+const game = (over: Partial<GameRecord> = {}): GameRecord =>
+  makeGameRecord({
+    finishedAt: at(2026, 9, 6, 8),
+    listIds: ['a'],
+    listNames: ['Lesson 3'],
+    correct: 8,
+    points: 64,
+    ...over,
+  })
 
 const renderAt = (props: Parameters<typeof GameHistory>[0]) => {
   // The component reads the clock once on mount, as ReviewScreen does — pinning it here

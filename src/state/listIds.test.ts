@@ -1,34 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { makeList, makeRecord } from '../test/fixtures/words'
 import type { GameRecord } from '../game/types'
 import { aliasMap, canEditList, canonicalGames, canonicalRecords, isShared, roleOf } from './listIds'
 import type { SessionRecord, WordList } from './types'
 
-const list = (id: string, over: Partial<WordList> = {}): WordList => ({
-  id,
-  name: id,
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'manual',
-  pairs: [],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-  ...over,
-})
+const list = (id: string, over: Partial<WordList> = {}): WordList =>
+  makeList({ id, name: id, langSource: 'manual', pairs: [], createdAt: 1, updatedAt: 1, ...over })
 
-const record = (id: string, listId: string): SessionRecord => ({
-  id,
-  listId,
-  listName: listId,
-  right: 1,
-  wrong: 0,
-  total: 1,
-  pct: 100,
-  wrongPairs: [],
-  finishedAt: 1,
-  mode: 'full',
-  partial: false,
-})
+const record = (id: string, listId: string): SessionRecord =>
+  makeRecord({ id, listId, listName: listId, finishedAt: 1 })
 
 const sharing = (owner: string, roles: Record<string, 'owner' | 'editor' | 'viewer'>) => ({
   ownerUid: owner,

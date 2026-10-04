@@ -1,21 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList } from '../test/fixtures/words'
 import { TestsScreen } from './TestsScreen'
-import type { WordList } from '../state/types'
 import type { SavedTest } from '../state/testPlan'
 
-const list: WordList = {
-  id: 'a',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-}
+const list = makeList({ createdAt: 1, updatedAt: 1 })
 
 const savedTest: SavedTest = {
   id: 't1',

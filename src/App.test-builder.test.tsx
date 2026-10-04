@@ -1,6 +1,7 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from './test/fixtures/words'
 import { listRepo } from './storage/listRepo'
 import { sessionRepo } from './storage/sessionRepo'
 import { testRepo } from './storage/testRepo'
@@ -17,29 +18,19 @@ import type { SessionRecord, WordList } from './state/types'
  * while that chain is broken.
  */
 
-const chapter1: WordList = {
+const chapter1 = makeList({
   id: 'c1',
   name: 'Chapter 1',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'a1', col1: 'bread', col2: 'brood' },
-    { id: 'a2', col1: 'cheese', col2: 'kaas' },
-  ],
+  pairs: [pair('a1', 'bread', 'brood'), pair('a2', 'cheese', 'kaas')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 const chapter2: WordList = {
   ...chapter1,
   id: 'c2',
   name: 'Chapter 2',
-  pairs: [
-    { id: 'b1', col1: 'money', col2: 'geld' },
-    { id: 'b2', col1: 'basket', col2: 'mand' },
-  ],
+  pairs: [pair('b1', 'money', 'geld'), pair('b2', 'basket', 'mand')],
 }
 
 /** en → fr, so it can never join the other two. */
@@ -48,7 +39,7 @@ const paris: WordList = {
   id: 'p1',
   name: 'Paris',
   col2Lang: 'fr',
-  pairs: [{ id: 'r1', col1: 'bread', col2: 'pain' }],
+  pairs: [pair('r1', 'bread', 'pain')],
 }
 
 const records = () => sessionRepo.getAll(null)

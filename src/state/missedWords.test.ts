@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { makeList, makeRecord, pair } from '../test/fixtures/words'
 import {
   collectMissed,
   collectNew,
@@ -14,23 +15,12 @@ import type { SessionRecord, WordList, WordPair } from './types'
 const DAY = 86_400_000
 const NOW = Date.UTC(2026, 8, 5, 12, 0, 0)
 
-const pair = (id: string, col1: string, col2: string): WordPair => ({ id, col1, col2 })
-
-const list: WordList = {
+const list = makeList({
   id: 'l1',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    pair('p1', 'daughter', 'dochter'),
-    pair('p2', 'son', 'zoon'),
-    pair('p3', 'uncle', 'oom'),
-  ],
+  pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon'), pair('p3', 'uncle', 'oom')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 /**
  * A record. `rightPairs` is passed explicitly as `null` to mean "this is a
@@ -42,21 +32,19 @@ const rec = (
   wrongPairs: WordPair[],
   rightPairs: WordPair[] | null = [],
   over: Partial<SessionRecord> = {},
-): SessionRecord => ({
-  id: `r-${finishedAt}-${Math.random().toString(36).slice(2, 6)}`,
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: rightPairs?.length ?? 0,
-  wrong: wrongPairs.length,
-  total: wrongPairs.length + (rightPairs?.length ?? 0),
-  pct: 0,
-  wrongPairs,
-  ...(rightPairs === null ? {} : { rightPairs }),
-  finishedAt,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+): SessionRecord =>
+  makeRecord({
+    id: `r-${finishedAt}-${Math.random().toString(36).slice(2, 6)}`,
+    listId: 'l1',
+    right: rightPairs?.length ?? 0,
+    wrong: wrongPairs.length,
+    total: wrongPairs.length + (rightPairs?.length ?? 0),
+    pct: 0,
+    wrongPairs,
+    ...(rightPairs === null ? {} : { rightPairs }),
+    finishedAt,
+    ...over,
+  })
 
 const missed = (records: SessionRecord[], over: Partial<Parameters<typeof collectMissed>[1]> = {}) =>
   collectMissed(records, { listId: 'l1', window: 'all', now: NOW, list, ...over })

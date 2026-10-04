@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { makeList as baseList, pair } from '../test/fixtures/words'
 import {
   POOL_SOURCES,
   POOL_SOURCE_LABELS,
@@ -19,17 +20,8 @@ import type { WordList, WordPair } from './types'
 const DAY = 86_400_000
 const NOW = Date.UTC(2026, 8, 6, 12, 0, 0)
 
-const pair = (id: string, col1: string, col2: string): WordPair => ({ id, col1, col2 })
-
-const makeList = (over: Partial<WordList> & Pick<WordList, 'id' | 'name' | 'pairs'>): WordList => ({
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-  ...over,
-})
+const makeList = (over: Partial<WordList> & Pick<WordList, 'id' | 'name' | 'pairs'>): WordList =>
+  baseList({ createdAt: 1, updatedAt: 1, ...over })
 
 /** en → nl. */
 const food = makeList({

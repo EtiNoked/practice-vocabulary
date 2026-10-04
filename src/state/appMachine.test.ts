@@ -4,23 +4,14 @@ import { seededRng } from './session'
 import { runFromPool } from './drillRun'
 import type { PooledWord } from './wordPool'
 import { describe, expect, it } from 'vitest'
-import type { WordList } from './types'
+import { makeList, pair } from '../test/fixtures/words'
 import { type AppAction, type AppState, initialState, reduce } from './appMachine'
 
-const list: WordList = {
-  id: 'a',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'p1', col1: 'daughter', col2: 'dochter' },
-    { id: 'p2', col1: 'son', col2: 'zoon' },
-  ],
+const list = makeList({
+  pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 // Note the explicit arrow: passing `reduce` directly to Array.prototype.reduce
 // would hand the array index to reduce's third parameter (rng).

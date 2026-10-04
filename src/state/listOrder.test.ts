@@ -1,18 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { makeList } from '../test/fixtures/words'
 import { orderLists, readListOrder, writeListOrder } from './listOrder'
 import type { WordList } from './types'
 
-const list = (id: string, name: string): WordList => ({
-  id,
-  name,
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'manual',
-  pairs: [],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-})
+const list = (id: string, name: string): WordList =>
+  makeList({ id, name, langSource: 'manual', pairs: [], createdAt: 1, updatedAt: 1 })
 
 describe('orderLists', () => {
   const lists = [list('1', 'dutch food'), list('2', 'Animals'), list('3', 'Lesson 10'), list('4', 'Lesson 2')]

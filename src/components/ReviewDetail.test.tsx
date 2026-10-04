@@ -1,38 +1,30 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList, makeRecord, pair } from '../test/fixtures/words'
 import { ReviewDetail } from './ReviewDetail'
-import type { SessionRecord, WordList, WordPair } from '../state/types'
+import type { SessionRecord } from '../state/types'
 
-const pair = (id: string, col1: string, col2: string): WordPair => ({ id, col1, col2 })
-
-const list: WordList = {
+const list = makeList({
   id: 'l1',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
   pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
-
-const rec = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: 'r1',
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: 1,
-  wrong: 1,
-  total: 2,
-  pct: 50,
-  wrongPairs: [pair('p1', 'daughter', 'dochter')],
-  rightPairs: [pair('p2', 'son', 'zoon')],
-  finishedAt: Date.UTC(2026, 8, 4, 10, 30),
-  mode: 'full',
-  partial: false,
-  ...over,
 })
+
+const rec = (over: Partial<SessionRecord> = {}): SessionRecord =>
+  makeRecord({
+    id: 'r1',
+    listId: 'l1',
+    right: 1,
+    wrong: 1,
+    total: 2,
+    pct: 50,
+    wrongPairs: [pair('p1', 'daughter', 'dochter')],
+    rightPairs: [pair('p2', 'son', 'zoon')],
+    finishedAt: Date.UTC(2026, 8, 4, 10, 30),
+    ...over,
+  })
 
 const setup = (over: Partial<Parameters<typeof ReviewDetail>[0]> = {}) => {
   const onPractiseMisses = vi.fn()

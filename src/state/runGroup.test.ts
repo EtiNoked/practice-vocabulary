@@ -1,21 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { makeRecord } from '../test/fixtures/words'
 import { groupKey, groupRuns, type RunGroup } from './runGroup'
 import { bandBorder } from './scoreBand'
 import type { SessionRecord } from './types'
 
-const record = (over: Partial<SessionRecord> & Pick<SessionRecord, 'id'>): SessionRecord => ({
-  listId: 'A',
-  listName: 'List A',
-  right: 1,
-  wrong: 0,
-  total: 1,
-  pct: 100,
-  wrongPairs: [],
-  finishedAt: 1000,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+const record = (over: Partial<SessionRecord> & Pick<SessionRecord, 'id'>): SessionRecord =>
+  makeRecord({ listId: 'A', listName: 'List A', finishedAt: 1000, ...over })
 
 describe('groupKey', () => {
   it('is the record id when there is no run — every legacy record is a group of one', () => {

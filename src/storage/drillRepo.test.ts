@@ -1,25 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from '../test/fixtures/words'
 import { createSession, mark, reveal } from '../state/session'
 import { runFromList, type DrillRun } from '../state/drillRun'
 import type { PooledWord } from '../state/wordPool'
-import type { Session, WordList } from '../state/types'
+import type { Session } from '../state/types'
 import { DRILL_STORAGE_KEY, SCHEMA_VERSION, TTL_MS, drillRepo } from './drillRepo'
 
-const list: WordList = {
+const list = makeList({
   id: 'l1',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'p1', col1: 'daughter', col2: 'dochter' },
-    { id: 'p2', col1: 'son', col2: 'zoon' },
-    { id: 'p3', col1: 'uncle', col2: 'oom' },
-  ],
+  pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon'), pair('p3', 'uncle', 'oom')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 const noShuffle = () => 0.999999999
 

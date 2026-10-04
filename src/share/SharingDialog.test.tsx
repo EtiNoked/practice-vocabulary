@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from '../test/fixtures/words'
 import type { ListMember, WordList } from '../state/types'
 import { joinUrl, LINK_LIFETIME_MS } from './links'
 import SharingDialog from './SharingDialog'
@@ -18,26 +19,20 @@ const member = (role: ListMember['role'], name: string, joinedAt: number): ListM
 })
 
 function sharedList(members: Record<string, ListMember>): WordList {
-  return {
+  return makeList({
     id: 'l1',
     name: 'French verbs',
-    col1Lang: 'en',
     col2Lang: 'fr',
-    langSource: 'header',
-    pairs: [
-      { id: 'p1', col1: 'to be', col2: 'être' },
-      { id: 'p2', col1: 'to have', col2: 'avoir' },
-    ],
+    pairs: [pair('p1', 'to be', 'être'), pair('p2', 'to have', 'avoir')],
     createdAt: 1,
     updatedAt: 1,
-    origin: 'manual',
     sharing: {
       ownerUid: 'owner',
       memberUids: Object.keys(members),
       members,
       updatedBy: 'owner',
     },
-  }
+  })
 }
 
 const privateList = sharedList({ owner: member('owner', 'Eti', 1) })

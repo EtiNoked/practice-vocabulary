@@ -1,21 +1,16 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeGameRecord } from '../test/fixtures/words'
 import { GamesScreen } from './GamesScreen'
-import type { GameRecord } from '../game/types'
 
-const record: GameRecord = {
-  id: 'g1',
+const record = makeGameRecord({
   finishedAt: Date.now(),
   listIds: ['a'],
   listNames: ['Lesson 3'],
-  source: 'all',
   correct: 8,
-  asked: 10,
   points: 64,
-  available: 100,
-  partial: false,
-}
+})
 
 const setup = (over: Partial<Parameters<typeof GamesScreen>[0]> = {}) => {
   const onPlayGame = vi.fn()

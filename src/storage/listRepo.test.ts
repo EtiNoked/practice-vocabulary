@@ -1,19 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WordList } from '../state/types'
+import { makeList } from '../test/fixtures/words'
 import { MAX_LISTS, STORAGE_KEY, listRepo } from './listRepo'
-
-const makeList = (over: Partial<WordList> = {}): WordList => ({
-  id: 'a',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1000,
-  updatedAt: 1000,
-  origin: 'manual',
-  ...over,
-})
 
 beforeEach(() => localStorage.clear())
 

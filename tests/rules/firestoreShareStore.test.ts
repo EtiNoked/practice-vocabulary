@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { makeList as baseList, pair } from '../../src/test/fixtures/words'
 import type { FirebaseServices } from '../../src/auth/firebase'
 import { createFirestoreShareStore, readLink } from '../../src/share/firestoreShareStore'
 import type { Farewell, ShareLink } from '../../src/share/types'
@@ -52,21 +53,17 @@ function servicesFor(uid: string | null): FirebaseServices {
 const shareStore = (uid: string) => createFirestoreShareStore(servicesFor(uid), uid)
 const listStore = (uid: string) => createFirestoreListStore(servicesFor(uid), uid)
 
-const makeList = (over: Partial<WordList> = {}): WordList => ({
-  id: 'l1',
-  name: 'French verbs',
-  col1Lang: 'en',
-  col2Lang: 'fr',
-  langSource: 'manual',
-  pairs: [
-    { id: 'p1', col1: 'to be', col2: 'être' },
-    { id: 'p2', col1: 'to have', col2: 'avoir' },
-  ],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-  ...over,
-})
+const makeList = (over: Partial<WordList> = {}): WordList =>
+  baseList({
+    id: 'l1',
+    name: 'French verbs',
+    col2Lang: 'fr',
+    langSource: 'manual',
+    pairs: [pair('p1', 'to be', 'être'), pair('p2', 'to have', 'avoir')],
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  })
 
 function next<T>(subscribe: (cb: (v: T) => void) => () => void, predicate: (v: T) => boolean): Promise<T> {
   return new Promise((resolve, reject) => {

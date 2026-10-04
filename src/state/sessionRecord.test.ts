@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { makeList, pair } from '../test/fixtures/words'
 import { MAX_RIGHT_PAIRS, buildRunRecords, buildSessionRecord } from './sessionRecord'
 import { createSession, mark, seededRng } from './session'
 import { runFromList, type DrillRun } from './drillRun'
@@ -16,20 +17,12 @@ const noShuffle = () => 0
 
 const SUBJECT = { name: '3 lists', col1Lang: 'en', col2Lang: 'nl' } as const
 
-const list: WordList = {
+const list = makeList({
   id: 'l1',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'p1', col1: 'daughter', col2: 'dochter' },
-    { id: 'p2', col1: 'son', col2: 'zoon' },
-  ],
+  pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 const full = () => {
   let s = createSession(list.pairs, seededRng(1), list.id)

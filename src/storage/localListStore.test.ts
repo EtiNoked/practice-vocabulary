@@ -1,52 +1,12 @@
 import type { GameRecord } from '../game/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeGameRecord, makeList, makeRecord } from '../test/fixtures/words'
+
+const aGameRecord = (over: Partial<GameRecord> = {}): GameRecord => makeGameRecord({ results: [], ...over })
 import { createLocalListStore } from './localListStore'
 import { listRepo } from './listRepo'
 import { SESSION_STORAGE_KEY, MAX_RECORDS } from './sessionRepo'
 import type { SessionRecord, WordList } from '../state/types'
-
-const aGameRecord = (over: Partial<GameRecord> = {}): GameRecord => ({
-  id: 'g1',
-  finishedAt: 1000,
-  listIds: ['l1'],
-  listNames: ['Food'],
-  source: 'all',
-  correct: 7,
-  asked: 10,
-  points: 52,
-  available: 100,
-  results: [],
-  partial: false,
-  ...over,
-})
-
-const makeList = (over: Partial<WordList> = {}): WordList => ({
-  id: 'a',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1000,
-  updatedAt: 1000,
-  origin: 'manual',
-  ...over,
-})
-
-const makeRecord = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: 's1',
-  listId: 'a',
-  listName: 'Lesson 3',
-  right: 1,
-  wrong: 0,
-  total: 1,
-  pct: 100,
-  wrongPairs: [],
-  finishedAt: 2000,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
 
 beforeEach(() => localStorage.clear())
 
