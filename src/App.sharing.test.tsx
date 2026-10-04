@@ -142,6 +142,85 @@ describe('a shared list on My lists', () => {
   })
 })
 
+/**
+ * Deleting a list other people are in (016 D-11).
+ *
+ * The one destructive action in the app that reaches past the person taking it, so the
+ * question it asks has to say so: how many other people lose the list, and that they are
+ * not simply losing it — a farewell holds it as they last saw it, and they are offered a
+ * copy. `firestoreListStore`'s emulator suite proves those farewells are actually written;
+ * what is checked here is that the user is told before any of it happens.
+ */
+describe('the owner deleting a shared list', () => {
+  /** The same list, but mine — so the others are the people who would lose it. */
+  const myList = (...others: string[]) =>
+    sharedList({
+      sharing: {
+        ownerUid: 'eti',
+        memberUids: ['eti', ...others],
+        members: {
+          eti: member('owner', 'Eti'),
+          ...Object.fromEntries(others.map((uid) => [uid, member('editor', uid)])),
+        },
+        updatedBy: 'eti',
+      },
+    })
+
+  const tapDelete = async (list: WordList) => {
+    hooks.store = createMemoryStore([list])
+    const user = userEvent.setup()
+    renderApp(signedInStore(account))
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    return user
+  }
+
+  it('names how many other people lose it, and what they are offered instead', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await tapDelete(myList('dana', 'sam'))
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Delete “French verbs” for everyone? 2 other people will lose it and be offered a copy.',
+    )
+  })
+
+  // One person is a person. A question that reads "1 other people" is the kind of thing
+  // that makes someone doubt the sentence rather than answer it.
+  it('counts a single other member as one person', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await tapDelete(myList('dana'))
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Delete “French verbs” for everyone? 1 other person will lose it and be offered a copy.',
+    )
+  })
+
+  /*
+   * Nobody else is in it, so there is nobody to warn about — the long question would be
+   * asking the user to think about a consequence that does not exist.
+   */
+  it('asks the plain question for a list nobody else is in', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await tapDelete(myList())
+
+    expect(confirm).toHaveBeenCalledWith('Delete “French verbs”?')
+  })
+
+  it('keeps the list for everyone when the question is declined', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await tapDelete(myList('dana', 'sam'))
+
+    expect(screen.getByText('French verbs')).toBeInTheDocument()
+  })
+
+  it('removes it on OK', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await tapDelete(myList('dana', 'sam'))
+
+    await waitFor(() => expect(screen.queryByText('French verbs')).not.toBeInTheDocument())
+  })
+})
+
 describe('saving over someone else’s newer edit (016 D-8)', () => {
   async function openEditor(user: ReturnType<typeof userEvent.setup>) {
     await goTo(user, 'My lists')
