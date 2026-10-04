@@ -482,41 +482,32 @@ describe('duplicate words', () => {
 })
 
 describe('sorting the words A to Z', () => {
-  const words = () => cells().filter((c) => c.dataset.cell === 'col1').map((c) => (c as HTMLInputElement).value)
+  const spoken = () => cells().filter((c) => c.dataset.cell === 'col2').map((c) => (c as HTMLInputElement).value)
 
-  it('sorts by the first language on request, and only then', async () => {
-    const { user } = setup({
-      initialRows: [
-        { col1: 'pear', col2: 'peer' },
-        { col1: 'Apple', col2: 'appel' },
-        { col1: 'banana', col2: 'banaan' },
-      ],
-    })
-    expect(words()).toEqual(['pear', 'Apple', 'banana'])
-    await user.selectOptions(screen.getByLabelText('Sort the words A to Z'), 'col1')
-    expect(words()).toEqual(['Apple', 'banana', 'pear'])
-  })
-
-  it('can sort by the second language instead, keeping each pair together', async () => {
+  it('sorts by column 2, the word read aloud, on request and only then, keeping pairs together', async () => {
     const { user } = setup({
       initialRows: [
         { col1: 'sun', col2: 'zon' },
-        { col1: 'apple', col2: 'appel' },
+        { col1: 'apple', col2: 'Appel' },
+        { col1: 'banana', col2: 'banaan' },
       ],
     })
-    await user.selectOptions(screen.getByLabelText('Sort the words A to Z'), 'col2')
-    expect(words()).toEqual(['apple', 'sun'])
+    expect(spoken()).toEqual(['zon', 'Appel', 'banaan'])
+    await user.click(screen.getByRole('button', { name: 'Sort A to Z' }))
+    expect(spoken()).toEqual(['Appel', 'banaan', 'zon'])
+    const answers = cells().filter((c) => c.dataset.cell === 'col1').map((c) => (c as HTMLInputElement).value)
+    expect(answers.slice(0, 3)).toEqual(['apple', 'banana', 'sun'])
   })
 
   it('saves the sorted order', async () => {
     const { user, onConfirm } = setup({
       initialRows: [
-        { col1: 'b', col2: 'x' },
-        { col1: 'a', col2: 'y' },
+        { col1: 'x', col2: 'b' },
+        { col1: 'y', col2: 'a' },
       ],
     })
-    await user.selectOptions(screen.getByLabelText('Sort the words A to Z'), 'col1')
+    await user.click(screen.getByRole('button', { name: 'Sort A to Z' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onConfirm.mock.calls[0]![0].pairs.map((p: { col1: string }) => p.col1)).toEqual(['a', 'b'])
+    expect(onConfirm.mock.calls[0]![0].pairs.map((p: { col2: string }) => p.col2)).toEqual(['a', 'b'])
   })
 })
