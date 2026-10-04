@@ -1,4 +1,5 @@
 import type { FirebaseServices } from './firebase'
+import { errorCode } from './firebaseError'
 import type { DeleteOutcome } from './types'
 import { releaseAllLists } from '../storage/listEndings'
 
@@ -59,14 +60,6 @@ export async function purgeUserData(services: FirebaseServices, uid: string): Pr
     await deleteCollection(services, `users/${uid}/${collection}`)
   }
   await services.fs.deleteDoc(services.fs.doc(services.db, 'users', uid))
-}
-
-function errorCode(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code: unknown }).code
-    if (typeof code === 'string') return code
-  }
-  return ''
 }
 
 /**

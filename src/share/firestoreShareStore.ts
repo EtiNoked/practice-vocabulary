@@ -1,40 +1,11 @@
 import type { FirebaseServices } from '../auth/firebase'
+import { errorCode } from '../auth/firebaseError'
 import type { ListMember, WordList } from '../state/types'
-import { LISTS, selfMember, soleOwner, toListDoc, toStoreError } from '../storage/firestoreListStore'
+import { LISTS, selfMember, soleOwner, toListDoc } from '../storage/firestoreListStore'
+import { createTracker, toStoreError, toWriteResult, write } from '../storage/firestoreAdapter'
 import { endListForEveryone, FAREWELLS, farewellDoc, farewellId, SHARE_LINKS, snapshotOf } from '../storage/listEndings'
-import type { Unsubscribe, WriteResult } from '../storage/types'
 import { linkStatus, newLinkCode } from './links'
 import type { Farewell, JoinOutcome, ShareLink, ShareStore } from './types'
-
-function errorCode(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code: unknown }).code
-    if (typeof code === 'string') return code
-  }
-  return ''
-}
-
-function toWriteResult(error: unknown): WriteResult {
-  switch (errorCode(error)) {
-    case 'permission-denied':
-      return { ok: false, reason: 'permission' }
-    case 'unavailable':
-      return { ok: false, reason: 'offline' }
-    case 'not-found':
-      return { ok: false, reason: 'missing' }
-    default:
-      return { ok: false, reason: 'network' }
-  }
-}
-
-async function write(fn: () => Promise<void>): Promise<WriteResult> {
-  try {
-    await fn()
-    return { ok: true }
-  } catch (error) {
-    return toWriteResult(error)
-  }
-}
 
 /** A Firestore Timestamp, a pending server timestamp (null), or already a number. */
 function millis(value: unknown): number {
@@ -61,16 +32,8 @@ export async function readLink(services: FirebaseServices, code: string): Promis
 
 export function createFirestoreShareStore(services: FirebaseServices, uid: string): ShareStore {
   const { db, fs } = services
-  let detachers: Unsubscribe[] = []
+  const { track, detachAll } = createTracker()
   let disposed = false
-
-  function track(detach: Unsubscribe): Unsubscribe {
-    detachers.push(detach)
-    return () => {
-      detach()
-      detachers = detachers.filter((d) => d !== detach)
-    }
-  }
 
   const listRef = (id: string) => fs.doc(db, LISTS, id)
   const myName = () => services.auth?.currentUser?.displayName ?? null
@@ -266,8 +229,7 @@ export function createFirestoreShareStore(services: FirebaseServices, uid: strin
 
     async dispose() {
       disposed = true
-      detachers.forEach((d) => d())
-      detachers = []
+      detachAll()
     },
   }
 }

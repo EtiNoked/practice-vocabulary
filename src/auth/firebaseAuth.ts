@@ -1,4 +1,5 @@
 import { deleteAccount, reauthenticateAndDelete } from './deleteAccount'
+import { errorCode } from './firebaseError'
 import { clearFirestoreCache, loadFirebase } from './firebase'
 import {
   writeAuthHint,
@@ -7,15 +8,6 @@ import {
   type DeleteOutcome,
   type SignInOutcome,
 } from './types'
-
-/** Firebase errors carry a string `code`; every branch below keys off it. */
-function errorCode(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code: unknown }).code
-    if (typeof code === 'string') return code
-  }
-  return ''
-}
 
 /** Keep only the four fields the app uses. The SDK user carries far more. */
 function toAuthUser(user: {
