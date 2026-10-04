@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ListEditor } from './ListEditor'
 import { cell } from '../test/cells'
 
@@ -636,5 +636,245 @@ describe('sorting the words A to Z', () => {
     await user.click(screen.getByRole('button', { name: 'Sort A to Z' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onConfirm.mock.calls[0]![0].pairs.map((p: { col2: string }) => p.col2)).toEqual(['a', 'b'])
+  })
+})
+
+/**
+ * Translating a word.
+ *
+ * The browser's on-device Translator API stands in for the real thing. It is absent
+ * in jsdom, which is also the state every Safari and Firefox user is in — so the
+ * first test here is that the editor looks untouched without it.
+ */
+describe('translation suggestions', () => {
+  const installTranslator = (
+    translateFn: (text: string) => Promise<string> = async (t) => `<${t}>`,
+  ) => {
+    const api = {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(async (opts: { monitor?: (m: unknown) => void }) => {
+        opts.monitor?.({ addEventListener: () => {} })
+        return { translate: translateFn }
+      }),
+    }
+    Object.assign(globalThis, { Translator: api })
+    return api
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'Translator')
+  })
+
+  const translateButtons = () => screen.queryAllByRole('button', { name: /^translate row/i })
+
+  it('offers nothing in a browser without the API', async () => {
+    setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    // An await so a promise-resolved button would have had its chance to appear.
+    await screen.findByRole('button', { name: 'Save' })
+    expect(translateButtons()).toHaveLength(0)
+  })
+
+  it('offers a translate button per row once the browser confirms the pair', async () => {
+    installTranslator()
+    setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await screen.findAllByRole('button', { name: /^translate row/i })
+    expect(translateButtons().length).toBeGreaterThan(0)
+  })
+
+  it('hides it when the browser cannot do that pair', async () => {
+    const api = installTranslator()
+    api.availability.mockResolvedValue('unavailable')
+    setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await screen.findByRole('button', { name: 'Save' })
+    expect(translateButtons()).toHaveLength(0)
+  })
+
+  /*
+   * A list that explains its words in their own language has nothing to translate,
+   * and "Dutch into Dutch" is not a question worth putting to the browser.
+   */
+  it('hides it on a list whose two columns are the same language', async () => {
+    installTranslator()
+    const { user } = setup({ initialRows: [{ col1: 'daughter', col2: 'dochter' }] })
+    // Present first, so what follows tests the withdrawal and not just its absence.
+    await screen.findAllByRole('button', { name: /^translate row/i })
+
+    // Both columns Dutch: a word against an explanation of it, which this app supports
+    // and which has nothing to translate.
+    await user.selectOptions(screen.getByLabelText('Meaning language'), 'nl')
+    await user.selectOptions(screen.getByLabelText('Word language'), 'nl')
+    expect(translateButtons()).toHaveLength(0)
+  })
+
+  it('suggests a translation without writing it into the cell', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+
+    expect(await screen.findByText('daughter')).toBeInTheDocument()
+    // The cell is untouched until Use is clicked.
+    expect(cell(0, 'col1').value).toBe('')
+  })
+
+  it('fills the cell when the suggestion is used', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await user.click(await screen.findByRole('button', { name: /use the suggestion/i }))
+
+    expect(cell(0, 'col1').value).toBe('daughter')
+    expect(screen.queryByRole('button', { name: /use the suggestion/i })).not.toBeInTheDocument()
+  })
+
+  it('leaves the cell alone when the suggestion is dismissed', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await user.click(await screen.findByRole('button', { name: /dismiss the suggestion/i }))
+
+    expect(cell(0, 'col1').value).toBe('')
+    expect(screen.queryByText('daughter')).not.toBeInTheDocument()
+  })
+
+  /*
+   * Column 2 is the word being learned and column 1 is what it means, so a filled
+   * column 2 translates INTO column 1 — which is what fills the blank when the
+   * foreign words were typed first.
+   */
+  it('translates the word into the meaning column', async () => {
+    const seen: string[] = []
+    installTranslator(async (text) => {
+      seen.push(text)
+      return 'daughter'
+    })
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await user.click(await screen.findByRole('button', { name: /use the suggestion/i }))
+
+    expect(seen).toEqual(['dochter'])
+    expect(cell(0, 'col1').value).toBe('daughter')
+  })
+
+  it('runs the other way when only the meaning is filled', async () => {
+    const seen: string[] = []
+    installTranslator(async (text) => {
+      seen.push(text)
+      return 'dochter'
+    })
+    const { user } = setup({ initialRows: [{ col1: 'daughter', col2: '' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await user.click(await screen.findByRole('button', { name: /use the suggestion/i }))
+
+    expect(seen).toEqual(['daughter'])
+    expect(cell(0, 'col2').value).toBe('dochter')
+  })
+
+  // Both sides filled is a check of the answer, not a gap to fill.
+  it('says so when the suggestion is what the row already has', async () => {
+    installTranslator(async () => 'Daughter')
+    const { user } = setup({ initialRows: [{ col1: 'daughter', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+
+    expect(await screen.findByText(/the same as what you have/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /use the suggestion/i })).not.toBeInTheDocument()
+  })
+
+  it('has nothing to translate on an empty row', async () => {
+    installTranslator()
+    setup({ initialRows: [{ col1: '', col2: '' }] })
+    const buttons = await screen.findAllByRole('button', { name: /^translate row/i })
+    expect(buttons[0]).toBeDisabled()
+  })
+
+  it('tells the user when it could not translate, and leaves the row alone', async () => {
+    installTranslator(async () => {
+      throw new Error('model gone')
+    })
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+
+    expect(await screen.findByText(/could not translate/i)).toBeInTheDocument()
+    expect(cell(0, 'col1').value).toBe('')
+  })
+
+  /*
+   * A suggestion names a row by INDEX, and deleting a row above it shifts every
+   * index below. Left standing, Use would have written the word into the wrong row.
+   */
+  it('drops a pending suggestion when a row is deleted', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({
+      initialRows: [
+        { col1: 'son', col2: 'zoon' },
+        { col1: '', col2: 'dochter' },
+      ],
+    })
+    const buttons = await screen.findAllByRole('button', { name: /^translate row/i })
+    await user.click(buttons[1]!)
+    await screen.findByRole('button', { name: /use the suggestion/i })
+
+    await user.click(screen.getAllByRole('button', { name: /delete row/i })[0]!)
+    expect(screen.queryByRole('button', { name: /use the suggestion/i })).not.toBeInTheDocument()
+  })
+
+  it('drops a pending suggestion when the rows are sorted', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({
+      initialRows: [
+        { col1: 'sun', col2: 'zon' },
+        { col1: '', col2: 'dochter' },
+      ],
+    })
+    const buttons = await screen.findAllByRole('button', { name: /^translate row/i })
+    await user.click(buttons[1]!)
+    await screen.findByRole('button', { name: /use the suggestion/i })
+
+    await user.click(screen.getByRole('button', { name: 'Sort A to Z' }))
+    expect(screen.queryByRole('button', { name: /use the suggestion/i })).not.toBeInTheDocument()
+  })
+
+  it('drops a pending suggestion when the columns are swapped', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await screen.findByRole('button', { name: /use the suggestion/i })
+
+    await user.click(screen.getByRole('button', { name: /swap columns/i }))
+    expect(screen.queryByRole('button', { name: /use the suggestion/i })).not.toBeInTheDocument()
+  })
+
+  // An accepted suggestion is an ordinary edit in every respect.
+  it('an accepted suggestion marks the list unsaved', async () => {
+    installTranslator(async () => 'daughter')
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await user.click(await screen.findByRole('button', { name: /use the suggestion/i }))
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(confirmSpy).toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('drops a pending suggestion when a language is changed', async () => {
+    installTranslator(async () => 'daughter')
+    const { user } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await screen.findByRole('button', { name: /use the suggestion/i })
+
+    await user.selectOptions(screen.getByLabelText('Meaning language'), 'fr')
+    expect(screen.queryByRole('button', { name: /use the suggestion/i })).not.toBeInTheDocument()
+  })
+
+  it('saves an accepted suggestion as a pair', async () => {
+    installTranslator(async () => 'daughter')
+    const { user, onConfirm } = setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await user.click((await screen.findAllByRole('button', { name: /^translate row/i }))[0]!)
+    await user.click(await screen.findByRole('button', { name: /use the suggestion/i }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onConfirm.mock.calls[0]![0].pairs).toEqual([
+      expect.objectContaining({ col1: 'daughter', col2: 'dochter' }),
+    ])
   })
 })
