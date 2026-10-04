@@ -11,7 +11,6 @@ import type { WordList } from '../state/types'
 const loadFirebase = vi.fn()
 vi.mock('../auth/firebase', () => ({
   loadFirebase: () => loadFirebase(),
-  resetFirebaseForTests: () => {},
 }))
 
 const disposeSpy = vi.fn()
@@ -30,7 +29,6 @@ vi.mock('./firestoreListStore', () => ({
     recordSession: async () => ({ ok: true }),
     dispose: async () => disposeSpy(uid),
   }),
-  stripUndefined: <T,>(v: T) => v,
   legacyMoved: () => legacyMovedFlag,
 }))
 

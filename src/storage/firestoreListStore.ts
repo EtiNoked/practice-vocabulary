@@ -8,8 +8,6 @@ import { MAX_GAME_RECORDS } from './gameRepo'
 import { endListForEveryone } from './listEndings'
 import { stripUndefined } from './stripUndefined'
 
-export { stripUndefined }
-
 function errorCode(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const code = (error as { code: unknown }).code

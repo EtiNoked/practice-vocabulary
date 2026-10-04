@@ -170,8 +170,3 @@ export async function clearFirestoreCache(): Promise<void> {
     /* Another tab has it open, or the browser refused. Not worth failing over. */
   }
 }
-
-/** Test seam. Never call from application code. */
-export function resetFirebaseForTests(): void {
-  servicesPromise = null
-}
