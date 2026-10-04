@@ -64,6 +64,31 @@ describe('typing a list and practicing it', () => {
     expect(screen.getByText(/1 \/ 1/)).toBeInTheDocument()
     expect(screen.getByText(/\(100%\)/)).toBeInTheDocument()
   })
+
+  /*
+   * 017, end to end and in the user's own terms: the box you fill in FIRST is the word the
+   * drill reads out. ListEditor.test.tsx pins the editor's order on its own; this is the only
+   * test that carries that order all the way through saving, into a drill, and out of the
+   * speech API — which is the chain the feature is actually about.
+   *
+   * Deliberately typed by POSITION rather than through `cell()`, unlike every other test in
+   * this file. Position is the subject here.
+   */
+  it('speaks the word that was typed in the first box', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: /new list/i }))
+
+    const boxes = [...document.querySelectorAll<HTMLInputElement>('[data-cell]')]
+    await user.type(boxes[0]!, 'dochter')
+    await user.type(boxes[1]!, 'daughter')
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+
+    expect(speechCalls.filter((c) => c.type === 'speak').map((c) => c.text)).toEqual(['dochter'])
+  })
 })
 
 describe('practicing a saved list', () => {
@@ -327,8 +352,10 @@ describe('practicing a Dutch/French list', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /edit/i }))
-    expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
-    expect((screen.getByLabelText(/column 2 language/i) as HTMLSelectElement).value).toBe('fr')
+    // col1Lang is the MEANING selector and col2Lang the WORD one — the editor draws the
+    // word first since 017, and this list is stored col1Lang 'nl', col2Lang 'fr'.
+    expect((screen.getByLabelText(/meaning language/i) as HTMLSelectElement).value).toBe('nl')
+    expect((screen.getByLabelText(/word language/i) as HTMLSelectElement).value).toBe('fr')
     expect(screen.queryByText(/guessed/i)).not.toBeInTheDocument()
   })
 })

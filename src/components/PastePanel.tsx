@@ -66,7 +66,7 @@ export function PastePanel({ onAdd }: Props) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={5}
-        placeholder={'daughter\tdochter\nto die\tdoodgaan'}
+        placeholder={'dochter\tdaughter\ndoodgaan\tto die'}
         className="mt-1 w-full rounded border border-line-strong p-2 font-mono text-sm"
       />
 

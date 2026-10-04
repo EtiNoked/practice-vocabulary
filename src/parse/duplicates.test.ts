@@ -9,7 +9,7 @@ describe('findDuplicates', () => {
     expect([...found]).toEqual([[1, '“Slecht” is already in row 1.']])
   })
 
-  it('leaves column 1 alone, and never matches it against column 2', () => {
+  it('leaves the meaning alone, and never matches it against the word', () => {
     const found = findDuplicates(rows(['bad', 'slecht'], ['bad', 'kwaad'], ['slecht', 'x']))
     expect(found.size).toBe(0)
   })

@@ -6,7 +6,22 @@
  * built (see plan.md § Appendix), it attaches here and nothing else changes.
  */
 export interface RawRow {
+  /**
+   * The MEANING. Drawn SECOND in the editor, and revealed as the answer in a drill.
+   */
   col1: string
+  /**
+   * The WORD BEING LEARNT: spoken by every drill and game, tested, sorted by, and
+   * checked for duplicates. Drawn FIRST in the editor (017), and the first field of a
+   * pasted or uploaded line.
+   *
+   * THE NAMES NO LONGER TRACK POSITION, and that is deliberate. 017 flipped which input
+   * is drawn first and nothing else — not one stored byte moved, so no list had to be
+   * migrated, no schema bumped and nothing was ever asked of a user, including the owners
+   * of shared lists. Renaming these two to `word` and `meaning` would have rippled through
+   * some thirty-five modules to buy nothing anyone can see; `data-cell` carries the field
+   * name into the DOM, and that is what every test addresses a cell by.
+   */
   col2: string
   /**
    * OCR confidence, 0-100. Never set in v1 — it exists so the editor's

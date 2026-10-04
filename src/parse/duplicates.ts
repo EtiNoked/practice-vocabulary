@@ -2,12 +2,13 @@ import { foldText } from '../state/missedWords'
 import type { RawRow } from './types'
 
 /**
- * For each row whose column 2 repeats a word already in an EARLIER row, the warning to show
- * under it, keyed by the row's index in `rows`.
+ * For each row whose WORD repeats one already in an EARLIER row, the warning to show under
+ * it, keyed by the row's index in `rows`.
  *
- * Only column 2 is checked, the word being learnt and spoken aloud: two rows ending in the
- * same word are the same card twice. Column 1 is left alone, because one word in the language
- * the user already speaks can quite reasonably prompt several different words.
+ * Only the word column is checked — `col2`, the one spoken aloud and drawn first: two rows
+ * holding the same word are the same card twice. The meaning is left alone, because one word
+ * in the language the user already speaks can quite reasonably explain several different
+ * words.
  *
  * Compared with `foldText`, the same folding every other "is this the same word" question in
  * the app uses: case, surrounding spaces and runs of spaces do not count, so "Bad" and "bad "

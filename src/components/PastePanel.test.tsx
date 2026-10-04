@@ -34,14 +34,29 @@ describe('preview', () => {
   })
 })
 
-describe('separator handling', () => {
-  it('keeps commas inside column 2 intact', async () => {
+describe('which field is the word', () => {
+  it('hands the first field over as the word being learnt', async () => {
     const { user, onAdd } = setup()
-    await pasteInto(user, fx.COMMA_WITH_COMMAS_IN_COL2)
+    await pasteInto(user, 'dochter\tdaughter')
+    await user.click(screen.getByRole('button', { name: /add to list/i }))
+    expect(onAdd.mock.calls[0]![0][0]).toEqual({ col2: 'dochter', col1: 'daughter' })
+  })
+
+  it('shows the word first in the example it offers', () => {
+    setup()
+    const box = screen.getByRole('textbox', { name: /paste/i }) as HTMLTextAreaElement
+    expect(box.placeholder.split('\n')[0]).toBe('dochter\tdaughter')
+  })
+})
+
+describe('separator handling', () => {
+  it('keeps commas inside the second field intact', async () => {
+    const { user, onAdd } = setup()
+    await pasteInto(user, fx.COMMA_WITH_COMMAS_IN_SECOND_FIELD)
     await user.click(screen.getByRole('button', { name: /add to list/i }))
     expect(onAdd.mock.calls[0]![0][0]).toEqual({
-      col1: 'niece',
-      col2: "My sibling's daughter, my niece",
+      col2: 'niece',
+      col1: "My sibling's daughter, my niece",
     })
   })
 
@@ -50,8 +65,8 @@ describe('separator handling', () => {
     await pasteInto(user, fx.QUOTED_CSV)
     await user.click(screen.getByRole('button', { name: /add to list/i }))
     expect(onAdd.mock.calls[0]![0][0]).toEqual({
-      col1: 'cousin (male, female)',
-      col2: 'neef, nicht',
+      col2: 'cousin (male, female)',
+      col1: 'neef, nicht',
     })
   })
 

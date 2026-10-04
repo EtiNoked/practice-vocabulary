@@ -51,8 +51,9 @@ function toLines(text: string): string[] {
 }
 
 /**
- * Split a line at the first occurrence of `pattern`. Everything before is column 1,
- * everything after is column 2 — including further occurrences of the separator.
+ * Split a line at the first occurrence of `pattern`. Everything before is the first field,
+ * everything after is the second — including further occurrences of the separator.
+ * `parseDelimited` is what decides which field is the word and which is the meaning.
  *
  * This is the behaviour that keeps "niece,My sibling's daughter, my niece" intact.
  * `String.split()` would produce three fields and lose the tail.
@@ -144,20 +145,26 @@ export function detectDelimiter(text: string): { delimiter: Delimiter | null; co
 }
 
 /**
- * Split delimited text into rows. A line that yields only one field becomes a row
- * with an empty column 2 rather than being dropped — the user needs to see it in
- * the editor to fix it.
+ * Split delimited text into rows.
+ *
+ * THE FIRST FIELD IS THE WORD BEING LEARNT, and so lands in `col2` — the field the drill
+ * speaks and tests, and the one the editor draws first (017). The remainder is its meaning
+ * and lands in `col1`. The names are historical; see `RawRow`.
+ *
+ * A line that yields only one field becomes a row with an empty MEANING rather than being
+ * dropped — the user needs to see it in the editor to fix it, and a bare list of words is a
+ * list of words, so the word is the half that survives.
  */
 export function parseDelimited(text: string, delimiter: Delimiter): RawRow[] {
   const pattern = PATTERNS[delimiter]
   return toLines(text).map((line) => {
     const quoted = delimiter === 'comma' ? parseQuotedCsvLine(line) : null
     if (quoted) {
-      return { col1: (quoted[0] ?? '').trim(), col2: quoted.slice(1).join(',').trim() }
+      return { col2: (quoted[0] ?? '').trim(), col1: quoted.slice(1).join(',').trim() }
     }
     const split = splitOnce(line, pattern)
     return split
-      ? { col1: split[0].trim(), col2: split[1].trim() }
-      : { col1: line.trim(), col2: '' }
+      ? { col2: split[0].trim(), col1: split[1].trim() }
+      : { col2: line.trim(), col1: '' }
   })
 }

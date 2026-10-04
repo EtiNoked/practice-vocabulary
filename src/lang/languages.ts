@@ -133,7 +133,8 @@ export const PROFILES: Record<LangCode, LangProfile> = {
 /**
  * What to call each side of a card.
  *
- * Normally the two language names: the prompt is column 2 and the answer is column 1.
+ * Normally the two language names: the prompt is `col2` — the word column, drawn first in
+ * the editor — and the answer is `col1`.
  *
  * A list may have the SAME language on both sides — a Dutch word against a Dutch sentence
  * explaining it — and there the language name identifies nothing. Two headings both

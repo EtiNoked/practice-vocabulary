@@ -20,6 +20,95 @@ const setup = (props: Partial<Parameters<typeof ListEditor>[0]> = {}) => {
 }
 
 const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
+
+/**
+ * The word you practise comes first (017).
+ *
+ * Every assertion here is about ORDER, which is the one thing the rest of this suite
+ * deliberately does not look at — `cell(row, field)` exists precisely so that it cannot.
+ * So order is pinned once, here, and nowhere else.
+ *
+ * What is NOT asserted, because none of it moves: `col2` is still the word that is spoken,
+ * tested and sorted by, and `col1` is still its meaning. This feature flips where the two
+ * are DRAWN and nothing else.
+ */
+describe('column order', () => {
+  const drawn = () => [...document.querySelectorAll<HTMLInputElement>('[data-cell]')]
+
+  it('draws the spoken word first and its meaning second', () => {
+    setup()
+    expect(drawn().slice(0, 2).map((el) => el.dataset.cell)).toEqual(['col2', 'col1'])
+  })
+
+  it('names the two boxes by what they hold rather than by where they sit', () => {
+    setup()
+    expect(screen.getByLabelText('Row 1 word').dataset.cell).toBe('col2')
+    expect(screen.getByLabelText('Row 1 meaning').dataset.cell).toBe('col1')
+  })
+
+  it('heads the first column with the word and the second with its meaning', () => {
+    setup()
+    const word = screen.getByText('Word — spoken aloud')
+    const meaning = screen.getByText('Meaning — the answer')
+    // Node.DOCUMENT_POSITION_FOLLOWING === 4: `meaning` comes after `word`.
+    expect(word.compareDocumentPosition(meaning) & 4).toBeTruthy()
+  })
+
+  it('reads the badge word-first', () => {
+    setup({ initialLangs: { col1: 'en', col2: 'nl' }, initialLangSource: 'header' })
+    expect(screen.getByText(/Dutch → English/)).toBeInTheDocument()
+    expect(screen.queryByText(/English → Dutch/)).not.toBeInTheDocument()
+  })
+
+  it('offers the word language before the meaning language', () => {
+    setup({ initialLangs: { col1: 'en', col2: 'nl' }, initialLangSource: 'header' })
+    const word = screen.getByLabelText('Word language') as HTMLSelectElement
+    const meaning = screen.getByLabelText('Meaning language') as HTMLSelectElement
+    expect(word.value).toBe('nl')
+    expect(meaning.value).toBe('en')
+    expect(word.compareDocumentPosition(meaning) & 4).toBeTruthy()
+  })
+
+  /*
+   * The whole point of the feature, stated once end to end: what you type FIRST is what the
+   * drill will speak. `col2` is the field the drill speaks (StudyCard, TestCard, GameCloud),
+   * so this asserts the first box lands there.
+   */
+  it('saves what was typed first as the word that gets spoken', async () => {
+    const { user, onConfirm } = setup()
+    await user.type(drawn()[0]!, 'dochter')
+    await user.type(drawn()[1]!, 'daughter')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onConfirm.mock.calls[0]![0].pairs[0]).toMatchObject({ col2: 'dochter', col1: 'daughter' })
+  })
+
+  it('opens a list saved before the flip with its spoken word on the left', () => {
+    setup({
+      mode: 'update',
+      listId: 'x',
+      initialName: 'Lesson 3',
+      initialRows: [{ col1: 'daughter', col2: 'dochter' }],
+      initialLangs: { col1: 'en', col2: 'nl' },
+      initialLangSource: 'header',
+    })
+    expect(drawn()[0]!.value).toBe('dochter')
+    expect(drawn()[1]!.value).toBe('daughter')
+  })
+
+  it('still swaps contents and languages together', async () => {
+    const { user } = setup({
+      initialRows: [{ col1: 'daughter', col2: 'dochter' }],
+      initialLangs: { col1: 'en', col2: 'nl' },
+      initialLangSource: 'header',
+    })
+    await user.click(screen.getByRole('button', { name: 'Swap columns ⇄' }))
+    // The left box still holds whatever col2 holds, and col2 now holds the English.
+    expect(drawn()[0]!.value).toBe('daughter')
+    expect((screen.getByLabelText('Word language') as HTMLSelectElement).value).toBe('en')
+    expect((screen.getByLabelText('Meaning language') as HTMLSelectElement).value).toBe('nl')
+  })
+})
+
 describe('typing pairs', () => {
   it('starts with one empty row', () => {
     setup()
@@ -154,8 +243,10 @@ describe('confirming', () => {
 })
 
 describe('language selectors', () => {
-  const col1Select = () => screen.getByLabelText(/column 1 language/i) as HTMLSelectElement
-  const col2Select = () => screen.getByLabelText(/column 2 language/i) as HTMLSelectElement
+  // Named for the FIELD each one writes, not for where it sits — the meaning selector is
+  // drawn second since 017, and these names have to survive that.
+  const col1Select = () => screen.getByLabelText(/meaning language/i) as HTMLSelectElement
+  const col2Select = () => screen.getByLabelText(/word language/i) as HTMLSelectElement
 
   const NL_FR = [
     { col1: 'de deur', col2: 'la porte' },
@@ -280,7 +371,7 @@ describe('swapping columns', () => {
       ],
     })
     await user.click(swap())
-    expect((screen.getByLabelText(/column 1 language/i) as HTMLSelectElement).value).toBe('nl')
+    expect((screen.getByLabelText(/meaning language/i) as HTMLSelectElement).value).toBe('nl')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
     expect(list.pairs[0]).toMatchObject({ col1: 'dochter', col2: 'daughter' })
@@ -313,8 +404,10 @@ describe('swapping columns', () => {
  * to label the Dutch word "English" and read it in an English voice.
  */
 describe('reopening a saved list', () => {
-  const col1Select = () => screen.getByLabelText(/column 1 language/i) as HTMLSelectElement
-  const col2Select = () => screen.getByLabelText(/column 2 language/i) as HTMLSelectElement
+  // Named for the FIELD each one writes, not for where it sits — the meaning selector is
+  // drawn second since 017, and these names have to survive that.
+  const col1Select = () => screen.getByLabelText(/meaning language/i) as HTMLSelectElement
+  const col2Select = () => screen.getByLabelText(/word language/i) as HTMLSelectElement
 
   /** Dutch first, English second, and no signal in either — detection defaults. */
   const UNCALLABLE_NL_EN = [
@@ -362,7 +455,7 @@ describe('reopening a saved list', () => {
     await user.click(screen.getByRole('button', { name: /swap columns/i }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     const list = onConfirm.mock.calls[0]![0]
-    // Dutch moved to column 2 — the column that is spoken aloud — so the
+    // Dutch moved into `col2` — the word column, spoken aloud and drawn first — so the
     // languages have to move with it.
     expect(list.pairs[2]).toMatchObject({ col1: 'finger', col2: 'vinger' })
     expect(list.col1Lang).toBe('en')
@@ -433,6 +526,30 @@ describe('paste panel integration', () => {
     expect(screen.getByDisplayValue('zoon')).toBeInTheDocument()
     expect(screen.getByDisplayValue('oom')).toBeInTheDocument()
   })
+
+  /*
+   * The whole paste path, end to end, in the order a user sees it (017).
+   *
+   * This is the test the unit suite could not write: `parseDelimited` decides which field a
+   * pasted cell lands in and `detectLanguages` reads a header out of that same row, so the
+   * two have to agree about which field is "first". Assert them separately with hand-built
+   * rows and they can BOTH be flipped, cancel out, and leave a list labelled backwards with
+   * a green suite — which is exactly what happened while 017 was being built, and was caught
+   * by opening the app rather than by any test here.
+   */
+  it('takes the word language from the first cell of a pasted header row', async () => {
+    const { user } = setup()
+    await user.click(screen.getByRole('button', { name: /paste|import/i }))
+    await user.click(screen.getByRole('textbox', { name: /paste/i }))
+    await user.paste('Dutch\tEnglish\nzon\tsun\nappel\tapple')
+    await user.click(screen.getByRole('button', { name: /add to list/i }))
+
+    expect((screen.getByLabelText('Word language') as HTMLSelectElement).value).toBe('nl')
+    expect((screen.getByLabelText('Meaning language') as HTMLSelectElement).value).toBe('en')
+    expect(screen.getByText(/Dutch → English/)).toBeInTheDocument()
+    // The Dutch is in the first box of its row, not merely labelled Dutch somewhere.
+    expect(screen.getByDisplayValue('zon').dataset.cell).toBe('col2')
+  })
 })
 
 describe('the Save button', () => {
@@ -459,7 +576,7 @@ describe('duplicate words', () => {
     expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
   })
 
-  it('says nothing when only column 1 repeats, which two translations may fairly share', () => {
+  it('says nothing when only the meaning repeats, which two words may fairly share', () => {
     setup({
       initialRows: [
         { col1: 'bad', col2: 'slecht' },
@@ -494,7 +611,7 @@ describe('duplicate words', () => {
 describe('sorting the words A to Z', () => {
   const spoken = () => cells().filter((c) => c.dataset.cell === 'col2').map((c) => (c as HTMLInputElement).value)
 
-  it('sorts by column 2, the word read aloud, on request and only then, keeping pairs together', async () => {
+  it('sorts by the word column, read aloud and drawn first, on request and only then, keeping pairs together', async () => {
     const { user } = setup({
       initialRows: [
         { col1: 'sun', col2: 'zon' },

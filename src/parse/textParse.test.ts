@@ -12,7 +12,7 @@ describe('detectDelimiter', () => {
   })
 
   it('detects commas', () => {
-    expect(detectDelimiter(fx.COMMA_WITH_COMMAS_IN_COL2).delimiter).toBe('comma')
+    expect(detectDelimiter(fx.COMMA_WITH_COMMAS_IN_SECOND_FIELD).delimiter).toBe('comma')
   })
 
   it('detects semicolons', () => {
@@ -54,50 +54,79 @@ describe('detectDelimiter', () => {
   })
 })
 
+/**
+ * The first field is the word being learnt (017).
+ *
+ * Stated once, on its own, in the user's own terms — the rest of `parseDelimited`'s suite
+ * asserts field by field and would go on passing if the two were quietly exchanged.
+ *
+ * `col2` is the field the drill speaks and tests; this fixes WHICH side of a pasted line
+ * lands there, and the editor draws it first for the same reason.
+ */
+describe('parseDelimited — which field is the word', () => {
+  it('puts the first field in the word column and the second in the meaning column', () => {
+    expect(parseDelimited('dochter\tdaughter', 'tab')[0]).toEqual({
+      col2: 'dochter',
+      col1: 'daughter',
+    })
+  })
+
+  it('treats a line with only one field as a word still missing its meaning', () => {
+    expect(parseDelimited('hond', 'tab')[0]).toEqual({ col2: 'hond', col1: '' })
+  })
+
+  it('keeps everything after the first delimiter as the meaning', () => {
+    expect(parseDelimited("niece,My sibling's daughter, my niece", 'comma')[0]).toEqual({
+      col2: 'niece',
+      col1: "My sibling's daughter, my niece",
+    })
+  })
+})
+
 describe('parseDelimited', () => {
   it('splits a simple tab-separated list', () => {
     const rows = parseDelimited(fx.TAB_SIMPLE, 'tab')
     expect(rows).toHaveLength(5)
-    expect(rows[0]).toEqual({ col1: 'daughter', col2: 'dochter' })
-    expect(rows[3]).toEqual({ col1: 'family', col2: 'gezin; familie' })
+    expect(rows[0]).toEqual({ col2: 'daughter', col1: 'dochter' })
+    expect(rows[3]).toEqual({ col2: 'family', col1: 'gezin; familie' })
   })
 
   // Splitting on the FIRST delimiter only. `line.split(',')` would turn this into
   // three fields and silently lose the tail.
-  it('splits on the first delimiter only, keeping commas inside column 2', () => {
-    const rows = parseDelimited(fx.COMMA_WITH_COMMAS_IN_COL2, 'comma')
-    expect(rows[0]).toEqual({ col1: 'niece', col2: "My sibling's daughter, my niece" })
-    expect(rows[1]).toEqual({ col1: 'cousin', col2: "My aunt's child, my cousin" })
+  it('splits on the first delimiter only, keeping commas inside the second field', () => {
+    const rows = parseDelimited(fx.COMMA_WITH_COMMAS_IN_SECOND_FIELD, 'comma')
+    expect(rows[0]).toEqual({ col2: 'niece', col1: "My sibling's daughter, my niece" })
+    expect(rows[1]).toEqual({ col2: 'cousin', col1: "My aunt's child, my cousin" })
   })
 
   it('honours RFC 4180 quoting on the comma path', () => {
     const rows = parseDelimited(fx.QUOTED_CSV, 'comma')
-    expect(rows[0]).toEqual({ col1: 'cousin (male, female)', col2: 'neef, nicht' })
-    expect(rows[1]).toEqual({ col1: 'to look alike', col2: 'op elkaar lijken' })
+    expect(rows[0]).toEqual({ col2: 'cousin (male, female)', col1: 'neef, nicht' })
+    expect(rows[1]).toEqual({ col2: 'to look alike', col1: 'op elkaar lijken' })
   })
 
   it('splits on a spaced dash without eating hyphens inside words', () => {
     const rows = parseDelimited('great-grandmother - overgrootmoeder', 'dash')
-    expect(rows[0]).toEqual({ col1: 'great-grandmother', col2: 'overgrootmoeder' })
+    expect(rows[0]).toEqual({ col2: 'great-grandmother', col1: 'overgrootmoeder' })
   })
 
   it('splits on runs of two or more spaces', () => {
     const rows = parseDelimited(fx.MULTI_SPACE, 'spaces')
-    expect(rows[0]).toEqual({ col1: 'twins', col2: 'tweeling' })
-    expect(rows[1]).toEqual({ col1: 'sibling', col2: 'broer; zus' })
+    expect(rows[0]).toEqual({ col2: 'twins', col1: 'tweeling' })
+    expect(rows[1]).toEqual({ col2: 'sibling', col1: 'broer; zus' })
   })
 
   // Never drop a line the user typed — they need to see it to fix it.
   it('keeps a single-field line as an incomplete row', () => {
     const rows = parseDelimited(fx.SINGLE_FIELD_LINES, 'tab')
     expect(rows).toHaveLength(3)
-    expect(rows[1]).toEqual({ col1: 'justonewordhere', col2: '' })
+    expect(rows[1]).toEqual({ col2: 'justonewordhere', col1: '' })
   })
 
   it('strips a BOM and normalises CRLF line endings', () => {
     const rows = parseDelimited(fx.BOM_AND_CRLF, 'comma')
     expect(rows).toHaveLength(3)
-    expect(rows[0]).toEqual({ col1: 'daughter', col2: 'dochter' })
+    expect(rows[0]).toEqual({ col2: 'daughter', col1: 'dochter' })
   })
 
   it('drops trailing blank lines', () => {

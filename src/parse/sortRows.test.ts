@@ -5,7 +5,7 @@ const rows = (...pairs: Array<[string, string]>) => pairs.map(([col1, col2]) => 
 const col1s = (r: ReturnType<typeof rows>) => r.map((x) => x.col1)
 
 describe('sortRows', () => {
-  it('sorts by column 1, ignoring case and accents', () => {
+  it('sorts by col1, ignoring case and accents', () => {
     expect(col1s(sortRows(rows(['pear', 'peer'], ['Apple', 'appel'], ['égal', 'gelijk'], ['banana', 'banaan']), 'col1'))).toEqual([
       'Apple',
       'banana',
@@ -14,7 +14,7 @@ describe('sortRows', () => {
     ])
   })
 
-  it('can sort by column 2 instead', () => {
+  it('can sort by col2 instead', () => {
     expect(sortRows(rows(['a', 'zon'], ['b', 'appel']), 'col2').map((r) => r.col2)).toEqual(['appel', 'zon'])
   })
 
