@@ -321,9 +321,11 @@ describe('renaming and deleting a saved test', () => {
  *
  * Its rule, inherited from v1 and written down in `storage/messages.ts`, is that a failed
  * write must never read as "your list is gone" — so each of these asserts both halves:
- * the app says the change did not land, AND the thing it was about is still there and
- * still usable. `storage/messages.test.ts` pins the wording; these pin that the right
- * failure reaches the alert at all.
+ * the app says what did not happen, AND the thing it was about is still there and still
+ * usable. `storage/messages.test.ts` pins the wording across every reason and action;
+ * these pin that the right PAIR — this reason, this verb, this noun — reaches the alert.
+ * A message describing the wrong action is how the two drift apart without either suite
+ * noticing.
  */
 describe('when the device will not accept the write', () => {
   it('says a rename did not land, and keeps the list practisable', async () => {
@@ -335,13 +337,19 @@ describe('when the device will not accept the write', () => {
 
     await user.click(row('Lesson 3').getByRole('button', { name: 'Rename' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/storage is full/i)
-    expect(screen.getByRole('alert')).toHaveTextContent(/still practice/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "This device's storage is full, so the list wasn't renamed. You can still practice it now.",
+    )
     expect(screen.getByText('Lesson 3')).toBeInTheDocument()
     expect(row('Lesson 3').getByRole('button', { name: 'Practice' })).toBeEnabled()
   })
 
-  it('says a delete did not land, and leaves the list where it was', async () => {
+  /*
+   * The toast this suite was extended for. It used to read "so the list wasn't saved. You
+   * can still practice it now." after a tap on Delete — every clause of it answering a
+   * question the user had not asked, and none of them saying whether the list was gone.
+   */
+  it('says a delete did not land, and that the list is still where it was', async () => {
     listRepo.save(lesson3)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const user = userEvent.setup()
@@ -350,11 +358,15 @@ describe('when the device will not accept the write', () => {
 
     await user.click(row('Lesson 3').getByRole('button', { name: 'Delete' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/storage is full/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "This device's storage is full, so the list wasn't deleted. It's still in your lists.",
+    )
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/saved|still practice/i)
     expect(screen.getByText('Lesson 3')).toBeInTheDocument()
   })
 
-  it('says a saved test could not be deleted', async () => {
+  // ...and on My tests the same failure has to call the row a test, not a list.
+  it('calls a saved test a test when it could not be deleted', async () => {
     listRepo.save(lesson3)
     testRepo.save(weakVerbs)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -364,16 +376,20 @@ describe('when the device will not accept the write', () => {
 
     await user.click(row('Weak verbs').getByRole('button', { name: 'Delete' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/storage is full/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "This device's storage is full, so the test wasn't deleted. It's still in your tests.",
+    )
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/\blists?\b/i)
     expect(screen.getByText('Weak verbs')).toBeInTheDocument()
   })
 
   /*
    * The one reason that is not about storage at all. `removeTest` answers `missing` for a
    * test that is already gone — a second tap on a stale row, or a delete that raced
-   * another device — and the message has to stop promising a practice that cannot happen.
+   * another device. A delete that finds its target missing got what it asked for, so the
+   * message says so plainly rather than offering a practice that cannot happen.
    */
-  it('says a vanished test is gone rather than offering to practise it', async () => {
+  it('tells a delete that found nothing that it was already gone', async () => {
     listRepo.save(lesson3)
     testRepo.save(weakVerbs)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -383,7 +399,7 @@ describe('when the device will not accept the write', () => {
 
     await user.click(row('Weak verbs').getByRole('button', { name: 'Delete' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/no longer exists/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent('That test was already gone.')
     expect(screen.getByRole('alert')).not.toHaveTextContent(/still practice/i)
   })
 })

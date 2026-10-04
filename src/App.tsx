@@ -33,7 +33,7 @@ import {
 import { readDrillPrefs, writeDrillPrefs } from './storage/drillPrefs'
 import { speak } from './speech/tts'
 import { useVoices, voiceMissingFor } from './speech/useVoices'
-import { writeFailureMessage } from './storage/messages'
+import { writeFailureMessage, type WriteAction } from './storage/messages'
 import { drillRepo } from './storage/drillRepo'
 import { useListStore } from './storage/useListStore'
 import { useAuth } from './auth/useAuth'
@@ -518,7 +518,7 @@ export default function App() {
       if (!store) return
       const result = await store.saveList(list)
       if (!result.ok) {
-        setToast(writeFailureMessage(result.reason))
+        setToast(writeFailureMessage(result.reason, { verb: 'save', subject: 'list' }))
         return
       }
       setSavedIds((s) => new Set(s).add(list.id))
@@ -837,10 +837,10 @@ export default function App() {
   )
 
   const saveTest = useCallback(
-    async (test: SavedTest) => {
+    async (test: SavedTest, verb: WriteAction['verb'] = 'save') => {
       if (!store) return
       const result = await store.saveTest(test)
-      if (!result.ok) setToast(writeFailureMessage(result.reason))
+      if (!result.ok) setToast(writeFailureMessage(result.reason, { verb, subject: 'test' }))
     },
     [store],
   )
@@ -1028,7 +1028,7 @@ export default function App() {
               onKeep={async (farewell) => {
                 if (!shareStore) return
                 const result = await shareStore.keepCopy(farewell)
-                if (!result.ok) setToast(writeFailureMessage(result.reason))
+                if (!result.ok) setToast(writeFailureMessage(result.reason, { verb: 'save', subject: 'list' }))
               }}
               onDismiss={(farewell) => void shareStore?.dismiss(farewell)}
             />
@@ -1041,7 +1041,7 @@ export default function App() {
             if (name === null || name.trim() === '') return
             if (!store) return
             const result = await store.renameList(list.id, name.trim())
-            if (!result.ok) setToast(writeFailureMessage(result.reason))
+            if (!result.ok) setToast(writeFailureMessage(result.reason, { verb: 'rename', subject: 'list' }))
           }}
           onDelete={async (list) => {
             const others = isShared(list) ? list.sharing!.memberUids.length - 1 : 0
@@ -1052,7 +1052,7 @@ export default function App() {
             if (!window.confirm(question)) return
             if (!store) return
             const result = await store.removeList(list.id)
-            if (!result.ok) setToast(writeFailureMessage(result.reason))
+            if (!result.ok) setToast(writeFailureMessage(result.reason, { verb: 'delete', subject: 'list' }))
           }}
         />
       )}
@@ -1077,13 +1077,13 @@ export default function App() {
           onRename={(test) => {
             const name = window.prompt('New name', test.name)
             if (name === null || name.trim() === '') return
-            void saveTest({ ...test, name: name.trim(), updatedAt: Date.now() })
+            void saveTest({ ...test, name: name.trim(), updatedAt: Date.now() }, 'rename')
           }}
           onDelete={(test) => {
             if (!window.confirm(`Delete \u201c${test.name}\u201d?`)) return
             if (!store) return
             void store.removeTest(test.id).then((result) => {
-              if (!result.ok) setToast(writeFailureMessage(result.reason))
+              if (!result.ok) setToast(writeFailureMessage(result.reason, { verb: 'delete', subject: 'test' }))
             })
           }}
         />
