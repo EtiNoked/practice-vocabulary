@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  POOL_SOURCES,
+  POOL_SOURCE_LABELS,
+  POOL_SOURCE_PHRASES,
   buildWordPool,
+  countsTowardsAverage,
+  isPoolSource,
   listOptions,
   poolLanguages,
   poolSize,
@@ -280,6 +285,90 @@ describe('toPairs', () => {
   })
 })
 
+describe('buildWordPool — source: new (014)', () => {
+  it('takes every word when the lists have never been practised', () => {
+    const pool = buildWordPool(LISTS, spec({ source: 'new' }), ctx())
+    expect(pool.map((w) => w.col1)).toEqual(['bread', 'cheese', 'apple'])
+  })
+
+  it('drops a word the moment it has been asked, right or wrong', () => {
+    const records = [missed('l1', NOW - DAY, [pair('x1', 'bread', 'brood')], [pair('x2', 'cheese', 'kaas')])]
+    const pool = buildWordPool(LISTS, spec({ source: 'new' }), ctx({ records }))
+    expect(pool.map((w) => w.col1)).toEqual(['apple'])
+  })
+
+  it('asks each list about its OWN history', () => {
+    const records = [missed('l1', NOW - DAY, [pair('x1', 'cheese', 'kaas')], [])]
+    const pool = buildWordPool(LISTS, spec({ listIds: ['l1', 'l2'], source: 'new' }), ctx({ records }))
+    // 'cheese' is spent in Food, so Food does not offer it — but Market has never
+    // been practised at all, and keys fold by content, so Market's copy stands.
+    expect(pool.map((w) => `${w.listId}:${w.col1}`)).toEqual(['l1:bread', 'l1:apple', 'l2:cheese', 'l2:money'])
+  })
+
+  it('ignores the window — never-asked is not a slice of time', () => {
+    const records = [missed('l1', NOW - 400 * DAY, [pair('x1', 'bread', 'brood')], [])]
+    for (const window of ['day', 'all'] as const) {
+      const pool = buildWordPool(LISTS, spec({ source: 'new', window }), ctx({ records }))
+      expect(pool.map((w) => w.col1)).toEqual(['cheese', 'apple'])
+    }
+  })
+})
+
+describe('buildWordPool — source: missed-new (014)', () => {
+  const records = [
+    // 'bread' still wrong, 'cheese' fixed since, 'apple' never asked.
+    missed('l1', NOW - 2 * DAY, [pair('x1', 'bread', 'brood'), pair('x2', 'cheese', 'kaas')], []),
+    missed('l1', NOW - DAY, [], [pair('x3', 'cheese', 'kaas')]),
+  ]
+
+  it('is the union of the two halves, with the mistakes first', () => {
+    const pool = buildWordPool(LISTS, spec({ source: 'missed-new' }), ctx({ records }))
+    expect(pool.map((w) => w.col1)).toEqual(['bread', 'apple'])
+  })
+
+  it('is exactly the sum of the two, because they cannot overlap', () => {
+    const only = (source: PoolSpec['source']) =>
+      poolSize(LISTS, spec({ source }), ctx({ records }))
+    expect(only('missed-new')).toBe(only('missed') + only('new'))
+  })
+
+  it('windows its missed half and leaves its new half alone', () => {
+    const old = [missed('l1', NOW - 400 * DAY, [pair('x1', 'bread', 'brood')], [])]
+    const pool = buildWordPool(LISTS, spec({ source: 'missed-new', window: 'week' }), ctx({ records: old }))
+    // 'bread' falls outside the week, but it HAS been asked, so it is not new either.
+    expect(pool.map((w) => w.col1)).toEqual(['cheese', 'apple'])
+  })
+
+  it('still re-mints ids across the two halves, so nothing collides', () => {
+    const pool = buildWordPool(LISTS, spec({ source: 'missed-new' }), ctx({ records }))
+    expect(new Set(pool.map((w) => w.id)).size).toBe(pool.length)
+  })
+})
+
+describe('the rules that travel with a source (014)', () => {
+  it('holds only a mistakes-only run back from the average', () => {
+    expect(countsTowardsAverage('missed')).toBe(false)
+    // Ordinary practice over part of a list, no more self-selected than a capped test.
+    expect(countsTowardsAverage('all')).toBe(true)
+    expect(countsTowardsAverage('missed-new')).toBe(true)
+    expect(countsTowardsAverage('new')).toBe(true)
+  })
+
+  it('recognises every source it offers, and nothing else', () => {
+    for (const source of POOL_SOURCES) expect(isPoolSource(source)).toBe(true)
+    for (const junk of ['Missed', 'wrong', '', undefined, null, 1]) {
+      expect(isPoolSource(junk)).toBe(false)
+    }
+  })
+
+  it('has a label and a phrase for every source, so no screen can fall through', () => {
+    for (const source of POOL_SOURCES) {
+      expect(POOL_SOURCE_LABELS[source]).toBeTruthy()
+      expect(POOL_SOURCE_PHRASES[source]).toBeTruthy()
+    }
+  })
+})
+
 describe('the module stays feature-agnostic (008 NFR-11)', () => {
   /*
    * The boundary IS the feature here (008 D-13): this module answers "which words does
@@ -293,11 +382,22 @@ describe('the module stays feature-agnostic (008 NFR-11)', () => {
   it('exports exactly the selection API and nothing feature-shaped', async () => {
     const module = await import('./wordPool')
     expect(Object.keys(module).sort()).toEqual([
+      // The selection API.
       'buildWordPool',
       'listOptions',
       'poolLanguages',
       'poolSize',
       'toPairs',
-    ])
+      // The source enum, its copy and its two rules (014). Still feature-agnostic:
+      // every one of them is about a PoolSource and nothing else, and four screens
+      // render the same four labels — four private copies is four chances to
+      // describe a saved test in words its builder never used.
+      'POOL_SOURCES',
+      'POOL_SOURCE_EMPTY',
+      'POOL_SOURCE_LABELS',
+      'POOL_SOURCE_PHRASES',
+      'countsTowardsAverage',
+      'isPoolSource',
+    ].sort())
   })
 })

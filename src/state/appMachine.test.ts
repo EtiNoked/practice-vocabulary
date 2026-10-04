@@ -403,23 +403,23 @@ describe('reaching the review screens', () => {
 
 describe('practicing the words you missed', () => {
   const missedPairs = [{ id: 'missed-0', col1: 'son', col2: 'zoon' }]
-  const source = { kind: 'window', window: 'week' } as const
+  const source = { kind: 'window', source: 'missed', window: 'week' } as const
 
   it('lands on ready carrying the subset, beside the real list', () => {
-    const s = reduce(initialState, { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source })
+    const s = reduce(initialState, { type: 'PRACTISE_SUBSET', list, pairs: missedPairs, source })
     expect(s.screen).toBe('ready')
     if (s.screen !== 'ready') throw new Error('unreachable')
     // The list is the REAL one — the subset never masquerades as it, or Save
     // would overwrite two words with one.
     expect(s.list).toBe(list)
-    expect(s.missed?.pairs).toEqual(missedPairs)
-    expect(s.missed?.source).toEqual(source)
+    expect(s.subset?.pairs).toEqual(missedPairs)
+    expect(s.subset?.source).toEqual(source)
   })
 
   it('starts the drill from the subset', () => {
     const s = at(
       initialState,
-      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'PRACTISE_SUBSET', list, pairs: missedPairs, source },
       { type: 'START' },
     )
     if (s.screen !== 'practising') throw new Error('unreachable')
@@ -439,7 +439,7 @@ describe('practicing the words you missed', () => {
   it('honours the drill mode for a missed subset too', () => {
     const s = at(
       initialState,
-      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'PRACTISE_SUBSET', list, pairs: missedPairs, source },
       { type: 'START', mode: 'practice' },
     )
     if (s.screen !== 'practising') throw new Error('unreachable')
@@ -449,11 +449,11 @@ describe('practicing the words you missed', () => {
   it('drops back to the full list on PRACTISE_FULL', () => {
     const s = at(
       initialState,
-      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'PRACTISE_SUBSET', list, pairs: missedPairs, source },
       { type: 'PRACTISE_FULL' },
     )
     if (s.screen !== 'ready') throw new Error('unreachable')
-    expect(s.missed).toBeUndefined()
+    expect(s.subset).toBeUndefined()
     expect(s.list).toBe(list)
   })
 
@@ -466,11 +466,11 @@ describe('practicing the words you missed', () => {
     // Arriving from Home always means the whole list.
     const s = at(
       initialState,
-      { type: 'PRACTISE_MISSED', list, pairs: missedPairs, source },
+      { type: 'PRACTISE_SUBSET', list, pairs: missedPairs, source },
       { type: 'PRACTISE_LIST', list },
     )
     if (s.screen !== 'ready') throw new Error('unreachable')
-    expect(s.missed).toBeUndefined()
+    expect(s.subset).toBeUndefined()
   })
 })
 
@@ -642,7 +642,7 @@ describe('a drill carries a run, not a list (011 D-7, D-9)', () => {
   it('starts a missed subset as a run over just those words', () => {
     const s = at(
       initialState,
-      { type: 'PRACTISE_MISSED', list, pairs: [{ id: 'missed-0', col1: 'son', col2: 'zoon' }], source: { kind: 'window', window: 'week' } },
+      { type: 'PRACTISE_SUBSET', list, pairs: [{ id: 'missed-0', col1: 'son', col2: 'zoon' }], source: { kind: 'window', source: 'missed', window: 'week' } },
       { type: 'START' },
     )
     if (s.screen !== 'practising') throw new Error('unreachable')

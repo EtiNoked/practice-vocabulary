@@ -130,6 +130,21 @@ export interface MissedSet {
   records: number
 }
 
+/** What `collectNew` found, shaped like `MissedSet` so a screen reads both the same way. */
+export interface NewSet {
+  /** In the list's own order. */
+  words: WordPair[]
+  /**
+   * At least one record predates right-answer recording, so a word the user HAS
+   * been asked — and got right — may still be counted as new. See the note in
+   * `collectNew`; `MissedSet.degraded` is the same blindness seen from the
+   * other side.
+   */
+  degraded: boolean
+  /** Records considered. Separates "never practised this list" from "nothing new". */
+  records: number
+}
+
 /**
  * The words from `listId` that the user is STILL getting wrong within `window`.
  *
@@ -239,6 +254,60 @@ export function collectMissed(
 }
 
 /**
+ * The words of `listId` the user has NO RECORD of — never asked, never marked.
+ *
+ * The complement of history over the live list, which is why `list` is the only
+ * source of candidates: a word is new because it is IN the list and absent from
+ * every record, and a deleted list has no words to be new. Absent or null
+ * therefore yields nothing rather than everything.
+ *
+ * No `window` and no `now`, deliberately, where `collectMissed` has both. "I
+ * have not been asked this yet" is not a statement about a slice of time — a
+ * word first practised a year ago is not new today, and narrowing the window
+ * would quietly turn this into "not practised lately", which is a different
+ * feature (a lapsed/spaced-review set) wearing this one's name. If that feature
+ * is ever wanted, it should arrive as its own function rather than as a
+ * parameter bolted onto this one.
+ *
+ * Both sides of history count. A word answered RIGHT is just as much "seen" as
+ * one answered wrong — the only question here is whether it has ever come up.
+ */
+export function collectNew(
+  records: readonly MissSource[],
+  options: { listId: string; list?: WordList | null },
+): NewSet {
+  const mine = records.filter((r) => r.listId === options.listId)
+
+  const seen = new Set<string>()
+  for (const record of mine) {
+    for (const pair of record.wrongPairs) seen.add(wordKey(pair))
+    /*
+     * A record with no `rightPairs` contributes only its misses, so every word
+     * it got RIGHT still looks unseen. That is the same blindness `MissedSet`
+     * reports as `degraded`, pointing the other way: there it keeps a learned
+     * word in the missed set, here it puts one in the new set. One flag, same
+     * cause, and the screens say so rather than presenting a guess as a fact.
+     */
+    for (const pair of record.rightPairs ?? []) seen.add(wordKey(pair))
+  }
+
+  // LIST ORDER, not sorted. A missed set ranks by how badly you are doing;
+  // words you have never seen have nothing to rank them by, and the order the
+  // user typed them in is the one order that means something.
+  const words = (options.list?.pairs ?? []).filter((p) => !seen.has(wordKey(p)))
+
+  return { words, degraded: mine.some((r) => r.rightPairs === undefined), records: mine.length }
+}
+
+/** How many words of `listId` have never been asked. */
+export function newCount(
+  records: readonly MissSource[],
+  options: { listId: string; list?: WordList | null },
+): number {
+  return collectNew(records, options).words.length
+}
+
+/**
  * Pairs for the drill, with fresh, guaranteed-unique ids.
  *
  * A missed set is assembled from several snapshots taken across several list
@@ -251,7 +320,20 @@ export function collectMissed(
  * and are never compared again.
  */
 export function toDrillPairs(words: readonly MissedWord[]): WordPair[] {
-  return words.map((w, i) => ({ id: `missed-${i}`, col1: w.pair.col1, col2: w.pair.col2 }))
+  return renumberPairs(words.map((w) => w.pair))
+}
+
+/**
+ * The same re-minting, over pairs that were assembled rather than collected.
+ *
+ * Its own export because a *missed and new* drill concatenates two sets whose
+ * ids came from two different places, so the duplicate-id hazard `toDrillPairs`
+ * exists to close is strictly worse there — and writing the loop a second time
+ * at that call site is how the two drift. `toDrillPairs` is this function with a
+ * projection in front of it, so there is one implementation, not two.
+ */
+export function renumberPairs(pairs: readonly WordPair[]): WordPair[] {
+  return pairs.map((p, i) => ({ id: `missed-${i}`, col1: p.col1, col2: p.col2 }))
 }
 
 /** How many words each window would drill. One pass per window. */

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { LANG_NAMES } from '../lang/languages'
-import { listOptions } from '../state/wordPool'
+import { POOL_SOURCES, POOL_SOURCE_LABELS, listOptions } from '../state/wordPool'
 import type { WordList } from '../state/types'
 import type { PoolDraft, PoolLimits } from './usePoolDraft'
 
@@ -69,23 +69,24 @@ export function PoolPicker({
 
       <div className="flex flex-col gap-2">
         <h2 className="font-semibold">Which words?</h2>
-        <div className="flex gap-2">
-          {(
-            [
-              ['all', 'All words'],
-              ['missed', 'Words I got wrong'],
-            ] as const
-          ).map(([value, label]) => (
+        {/*
+          A 2×2 GRID, not the row of two this replaced. Four of these labels in one
+          flex row wrap into a ragged two-and-two on a phone with the widths deciding
+          where the break lands; a grid puts it in the same place every time, and
+          equal-width cells keep "New words" the same tap target as the long one.
+        */}
+        <div className="grid grid-cols-2 gap-2">
+          {POOL_SOURCES.map((value) => (
             <button
               key={value}
               type="button"
               aria-pressed={draft.source === value}
               onClick={() => draft.setSource(value)}
-              className={`btn btn-quiet flex-1 ${
+              className={`btn btn-quiet ${
                 draft.source === value ? 'border-primary bg-primary-soft' : ''
               }`}
             >
-              {label}
+              {POOL_SOURCE_LABELS[value]}
             </button>
           ))}
         </div>

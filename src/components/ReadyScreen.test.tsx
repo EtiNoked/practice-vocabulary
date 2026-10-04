@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import type { ReviewWindow } from '../state/missedWords'
 import type { WordList } from '../state/types'
-import { ReadyScreen } from './ReadyScreen'
+import { ReadyScreen, type SubsetCounts } from './ReadyScreen'
 
 const list: WordList = {
   id: 'a',
@@ -19,27 +20,44 @@ const list: WordList = {
   origin: 'manual',
 }
 
-const NO_MISSES = { day: 0, week: 0, month: 0, all: 0 }
+const NOTHING = { day: 0, week: 0, month: 0, all: 0 }
+
+const NO_SUBSETS: SubsetCounts = { missed: NOTHING, missedNew: NOTHING, unseen: 0 }
+
+/**
+ * Counts as the app builds them: `missedNew` is `missed` plus the never-asked
+ * words, which is exact because a word cannot be both.
+ */
+const countsOf = (missed: Record<ReviewWindow, number>, unseen: number): SubsetCounts => ({
+  missed,
+  missedNew: {
+    day: missed.day + unseen,
+    week: missed.week + unseen,
+    month: missed.month + unseen,
+    all: missed.all + unseen,
+  },
+  unseen,
+})
 
 const setup = (saved = false, over: Partial<Parameters<typeof ReadyScreen>[0]> = {}) => {
   const onStart = vi.fn()
   const onSave = vi.fn()
   const onBack = vi.fn()
-  const onPickWindow = vi.fn()
+  const onPickSubset = vi.fn()
   const onPractiseFull = vi.fn()
   const onOptionsChange = vi.fn()
   render(
     <ReadyScreen
       list={list}
       saved={saved}
-      missed={null}
-      counts={NO_MISSES}
+      subset={null}
+      counts={NO_SUBSETS}
       degraded={false}
       options={{ ordering: 'random', prompt: 'hear' }}
       voiceMissing={false}
       onOptionsChange={onOptionsChange}
       onStart={onStart}
-      onPickWindow={onPickWindow}
+      onPickSubset={onPickSubset}
       onPractiseFull={onPractiseFull}
       onSave={onSave}
       onBack={onBack}
@@ -50,7 +68,7 @@ const setup = (saved = false, over: Partial<Parameters<typeof ReadyScreen>[0]> =
     onStart,
     onSave,
     onBack,
-    onPickWindow,
+    onPickSubset,
     onPractiseFull,
     onOptionsChange,
     user: userEvent.setup(),
@@ -125,42 +143,130 @@ describe('what the screen already did', () => {
   })
 })
 
-describe('practicing the words you missed', () => {
-  const counts = { day: 0, week: 3, month: 7, all: 9 }
+describe('choosing which words (014)', () => {
+  // 9 missed all time, narrowing to 3 this week; 4 words never asked.
+  const counts = countsOf({ day: 0, week: 3, month: 7, all: 9 }, 4)
 
-  it('shows nothing at all when there is nothing missed', () => {
+  it('offers the four sources, each carrying what it would deal', () => {
+    setup(false, { counts })
+    expect(screen.getByRole('button', { name: /^all words · 2$/i })).toBeInTheDocument()
+    // All time is the seeded window, so the two mistake buttons read their widest.
+    expect(screen.getByRole('button', { name: /^words i got wrong · 9$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^wrong & new words · 13$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^new words · 4$/i })).toBeInTheDocument()
+  })
+
+  it('disables a source with nothing in it, rather than hiding it', () => {
+    // A zero tells the user they have no mistakes left, which is worth knowing.
+    // A missing button would just look like a feature that is not there.
     setup()
-    expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^words i got wrong · 0$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^new words · 0$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^all words · 2$/i })).toBeEnabled()
   })
 
-  it('offers a chip per window, each carrying its count', () => {
+  it('asks for the mistakes over the whole of history, until told otherwise', async () => {
+    const { user, onPickSubset } = setup(false, { counts })
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 9$/i }))
+    expect(onPickSubset).toHaveBeenCalledWith({ kind: 'window', source: 'missed', window: 'all' })
+  })
+
+  it('asks for mistakes and new words together', async () => {
+    const { user, onPickSubset } = setup(false, { counts })
+    await user.click(screen.getByRole('button', { name: /^wrong & new words · 13$/i }))
+    expect(onPickSubset).toHaveBeenCalledWith({
+      kind: 'window',
+      source: 'missed-new',
+      window: 'all',
+    })
+  })
+
+  it('asks for the never-seen words with no window at all', async () => {
+    const { user, onPickSubset } = setup(false, { counts })
+    await user.click(screen.getByRole('button', { name: /^new words · 4$/i }))
+    expect(onPickSubset).toHaveBeenCalledWith({ kind: 'new' })
+  })
+
+  it('keeps the windows out of sight until they have something to narrow', () => {
     setup(false, { counts })
-    expect(screen.getByRole('button', { name: /this week · 3/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /this month · 7/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /all time · 9/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /this week/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/counting mistakes from/i)).not.toBeInTheDocument()
   })
 
-  it('disables a window with nothing in it, rather than hiding it', () => {
-    // A zero tells the user their recent misses are cleared. A missing chip
-    // would just look like a feature that is not there.
+  it('offers a window per slice once a mistakes source is live, each with its count', () => {
+    setup(false, {
+      counts,
+      subset: { count: 9, source: { kind: 'window', source: 'missed', window: 'all' } },
+    })
+    expect(screen.getByRole('button', { name: /^this week · 3$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^this month · 7$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^all time · 9$/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /^today · 0$/i })).toBeDisabled()
+  })
+
+  it('counts the windows through the live source, new words included', () => {
+    // On "wrong & new" every window carries the 4 never-asked words too, so a
+    // chip cannot read 0 while the button above it reads 13.
+    setup(false, {
+      counts,
+      subset: { count: 13, source: { kind: 'window', source: 'missed-new', window: 'all' } },
+    })
+    expect(screen.getByRole('button', { name: /^today · 4$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^this week · 7$/i })).toBeInTheDocument()
+  })
+
+  it('narrows the live source rather than switching back to mistakes-only', async () => {
+    const { user, onPickSubset } = setup(false, {
+      counts,
+      subset: { count: 13, source: { kind: 'window', source: 'missed-new', window: 'all' } },
+    })
+    await user.click(screen.getByRole('button', { name: /^this week · 7$/i }))
+    expect(onPickSubset).toHaveBeenCalledWith({
+      kind: 'window',
+      source: 'missed-new',
+      window: 'week',
+    })
+  })
+
+  it('remembers a narrowed window across a trip through another source', async () => {
+    const { user, onPickSubset } = setup(false, {
+      counts,
+      subset: { count: 3, source: { kind: 'window', source: 'missed', window: 'week' } },
+    })
+    // The parent is a mock, so the subset prop does not move: what is under test
+    // is that the screen keeps 'week' of its own accord once the chip is pressed.
+    await user.click(screen.getByRole('button', { name: /^wrong & new words · 7$/i }))
+    expect(onPickSubset).toHaveBeenLastCalledWith({
+      kind: 'window',
+      source: 'missed-new',
+      window: 'week',
+    })
+  })
+
+  it('restates each button through the chosen window', () => {
+    setup(false, {
+      counts,
+      subset: { count: 3, source: { kind: 'window', source: 'missed', window: 'week' } },
+    })
+    expect(screen.getByRole('button', { name: /^words i got wrong · 3$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^wrong & new words · 7$/i })).toBeInTheDocument()
+    // New words have no window, so this one does not move.
+    expect(screen.getByRole('button', { name: /^new words · 4$/i })).toBeInTheDocument()
+  })
+
+  it('keeps the buttons at a full touch target', () => {
     setup(false, { counts })
-    expect(screen.getByRole('button', { name: /today · 0/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^new words · 4$/i })).toHaveClass('btn')
   })
 
-  it('picks a window', async () => {
-    const { user, onPickWindow } = setup(false, { counts })
-    await user.click(screen.getByRole('button', { name: /this week · 3/i }))
-    expect(onPickWindow).toHaveBeenCalledWith('week')
-  })
-
-  it('keeps the chips at a full touch target', () => {
-    setup(false, { counts })
-    expect(screen.getByRole('button', { name: /this week · 3/i })).toHaveClass('btn')
-  })
-
-  it('explains a history that predates right-answer recording', () => {
+  it('explains a history that predates right-answer recording, both ways round', () => {
     setup(false, { counts, degraded: true })
-    expect(screen.getByText(/before right answers were saved/i)).toBeInTheDocument()
+    const note = screen.getByText(/before right answers were saved/i)
+    expect(note).toHaveTextContent(/may still count as missed/i)
+    expect(note).toHaveTextContent(/may still count as new/i)
   })
 
   it('says nothing about it when the history is complete', () => {
@@ -170,34 +276,62 @@ describe('practicing the words you missed', () => {
 })
 
 describe('once a subset is selected', () => {
-  const missed = { count: 3, source: { kind: 'window', window: 'week' } as const }
+  const counts = countsOf({ day: 0, week: 3, month: 7, all: 9 }, 4)
+  const subset = { count: 3, source: { kind: 'window', source: 'missed', window: 'week' } } as const
 
   it('says what will be drilled, in place of the languages panel', () => {
-    setup(false, { missed })
+    setup(false, { counts, subset })
     expect(screen.getByText(/3 words you missed in the last week/i)).toBeInTheDocument()
     expect(screen.queryByText(/you'll hear/i)).not.toBeInTheDocument()
   })
 
+  it('reads back a mistakes-and-new subset as the two things it is', () => {
+    setup(false, {
+      counts,
+      subset: { count: 7, source: { kind: 'window', source: 'missed-new', window: 'week' } },
+    })
+    const said = screen.getByText(/7 words/i)
+    expect(said).toHaveTextContent(/missed in the last week/i)
+    expect(said).toHaveTextContent(/haven’t been asked yet/i)
+  })
+
+  it('reads back a never-asked subset without mentioning a window', () => {
+    setup(false, { counts, subset: { count: 4, source: { kind: 'new' } } })
+    const said = screen.getByText(/4 words/i)
+    expect(said).toHaveTextContent(/haven’t been asked yet/i)
+    expect(said).not.toHaveTextContent(/missed/i)
+  })
+
   it('names the day when the subset came from one drill', () => {
     setup(false, {
-      missed: { count: 1, source: { kind: 'session', finishedAt: Date.UTC(2026, 8, 4) } },
+      subset: { count: 1, source: { kind: 'session', finishedAt: Date.UTC(2026, 8, 4) } },
     })
     expect(screen.getByText(/1 word you missed on 04\/09\/2026/i)).toBeInTheDocument()
   })
 
+  it('lights none of the four for a subset that came from the review screen', () => {
+    setup(false, {
+      counts,
+      subset: { count: 1, source: { kind: 'session', finishedAt: Date.UTC(2026, 8, 4) } },
+    })
+    for (const name of [/^all words/i, /^words i got wrong/i, /^new words/i]) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    }
+  })
+
   it('HIDES Save, so a subset can never overwrite the real list', () => {
-    setup(false, { missed })
+    setup(false, { counts, subset })
     expect(screen.queryByRole('button', { name: /save this list/i })).not.toBeInTheDocument()
   })
 
   it('offers a way back to the whole list, from the same Words choice', async () => {
-    const { user, onPractiseFull } = setup(false, { missed })
+    const { user, onPractiseFull } = setup(false, { counts, subset })
     await user.click(screen.getByRole('button', { name: /^all words · 2$/i }))
     expect(onPractiseFull).toHaveBeenCalled()
   })
 
   it('still starts in either mode, from the same two buttons', async () => {
-    const { user, onStart } = setup(false, { missed })
+    const { user, onStart } = setup(false, { counts, subset })
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     expect(onStart).toHaveBeenCalledWith('test')
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
@@ -205,10 +339,19 @@ describe('once a subset is selected', () => {
   })
 
   it('keeps the other windows on offer, with the chosen one marked', () => {
-    setup(false, { missed, counts: { day: 0, week: 3, month: 7, all: 9 } })
-    expect(screen.getByRole('button', { name: /this week · 3/i })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /this month · 7/i })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: /^all words/i })).toHaveAttribute('aria-pressed', 'false')
+    setup(false, { counts, subset })
+    expect(screen.getByRole('button', { name: /^this week · 3$/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /^this month · 7$/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(screen.getByRole('button', { name: /^all words/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
   })
 })
 
@@ -219,7 +362,7 @@ describe('setting up the run, before starting it', () => {
   })
 
   it('puts the setup above the start buttons', () => {
-    setup(false, { counts: { day: 1, week: 1, month: 1, all: 1 } })
+    setup(false, { counts: countsOf({ day: 1, week: 1, month: 1, all: 1 }, 0) })
     const order = screen.getAllByRole('button').map((b) => b.textContent)
     expect(order.indexOf('All words · 2')).toBeLessThan(order.indexOf('Practice'))
     expect(order.indexOf('Random')).toBeLessThan(order.indexOf('Test'))

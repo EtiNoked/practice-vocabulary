@@ -1,5 +1,11 @@
 import type { LangCode } from '../lang/languages'
-import { collectMissed, wordKey, type MissSource, type ReviewWindow } from './missedWords'
+import {
+  collectMissed,
+  collectNew,
+  wordKey,
+  type MissSource,
+  type ReviewWindow,
+} from './missedWords'
 import type { WordList, WordPair } from './types'
 
 /**
@@ -26,7 +32,99 @@ import type { WordList, WordPair } from './types'
  *   this is the kind of boundary that dissolves with no error and no failing test.
  */
 
-export type PoolSource = 'all' | 'missed'
+/**
+ * WHICH of a list's words a run is built from.
+ *
+ * Four answers rather than two since 014, and the two added ones are both about
+ * words with NO history: a word you added to a list and have not been asked yet.
+ *
+ * | | |
+ * |---|---|
+ * | `all` | every word in the list |
+ * | `missed` | the ones you are still getting wrong |
+ * | `missed-new` | those, plus the ones you have never been asked |
+ * | `new` | only the ones you have never been asked |
+ *
+ * `missed` is windowed and `new` is not, which is not an oversight — see
+ * `collectNew`. `missed-new` is therefore windowed too, on its missed half
+ * alone: "the words I got wrong this week, and everything I have not seen yet".
+ *
+ * SERIALISED, in saved tests and in game records, so these strings are a
+ * storage format: renaming one silently invalidates saved tests written by an
+ * older build (`testRepo.isSavedTest` drops them). Add; do not rename.
+ */
+export type PoolSource = 'all' | 'missed' | 'missed-new' | 'new'
+
+/** In offering order. The order the two setup screens render their buttons in. */
+export const POOL_SOURCES: readonly PoolSource[] = ['all', 'missed', 'missed-new', 'new']
+
+/**
+ * Button labels, and the sentence fragment for a saved test's one-liner.
+ *
+ * Copy, in a state module, for the reason `WINDOW_LABELS` is: four screens render
+ * these — both setup pickers, the ready screen and `describeTest` — and four
+ * private copies of "Words I got wrong" is four chances for a saved test to be
+ * described in words the builder never used.
+ */
+export const POOL_SOURCE_LABELS: Record<PoolSource, string> = {
+  all: 'All words',
+  missed: 'Words I got wrong',
+  'missed-new': 'Wrong & new words',
+  new: 'New words',
+}
+
+/** For a sentence: "3 lists · <this> · 15 of 34". */
+export const POOL_SOURCE_PHRASES: Record<PoolSource, string> = {
+  all: 'all words',
+  missed: 'words I got wrong',
+  'missed-new': 'words I got wrong, and new ones',
+  new: 'words I haven’t been asked yet',
+}
+
+/**
+ * Why a non-'all' selection came back empty, as the second half of a sentence.
+ *
+ * "Nothing here yet" is the unhelpful half of that message: the useful half is
+ * WHICH of the two possible reasons it is, since an empty 'new' set is good news
+ * and an empty 'missed' set is better news. Keyed off 'all' because a selection
+ * of every word can only be empty by having no words in it, which the screens
+ * already say in their own words.
+ */
+export const POOL_SOURCE_EMPTY: Record<Exclude<PoolSource, 'all'>, string> = {
+  missed: 'you haven’t gotten any of these wrong.',
+  'missed-new':
+    'you haven’t gotten any of these wrong, and you have been asked every word in them.',
+  new: 'you have been asked every word in these lists already.',
+}
+
+/**
+ * A runtime guard, for the two places a `PoolSource` arrives from storage.
+ *
+ * Exported so `testRepo`'s validation and anything that reads a game record ask
+ * the SAME question. A hand-written `=== 'all' || === 'missed'` chain is how a
+ * source added here stops round-tripping through localStorage with no error and
+ * no failing test — which is exactly what happened to be true before 014.
+ */
+export function isPoolSource(value: unknown): value is PoolSource {
+  return typeof value === 'string' && (POOL_SOURCES as readonly string[]).includes(value)
+}
+
+/**
+ * Whether a run over this source should count towards the home screen's average.
+ *
+ * Only `missed` is held back, and the test is "was this set chosen BY past
+ * failure" rather than "is this a subset" — a capped test of 15 random words out
+ * of 34 is a subset too, and has always counted. A mistakes-only re-run is a
+ * deliberately hard set and would drag the average down; `missed-new` is the
+ * ordinary way to study a list day to day, and excluding it would leave the
+ * trend with almost nothing in it; `new` is unpractised, not failed.
+ *
+ * Here rather than inlined in `App`, because `SessionRecord.mode` is persisted
+ * and the rule that fills it must have exactly one statement.
+ */
+export function countsTowardsAverage(source: PoolSource): boolean {
+  return source !== 'missed'
+}
 
 /**
  * WHICH words a caller wants, said declaratively.
@@ -45,7 +143,10 @@ export interface PoolSpec {
    */
   readonly listIds: readonly string[]
   readonly source: PoolSource
-  /** Consulted only when `source` is 'missed'. Defaults to all time. */
+  /**
+   * Consulted only by the MISSED half of a source — 'missed' and 'missed-new'.
+   * Defaults to all time, and 'new' ignores it entirely (see `collectNew`).
+   */
   readonly window?: ReviewWindow
 }
 
@@ -121,21 +222,38 @@ export function buildWordPool(
   const seen = new Map<string, { pair: WordPair; list: WordList }>()
 
   for (const list of selected) {
+    /*
+     * ONE list at a time, because that is collectMissed's and collectNew's contract —
+     * both filter on a single listId. Calling them per list keeps 006's still-missed
+     * rule intact rather than reimplemented across several; there is exactly one
+     * implementation of that rule in this codebase and this must not become the second.
+     */
+    const missed = () =>
+      collectMissed(context.records, {
+        listId: list.id,
+        window: spec.window ?? 'all',
+        now: context.now,
+        list,
+      }).words.map((w) => w.pair)
+
+    // `list` and not `list.pairs`: a word is new by being in the list and absent
+    // from history, so the list IS the candidate set.
+    const fresh = () => collectNew(context.records, { listId: list.id, list }).words
+
     const pairs =
       spec.source === 'all'
         ? list.pairs
-        : /*
-           * ONE list at a time, because that is collectMissed's contract — it filters on
-           * a single listId. Calling it per list keeps 006's still-missed rule intact
-           * rather than reimplemented across several; there is exactly one implementation
-           * of that rule in this codebase and this must not become the second.
-           */
-          collectMissed(context.records, {
-            listId: list.id,
-            window: spec.window ?? 'all',
-            now: context.now,
-            list,
-          }).words.map((w) => w.pair)
+        : spec.source === 'missed'
+          ? missed()
+          : spec.source === 'new'
+            ? fresh()
+            : /*
+               * Missed FIRST, then new. The dedupe below is first-wins, and the two sets
+               * are disjoint by construction anyway (a missed word has a record, a new
+               * one does not), so the order is about what the user meets first in a
+               * list-order run: the words they are already fighting with.
+               */
+              [...missed(), ...fresh()]
 
     for (const pair of pairs) {
       // A word blank on either side is unpickable and unspeakable — it is not a word.

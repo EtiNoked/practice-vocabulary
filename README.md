@@ -173,7 +173,7 @@ The list's start screen sets the run up above the **Practice** and **Test** butt
 
 | | |
 |---|---|
-| **Words** | **All words**, or only the ones you missed today / this week / this month / all time |
+| **Words** | **All words**, **Words I got wrong**, **Wrong & new words**, or **New words** — see [Which words](#which-words) |
 | **Order** | **Random** or **List order** |
 | **In Test** | **Just listen** (nothing on screen), **Show the word** (no sound at all), or **Both** |
 
@@ -214,7 +214,7 @@ Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
 A drill covers one list. **My tests → Build a test** covers as many as you like, and lets
 you say how much of them you want.
 
-Pick your lists, choose **All words** or **Words I got wrong**, and set a length: **10**,
+Pick your lists, choose which words ([all four](#which-words)), and set a length: **10**,
 **15**, **20**, type a number, or **All**. The words are drawn at random. The screen keeps
 a running count of how many words your selection actually has, so you decide against a
 real number rather than a guess.
@@ -271,14 +271,40 @@ Every practice — there and on the drill's own page — is bordered by how it w
 there in text; a border colour on its own is no use to a colour-blind reader or a greyscale
 screenshot.
 
-From a list's start screen you can also drill **just the words you are still getting
-wrong**, over **Today**, **This week**, **This month** or **All time**. Each chip shows
-how many words it would drill.
+### Which words
+
+Every start screen — a list's, the test builder's and a game's — asks the same question
+four ways:
+
+| | |
+|---|---|
+| **All words** | the whole list |
+| **Words I got wrong** | only the ones you are still getting wrong |
+| **Wrong & new words** | those, plus the ones you have never been asked |
+| **New words** | only the ones you have never been asked |
+
+Each one carries the number it would deal, so you choose between two counts rather than
+guessing. A source with nothing in it is **disabled, not hidden** — "Words I got wrong ·
+0" tells you your mistakes are cleared, where a missing button would only raise the
+question.
+
+A **new word** is one you have added to a list and not been asked yet, in a drill or in a
+game. There is no time limit on that: a word you first practised a year ago is not new
+today. **Wrong & new words** is the everyday one — revise what you are getting wrong, and
+meet what you have not seen.
+
+The two mistake sources can be narrowed to **Today**, **This week**, **This month** or
+**All time**, and that row only appears once one of them is chosen, because it has nothing
+to narrow otherwise. **New words** has no window, deliberately: never-asked is not a slice
+of time.
 
 "Still getting wrong" is meant literally. A word counts only if the **most recent** time
 you saw it in that window, you missed it — answer it correctly later and it drops out on
-its own, so the set shrinks as you learn. Those runs are logged as *missed words only* and
-kept out of your full-run average, exactly as the wrong-only re-run already was.
+its own, so the set shrinks as you learn. Mistakes-only runs are logged as *missed words
+only* and kept out of your full-run average, exactly as the wrong-only re-run already was.
+**Wrong & new** and **New words** runs *do* count: they are ordinary practice over part of
+a list, no more self-selected than a test of 15 words out of 34, and holding them back
+would leave the average with almost nothing feeding it.
 
 Two things worth knowing:
 
@@ -287,7 +313,10 @@ Two things worth knowing:
   *says*, though, and it counts as a new word with a clean slate.
 - Drills finished **before this feature shipped** only recorded the words you got wrong,
   never the ones you got right. History is append-only by design, so there is no backfill:
-  those drills show a line saying so rather than pretending you scored zero.
+  those drills show a line saying so rather than pretending you scored zero. The same gap
+  points the other way for **New words** — a word you got right in one of those drills can
+  still be counted as never asked — and the start screen says so in one line when any of
+  your history is that old.
 
 ## Playing a game
 
@@ -301,8 +330,8 @@ Setting one up takes three choices:
 
 - **Which lists.** Several at once, and the running total tells you how many words you
   have before you commit to anything. A word in two lists counts once.
-- **All words, or just the ones you keep getting wrong** — the same "still getting wrong"
-  set the drill offers, pooled across every list you picked.
+- **Which words** — [the same four](#which-words) the drill offers, pooled across every
+  list you picked.
 - **How many words.** 10, 15 or 20, or type a number. Options bigger than your pool are
   disabled rather than hidden, so the reason is on screen.
 
@@ -318,7 +347,8 @@ Two things worth knowing:
 
 - **Games count.** A word you miss in a game joins the same *words you got wrong* pool the
   drill fills, so you can drill it properly afterwards — and a word you get right leaves
-  it again. Game scores are kept in their own history and never folded into your drill
+  it again. Either way it stops being a **new word**: being asked in a game is being
+  asked. Game scores are kept in their own history and never folded into your drill
   average, because marking yourself and being marked are not the same measurement.
 - **A game does not survive a reload**, unlike a drill in progress. There is no honest
   answer to how much of the ten seconds was left, and the word could not be re-spoken on

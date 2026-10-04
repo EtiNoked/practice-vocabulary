@@ -1202,8 +1202,12 @@ describe('practicing the words you missed', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    expect(screen.getByRole('button', { name: /today · 0/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /this week · 2/i })).toBeEnabled()
+    // The source button reads its widest window; the per-window row appears
+    // under it once a mistakes source is the live one.
+    expect(screen.getByRole('button', { name: /^words i got wrong · 2$/i })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 2$/i }))
+    expect(screen.getByRole('button', { name: /^today · 0$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^this week · 2$/i })).toBeEnabled()
   })
 
   it('leaves out a word that has since been answered right', async () => {
@@ -1216,7 +1220,8 @@ describe('practicing the words you missed', () => {
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
     // Two were missed; one has been fixed since.
-    expect(screen.getByRole('button', { name: /this week · 1/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 1$/i }))
+    expect(screen.getByRole('button', { name: /^this week · 1$/i })).toBeInTheDocument()
   })
 
   it('drills only the still-missed words', async () => {
@@ -1228,7 +1233,8 @@ describe('practicing the words you missed', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 1$/i }))
+    await user.click(screen.getByRole('button', { name: /^this week · 1$/i }))
     expect(screen.getByText(/1 word you missed in the last week/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^test$/i }))
@@ -1245,7 +1251,8 @@ describe('practicing the words you missed', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 1$/i }))
+    await user.click(screen.getByRole('button', { name: /^this week · 1$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
@@ -1263,16 +1270,18 @@ describe('practicing the words you missed', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 1$/i }))
+    await user.click(screen.getByRole('button', { name: /^this week · 1$/i }))
     await user.click(screen.getByRole('button', { name: /^test$/i }))
     await user.click(screen.getByRole('button', { name: /show answer/i }))
     await user.click(screen.getByRole('button', { name: /right/i }))
     await user.click(screen.getByRole('button', { name: /^done$/i }))
 
-    // Back at the ready screen, the word is gone from every window.
+    // Back at the ready screen, the word is gone from every window — the
+    // mistakes button reads 0 and is disabled rather than disappearing.
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^words i got wrong · 0$/i })).toBeDisabled()
   })
 
   it('hides Save while a subset is selected, and restores it on the way back', async () => {
@@ -1283,7 +1292,7 @@ describe('practicing the words you missed', () => {
     await goTo(user, 'My lists')
 
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    await user.click(screen.getByRole('button', { name: /this week · 1/i }))
+    await user.click(screen.getByRole('button', { name: /^words i got wrong · 1$/i }))
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^all words/i }))
@@ -1314,7 +1323,7 @@ describe('practicing the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    expect(screen.getByRole('button', { name: /this week · 1/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^words i got wrong · 1$/i })).toBeInTheDocument()
   })
 
   it('drops a word deleted from the list', async () => {
@@ -1326,7 +1335,68 @@ describe('practicing the words you missed', () => {
     renderApp()
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: /^practice$/i }))
-    expect(screen.queryByText(/words you missed/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^words i got wrong · 0$/i })).toBeDisabled()
+  })
+
+  it('offers the words it has never asked, and only those (014)', async () => {
+    listRepo.save(seeded)
+    // One word has a record; the other has never come up.
+    seedRecord(Date.now() - 2 * DAY, [son])
+
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+
+    expect(screen.getByRole('button', { name: /^new words · 1$/i })).toBeEnabled()
+    // One missed plus one never asked, and no double counting.
+    expect(screen.getByRole('button', { name: /^wrong & new words · 2$/i })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /^new words · 1$/i }))
+    expect(screen.getByText(/1 word you haven’t been asked yet/i)).toBeInTheDocument()
+    // No window row: never-asked is not a slice of time.
+    expect(screen.queryByText(/counting mistakes from/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.getByText(/card 1 of 1/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    expect(screen.getByText('daughter')).toBeInTheDocument()
+  })
+
+  it('counts a new-words run towards the average, where a mistakes run is held back', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: /^new words · 1$/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+
+    // Ordinary practice over part of a list, no more self-selected than a
+    // 15-of-34 test — so it feeds the trend like any other run.
+    expect(sessionRepo.getAll()[0]?.mode).toBe('full')
+  })
+
+  it('drills the mistakes and the never-asked words together', async () => {
+    listRepo.save(seeded)
+    seedRecord(Date.now() - 2 * DAY, [son])
+
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+    await user.click(screen.getByRole('button', { name: /^wrong & new words · 2$/i }))
+
+    const said = screen.getByText(/^practicing 2 words:/i)
+    expect(said).toHaveTextContent(/missed/i)
+    expect(said).toHaveTextContent(/haven’t been asked yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.getByText(/card 1 of 2/i)).toBeInTheDocument()
   })
 })
 

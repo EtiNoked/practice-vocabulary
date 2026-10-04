@@ -109,9 +109,30 @@ describe('what a row says', () => {
     expect(screen.getByText(/stopped early/i)).toBeInTheDocument()
   })
 
-  it('marks a missed-words round, as the practice log does', () => {
+  it('names the words a round was dealt from, when it was not the whole list', () => {
     renderAt({ games: [game({ source: 'missed' })] })
-    expect(screen.getByText(/missed words only/i)).toBeInTheDocument()
+    expect(screen.getByText(/words I got wrong/i)).toBeInTheDocument()
+  })
+
+  it('names the other two sources too (014), and says nothing for a full round', () => {
+    renderAt({ games: [game({ source: 'new' })] })
+    expect(screen.getByText(/haven’t been asked yet/i)).toBeInTheDocument()
+  })
+
+  it('says nothing at all for a round dealt from every word', () => {
+    renderAt({ games: [game({ source: 'all' })] })
+    expect(screen.queryByText(/words I got wrong/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/haven’t been asked/i)).not.toBeInTheDocument()
+  })
+
+  /*
+   * `gameRepo` deliberately does not validate `source`, so a round written by a
+   * build that had none reaches the row as undefined. An unguarded lookup would
+   * print "· undefined" on a real history row.
+   */
+  it('survives a round written before the field existed', () => {
+    renderAt({ games: [game({ source: undefined as never })] })
+    expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument()
   })
 
   /*

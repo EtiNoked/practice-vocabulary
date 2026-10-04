@@ -167,6 +167,26 @@ describe('the live pool count (008 FR-6)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/haven’t gotten any of these wrong/i)
     expect(start()).toBeDisabled()
   })
+
+  it('deals only the never-asked words under “New words” (014)', async () => {
+    const records: MissSource[] = [
+      {
+        listId: 'l1',
+        finishedAt: NOW - 1000,
+        wrongPairs: food.pairs.slice(0, 2),
+        rightPairs: food.pairs.slice(2, 5),
+      },
+    ]
+    const { user } = setup({}, records)
+    await user.click(listRow('Food'))
+    await user.click(screen.getByRole('button', { name: 'New words' }))
+    // Five of the list's words have been asked; the rest never have.
+    expect(screen.getByRole('status')).toHaveTextContent(String(food.pairs.length - 5))
+
+    // And the two halves together are the mistakes plus those, with no overlap.
+    await user.click(screen.getByRole('button', { name: 'Wrong & new words' }))
+    expect(screen.getByRole('status')).toHaveTextContent(String(food.pairs.length - 5 + 2))
+  })
 })
 
 describe('too few words to play', () => {

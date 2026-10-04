@@ -70,6 +70,17 @@ describe('the pool', () => {
     await user.click(screen.getByRole('button', { name: /words i got wrong/i }))
     expect(screen.getByRole('status')).toHaveTextContent(/haven’t gotten any of these wrong/i)
   })
+
+  it('gives each empty source its own reason, not one borrowed from misses (014)', async () => {
+    const { user } = setup({ count: () => 0 })
+    await user.click(screen.getByRole('button', { name: /chapter 1/i }))
+
+    await user.click(screen.getByRole('button', { name: /^new words$/i }))
+    expect(screen.getByRole('status')).toHaveTextContent(/asked every word in these lists already/i)
+
+    await user.click(screen.getByRole('button', { name: /^wrong & new words$/i }))
+    expect(screen.getByRole('status')).toHaveTextContent(/and you have been asked every word/i)
+  })
 })
 
 describe('starting', () => {

@@ -30,13 +30,39 @@ import { advance as advanceGame, answer as answerGame, isFinished as gameFinishe
 import type { Game, GameSettings } from '../game/types'
 
 /**
- * Where a missed-words subset came from, so the ready screen can say it in
- * words. A discriminated union rather than a display string: prose belongs to
- * the component, and the state stays serialisable and comparable.
+ * Where the ready screen's subset came from, so it can say it in words.
+ *
+ * A discriminated union rather than a display string: prose belongs to the
+ * component, and the state stays serialisable and comparable.
+ *
+ * Named for the SUBSET and not for misses since 014, when "the words I have
+ * never been asked" joined it. `kind: 'new'` carries no window on purpose —
+ * never-asked is not a statement about a slice of time, and `collectNew` says
+ * why at length. Giving it one "for symmetry" would make the type able to
+ * express a question the engine cannot answer.
  */
-export type MissedSource =
-  | { kind: 'window'; window: ReviewWindow }
+export type SubsetSource =
+  /** Both halves of a windowed source; 'missed-new' windows its missed half only. */
+  | { kind: 'window'; source: 'missed' | 'missed-new'; window: ReviewWindow }
+  | { kind: 'new' }
+  /** The misses of ONE finished drill, arrived at from the review screen. */
   | { kind: 'session'; finishedAt: number }
+
+/**
+ * Whether this subset was selected BY past failure, and so must be kept out of
+ * the home screen's average.
+ *
+ * The ready screen's half of `wordPool.countsTowardsAverage`, which says the
+ * same thing about a pool run. Two statements of one rule, because the two
+ * screens select words through different types — but they must agree, and
+ * `App` is the only caller of either, within a few lines of itself.
+ */
+export function isMistakesOnly(source: SubsetSource | undefined): boolean {
+  if (!source) return false
+  // A session subset IS a finished drill's misses, so it is mistakes-only by
+  // construction and has no window to ask about.
+  return source.kind === 'session' || (source.kind === 'window' && source.source === 'missed')
+}
 
 /**
  * The whole app as a discriminated union.
@@ -77,25 +103,26 @@ export type AppState =
       screen: 'ready'
       list: WordList
       /**
-       * Present when the user picked a missed-words subset on this screen.
+       * Present when the user picked a subset of the list on this screen —
+       * their mistakes, the words they have never been asked, or both.
        *
        * Carried BESIDE the list rather than as a synthetic WordList whose pairs
        * are the subset. Such a list would share the real one's id, so "Save this
        * list" would overwrite forty words with twelve — keeping them separate
        * makes that mistake unrepresentable rather than merely avoided.
        */
-      missed?: { pairs: WordPair[]; source: MissedSource }
+      subset?: { pairs: WordPair[]; source: SubsetSource }
     }
   /**
    * A drill in flight, and the run it is a run OF.
    *
    * A `DrillRun` rather than a `WordList` since 011: a test can span several lists, and
    * there is then no honest single list to hold. A synthetic one was rejected on the
-   * grounds the ready screen already documents for its missed subset — it would share a
+   * grounds the ready screen already documents for its subset — it would share a
    * real list's id, so anything saving by id would overwrite the real thing (011 D-7).
    *
    * The `ready` screen above deliberately keeps a real `WordList`: it needs `pairs`,
-   * "Save this list" and the missed chips, none of which a run has.
+   * "Save this list" and the subset chips, none of which a run has.
    */
   | { screen: 'practising'; run: DrillRun; session: Session }
   | { screen: 'results'; run: DrillRun; session: Session }
@@ -182,7 +209,7 @@ export type AppAction =
   | { type: 'OPEN_TESTS' }
   | { type: 'OPEN_GAMES' }
   /** Arrive at ready with a subset of the list's words to drill. */
-  | { type: 'PRACTISE_MISSED'; list: WordList; pairs: WordPair[]; source: MissedSource }
+  | { type: 'PRACTISE_SUBSET'; list: WordList; pairs: WordPair[]; source: SubsetSource }
   /** Drop the subset and go back to the whole list, staying on ready. */
   | { type: 'PRACTISE_FULL' }
   | { type: 'GO_HOME' }
@@ -195,7 +222,7 @@ export type AppAction =
    *
    * Carries a FINISHED run, not a plan. Building one needs the live lists and every
    * record, which a pure reducer does not have and must not acquire — the same reason
-   * START_GAME carries a built game and PRACTISE_MISSED carries finished pairs.
+   * START_GAME carries a built game and PRACTISE_SUBSET carries finished pairs.
    */
   | { type: 'START_RUN'; run: DrillRun; mode: DrillMode }
   /** From results: the same settings over a freshly drawn set. Pure — the pool is in state. */
@@ -205,7 +232,7 @@ export type AppAction =
    * Carries a FINISHED Game, not settings.
    *
    * Building one needs the live lists and every record, which a pure reducer does not
-   * have and must not acquire — the same reason PRACTISE_MISSED carries finished pairs.
+   * have and must not acquire — the same reason PRACTISE_SUBSET carries finished pairs.
    */
   | { type: 'START_GAME'; game: Game }
   | { type: 'ANSWER'; choiceId: string; remainingMs: number }
@@ -244,15 +271,15 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
       }
 
     case 'PRACTISE_LIST':
-      // Deliberately WITHOUT `missed`: arriving from home always means the whole
+      // Deliberately WITHOUT `subset`: arriving from home always means the whole
       // list, even when the previous visit to this screen had a subset selected.
       return { screen: 'ready', list: action.list }
 
-    case 'PRACTISE_MISSED':
+    case 'PRACTISE_SUBSET':
       return {
         screen: 'ready',
         list: action.list,
-        missed: { pairs: action.pairs, source: action.source },
+        subset: { pairs: action.pairs, source: action.source },
       }
 
     case 'PRACTISE_FULL':
@@ -307,7 +334,7 @@ export function reduce(state: AppState, action: AppAction, rng: Rng = randomRng)
        * path downstream, not two: a second path for "the simple case" is how the simple
        * case quietly stops matching the complicated one.
        */
-      const run = runFromList(state.list, state.missed?.pairs ?? state.list.pairs)
+      const run = runFromList(state.list, state.subset?.pairs ?? state.list.pairs)
       return {
         screen: 'practising',
         run,

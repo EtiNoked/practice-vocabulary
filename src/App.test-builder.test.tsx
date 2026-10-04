@@ -138,7 +138,9 @@ describe('building a test over several lists', () => {
     await goTo(user, 'My lists')
     const firstList = (await screen.findByText('Chapter 1')).closest('li')!
     await user.click(within(firstList).getByRole('button', { name: /^practice$/i }))
-    expect(await screen.findByRole('button', { name: /All time · 2/i })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /^words i got wrong · 2$/i }),
+    ).toBeInTheDocument()
   })
 })
 

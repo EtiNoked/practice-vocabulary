@@ -1,20 +1,36 @@
+import { useState } from 'react'
 import { LANG_NAMES, isSameLanguage } from '../lang/languages'
-import type { MissedSource } from '../state/appMachine'
+import type { SubsetSource } from '../state/appMachine'
 import {
   REVIEW_WINDOWS,
   WINDOW_LABELS,
   WINDOW_PHRASES,
   type ReviewWindow,
 } from '../state/missedWords'
+import { POOL_SOURCES, POOL_SOURCE_LABELS, type PoolSource } from '../state/wordPool'
 import { PROMPT_MODES, type DrillMode, type DrillOptions, type WordList } from '../state/types'
+
+/**
+ * How many words each source would deal, as the buttons need it.
+ *
+ * The two windowed sources arrive as a count PER WINDOW rather than a single
+ * number, because the button has to restate itself when the window changes —
+ * "Words I got wrong · 20" turning into "· 3" the moment Today is picked is the
+ * whole point of putting the number on the button. `unseen` has no window; see
+ * `collectNew`.
+ */
+export interface SubsetCounts {
+  missed: Record<ReviewWindow, number>
+  missedNew: Record<ReviewWindow, number>
+  unseen: number
+}
 
 interface Props {
   list: WordList
   saved: boolean
-  /** Non-null when a missed-words subset is selected instead of the whole list. */
-  missed: { count: number; source: MissedSource } | null
-  /** How many words each window would drill. */
-  counts: Record<ReviewWindow, number>
+  /** Non-null when a subset is selected instead of the whole list. */
+  subset: { count: number; source: SubsetSource } | null
+  counts: SubsetCounts
   /** Some history in range predates right-answer recording. */
   degraded: boolean
   /** Order and how a test gives the word, as this list last used them on this device. */
@@ -23,7 +39,9 @@ interface Props {
   /** True when the device has no voice for this list's prompt language. */
   voiceMissing: boolean
   onStart: (mode: DrillMode) => void
-  onPickWindow: (window: ReviewWindow) => void
+  /** Build and select a subset. Never called with `kind: 'session'`, which only Review produces. */
+  onPickSubset: (source: SubsetSource) => void
+  /** Drop the subset and go back to the whole list. */
   onPractiseFull: () => void
   onSave: () => void
   onBack: () => void
@@ -42,39 +60,100 @@ const PROMPT_COPY: Record<(typeof PROMPT_MODES)[number], { label: string; hint: 
   both: { label: 'Both', hint: 'Hear it and read it' },
 }
 
-/** What the subset is, in words. */
-function missedSummary(count: number, source: MissedSource): string {
+/**
+ * What the subset is, in words.
+ *
+ * Written out per case rather than assembled from `POOL_SOURCE_LABELS`, because
+ * a button label and a sentence are not the same text: "Wrong & new words" is
+ * the right thing to press and the wrong thing to read back.
+ */
+function subsetSummary(count: number, source: SubsetSource): string {
   const words = `${count} ${count === 1 ? 'word' : 'words'}`
-  return source.kind === 'window'
-    ? `Practicing ${words} you missed ${WINDOW_PHRASES[source.window]}.`
-    : `Practicing the ${words} you missed on ${new Date(source.finishedAt).toLocaleDateString('en-GB')}.`
+  switch (source.kind) {
+    case 'window':
+      return source.source === 'missed'
+        ? `Practicing ${words} you missed ${WINDOW_PHRASES[source.window]}.`
+        : `Practicing ${words}: the ones you missed ${WINDOW_PHRASES[source.window]}, and the ones you haven’t been asked yet.`
+    case 'new':
+      return `Practicing the ${words} you haven’t been asked yet.`
+    case 'session':
+      return `Practicing the ${words} you missed on ${new Date(source.finishedAt).toLocaleDateString('en-GB')}.`
+  }
 }
 
 export function ReadyScreen({
   list,
   saved,
-  missed,
+  subset,
   counts,
   degraded,
   options,
   onOptionsChange,
   voiceMissing,
   onStart,
-  onPickWindow,
+  onPickSubset,
   onPractiseFull,
   onSave,
   onBack,
 }: Props) {
-  const anyMissed = REVIEW_WINDOWS.some((w) => counts[w] > 0)
+  /*
+   * The window the two windowed sources are read through.
+   *
+   * Local, and remembered across a switch away and back, because the window is
+   * a REFINEMENT of the source rather than a sibling of it: picking "New words"
+   * and then "Words I got wrong" again should not silently widen the user back
+   * out to all time. It seeds at 'all' — the widest — so the first press of a
+   * mistakes button gives everything rather than an arbitrary slice.
+   *
+   * Read from the live selection when there is one, so the two cannot disagree
+   * about which chip is lit.
+   */
+  const [lastWindow, setLastWindow] = useState<ReviewWindow>(() =>
+    subset?.source.kind === 'window' ? subset.source.window : 'all',
+  )
+  const windowed = subset?.source.kind === 'window' ? subset.source : null
+  // `activeWindow`, not `window`: shadowing the global here would be a trap for
+  // the next person who reaches for `window.matchMedia` in this file.
+  const activeWindow = windowed?.window ?? lastWindow
+
+  /** What each button would deal right now, read through the current window. */
+  const sourceCount: Record<PoolSource, number> = {
+    all: list.pairs.length,
+    missed: counts.missed[activeWindow],
+    'missed-new': counts.missedNew[activeWindow],
+    new: counts.unseen,
+  }
+
+  /** Which of the four is lit. Null while a review screen's session subset is showing. */
+  const chosen: PoolSource | null =
+    subset === null
+      ? 'all'
+      : subset.source.kind === 'window'
+        ? subset.source.source
+        : subset.source.kind === 'new'
+          ? 'new'
+          : null
+
+  const pickSource = (value: PoolSource) => {
+    if (value === 'all') return onPractiseFull()
+    if (value === 'new') return onPickSubset({ kind: 'new' })
+    onPickSubset({ kind: 'window', source: value, window: activeWindow })
+  }
+
+  const pickWindow = (next: ReviewWindow) => {
+    setLastWindow(next)
+    if (windowed) onPickSubset({ ...windowed, window: next })
+  }
+
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4 p-4">
       <h1 className="text-2xl font-semibold">{list.name}</h1>
       <p className="text-ink-muted">
         {list.pairs.length} {list.pairs.length === 1 ? 'word' : 'words'}
       </p>
-      {missed ? (
+      {subset ? (
         <p className="rounded-lg bg-primary-soft p-3 text-ink">
-          {missedSummary(missed.count, missed.source)}
+          {subsetSummary(subset.count, subset.source)}
         </p>
       ) : isSameLanguage(list.col1Lang, list.col2Lang) ? (
         /*
@@ -104,45 +183,83 @@ export function ReadyScreen({
         <h2 id="words-heading" className="font-semibold">
           Words
         </h2>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            aria-pressed={!missed}
-            onClick={missed ? onPractiseFull : undefined}
-            className={!missed ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
-          >
-            All words · {list.pairs.length}
-          </button>
+        {/*
+          Four sources in a 2×2 grid, where "All words" plus a row of window chips used
+          to sit. The windows did not go away — they moved UNDER the two sources they
+          actually qualify, which is the whole reason for the restructure: "Today" was
+          never a kind of words, it was a narrowing of one kind, and sitting beside
+          "All words" it read like a fifth option.
+
+          The count rides on each button rather than being stated once underneath, so
+          choosing between them is a choice between two numbers rather than a guess.
+        */}
+        <div className="grid grid-cols-2 gap-2">
+          {POOL_SOURCES.map((value) => {
+            const on = chosen === value
+            const n = sourceCount[value]
+            return (
+              <button
+                key={value}
+                type="button"
+                // Disabled rather than hidden: a zero tells the user they have no
+                // mistakes left in this window — which is worth knowing — where a
+                // missing button only invites the question.
+                disabled={n === 0 && !on}
+                aria-pressed={on}
+                onClick={() => pickSource(value)}
+                className={on ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
+              >
+                {POOL_SOURCE_LABELS[value]} · {n}
+              </button>
+            )
+          })}
         </div>
-        {anyMissed && (
+        {/*
+          Shown only while a windowed source is the live one. A window selector with
+          nothing to narrow is a control that does nothing when pressed, and the two
+          sources it does not apply to say so by its absence.
+        */}
+        {windowed && (
           <>
-            <p className="text-sm text-ink-muted">Or only the words you missed:</p>
+            <p className="text-sm text-ink-muted">Counting mistakes from:</p>
             <div className="flex flex-wrap gap-2">
               {REVIEW_WINDOWS.map((w) => {
-                const chosen = missed?.source.kind === 'window' && missed.source.window === w
+                /*
+                 * Counted against the LIVE source, not always against `missed`. On
+                 * "Wrong & new words" every chip includes the new words, so a chip
+                 * cannot read 0 while the button above it reads 40 — and a chip is
+                 * disabled exactly when pressing it would empty the current selection.
+                 */
+                const n = windowed.source === 'missed' ? counts.missed[w] : counts.missedNew[w]
+                const on = windowed.window === w
                 return (
                   <button
                     key={w}
                     type="button"
-                    // Disabled rather than hidden: a zero tells the user their
-                    // recent misses are cleared, which a missing chip would not.
-                    disabled={counts[w] === 0}
-                    aria-pressed={chosen}
-                    onClick={() => onPickWindow(w)}
-                    className={chosen ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
+                    disabled={n === 0 && !on}
+                    aria-pressed={on}
+                    onClick={() => pickWindow(w)}
+                    className={on ? 'btn btn-primary text-sm' : 'btn btn-quiet text-sm'}
                   >
-                    {WINDOW_LABELS[w]} · {counts[w]}
+                    {WINDOW_LABELS[w]} · {n}
                   </button>
                 )
               })}
             </div>
-            {degraded && (
-              <p className="text-sm text-ink-muted">
-                Some of these drills were recorded before right answers were saved, so a word you
-                have since got right may still appear.
-              </p>
-            )}
           </>
+        )}
+        {/*
+          One sentence covering BOTH halves of the same blindness. A drill recorded
+          before right answers were saved can leave a word you have since learned in
+          the missed set, and put a word you were asked into the new set — same cause,
+          opposite directions, and saying only the first would misdescribe the second.
+        */}
+        {degraded && (
+          <p className="text-sm text-ink-muted">
+            Some of these drills were recorded before right answers were saved, so a word you have
+            since got right may still count as missed, and a word you were asked may still count as
+            new.
+          </p>
         )}
       </section>
 
@@ -269,7 +386,7 @@ export function ReadyScreen({
           handful of words — and a disabled button invites the question where an
           absent one closes it.
         */}
-        {!missed && (
+        {!subset && (
           <button
             type="button"
             onClick={onSave}

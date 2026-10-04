@@ -102,6 +102,36 @@ describe('which words', () => {
     expect(draft().spec.source).toBe('missed')
   })
 
+  it('offers all four sources (014)', () => {
+    setup()
+    for (const name of [
+      /^all words$/i,
+      /^words i got wrong$/i,
+      /^wrong & new words$/i,
+      /^new words$/i,
+    ]) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+
+  it('reports each of the never-asked sources up by its stored name', async () => {
+    const { user, draft } = setup()
+    await user.click(screen.getByRole('button', { name: /^wrong & new words$/i }))
+    expect(draft().spec.source).toBe('missed-new')
+    await user.click(screen.getByRole('button', { name: /^new words$/i }))
+    expect(draft().spec.source).toBe('new')
+  })
+
+  it('marks exactly one of them at a time', async () => {
+    const { user } = setup()
+    await user.click(screen.getByRole('button', { name: /^new words$/i }))
+    const sources = ['All words', 'Words I got wrong', 'Wrong & new words', 'New words']
+    const pressed = sources.filter(
+      (name) => screen.getByRole('button', { name }).getAttribute('aria-pressed') === 'true',
+    )
+    expect(pressed).toEqual(['New words'])
+  })
+
   it('rebuilds the pool when the source changes, and NOT when the number box does', async () => {
     const count = vi.fn(() => 34)
     const { user } = setup({ count })

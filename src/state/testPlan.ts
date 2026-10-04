@@ -1,4 +1,5 @@
 import type { TestPlan } from './drillRun'
+import { POOL_SOURCE_PHRASES } from './wordPool'
 import type { WordList } from './types'
 
 /**
@@ -74,7 +75,7 @@ export function describeTest(
   if (living.length === 0) return 'No lists left — this test can’t run'
 
   const where = living.length === 1 ? living[0]!.name : `${living.length} lists`
-  const which = plan.spec.source === 'missed' ? 'words I got wrong' : 'all words'
+  const which = POOL_SOURCE_PHRASES[plan.spec.source]
 
   const howMany =
     available === 0

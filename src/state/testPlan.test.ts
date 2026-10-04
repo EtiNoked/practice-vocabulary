@@ -29,6 +29,15 @@ describe('describeTest', () => {
       .toBe('3 lists · words I got wrong · 15 of 34')
   })
 
+  it('names the two never-asked sources in words the builder also uses (014)', () => {
+    expect(
+      describeTest(plan({ spec: { listIds: ['A'], source: 'missed-new' }, count: 15 }), LISTS, 34),
+    ).toBe('Chapter 1 · words I got wrong, and new ones · 15 of 34')
+    expect(
+      describeTest(plan({ spec: { listIds: ['A'], source: 'new' }, count: 15 }), LISTS, 34),
+    ).toBe('Chapter 1 · words I haven’t been asked yet · 15 of 34')
+  })
+
   it('names a single list rather than counting it', () => {
     expect(describeTest(plan({ spec: { listIds: ['A'], source: 'all' }, count: 10 }), LISTS, 40))
       .toBe('Chapter 1 · all words · 10 of 40')
