@@ -53,18 +53,24 @@ const Row = memo(function Row({
   return (
     <li className="flex flex-col gap-1">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+        {/*
+          `col2` FIRST: it is the word being learnt — spoken, tested, sorted by — and the
+          word you are learning is the one you reach for first (017). The field names are
+          historical and no longer track position; `data-cell` names the field, which is
+          what every test addresses a cell by.
+        */}
         <input
-          data-cell="col1"
-          aria-label={`Row ${index + 1} column 1`}
-          value={row.col1}
-          onChange={(e) => onChange(index, { col1: e.target.value })}
+          data-cell="col2"
+          aria-label={`Row ${index + 1} word`}
+          value={row.col2}
+          onChange={(e) => onChange(index, { col2: e.target.value })}
           className="min-h-11 flex-1 rounded border border-line-strong px-2"
         />
         <input
-          data-cell="col2"
-          aria-label={`Row ${index + 1} column 2`}
-          value={row.col2}
-          onChange={(e) => onChange(index, { col2: e.target.value })}
+          data-cell="col1"
+          aria-label={`Row ${index + 1} meaning`}
+          value={row.col1}
+          onChange={(e) => onChange(index, { col1: e.target.value })}
           className="min-h-11 flex-1 rounded border border-line-strong px-2"
         />
         <span className="w-24 shrink-0 text-xs text-accent">
@@ -220,6 +226,9 @@ export function ListEditor({
   /**
    * Exchange both the column contents and their languages.
    *
+   * Still means "I have put these the wrong way round" after 017, and now looks like it:
+   * what is in the first box moves to the second, taking its language with it.
+   *
    * Setting the override is not optional: swapping only the contents lets the
    * next detection pass swap the languages straight back, and the two changes
    * cancel out into a button that appears to do nothing.
@@ -258,9 +267,9 @@ export function ListEditor({
   }, [])
 
   /**
-   * A to Z by column 2, the word read aloud, only when asked: a list kept in a textbook's order is kept that way
-   * until the user chooses otherwise. The header row (if the first row names the languages)
-   * stays on top.
+   * A to Z by the word column — the first one, the one read aloud — and only when asked: a
+   * list kept in a textbook's order is kept that way until the user chooses otherwise. The
+   * header row (if the first row names the languages) stays on top.
    */
   const handleSort = useCallback(() => {
     setDirty(true)
@@ -332,7 +341,7 @@ export function ListEditor({
             : 'bg-primary-soft text-ink'
         }`}
       >
-        Column 1 {LANG_NAMES[effective.col1Lang]} → Column 2 {LANG_NAMES[effective.col2Lang]} 🔊
+        {LANG_NAMES[effective.col2Lang]} → {LANG_NAMES[effective.col1Lang]} 🔊
         {guessed && ' (guessed)'}
       </p>
       {guessed && (
@@ -342,10 +351,11 @@ export function ListEditor({
       )}
 
       <div className="mt-2 flex flex-wrap items-end gap-3">
-        {(['col1', 'col2'] as const).map((column) => (
+        {/* Word language first, to match the order the boxes below are drawn in (017). */}
+        {(['col2', 'col1'] as const).map((column) => (
           <div key={column} className="flex flex-col gap-1">
             <label className="text-xs font-medium" htmlFor={`lang-${column}`}>
-              {column === 'col1' ? 'Column 1 language' : 'Column 2 language'}
+              {column === 'col2' ? 'Word language' : 'Meaning language'}
             </label>
             <select
               id={`lang-${column}`}
@@ -371,8 +381,8 @@ export function ListEditor({
       </div>
 
       <div className="mt-3 hidden gap-2 text-sm font-medium sm:flex">
-        <span className="flex-1">Column 1 — the answer</span>
-        <span className="flex-1">Column 2 — spoken aloud</span>
+        <span className="flex-1">Word — spoken aloud</span>
+        <span className="flex-1">Meaning — the answer</span>
         <span className="w-24" />
         <span className="w-11" />
       </div>
@@ -409,8 +419,8 @@ export function ListEditor({
           Paste or import a list
         </button>
         {/*
-          Column 2 is the word read aloud: the one being learned, and the one to look words up
-          by. A one-off action, not a setting: the rows then stay where they are.
+          Sorts by the first column, the word read aloud: the one being learned, and the one to
+          look words up by. A one-off action, not a setting: the rows then stay where they are.
         */}
         <button type="button" onClick={handleSort} className="btn btn-quiet">
           Sort A to Z

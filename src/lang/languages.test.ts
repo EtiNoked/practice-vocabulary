@@ -128,7 +128,7 @@ describe('header aliases are unambiguous across languages', () => {
 
 describe('sideNames — what to call each side of a card', () => {
   it('uses the two language names when the list translates', () => {
-    // The prompt is column 2 and the answer is column 1, which is the drill's direction.
+    // The prompt is `col2` — the word column — and the answer is `col1`: the drill's direction.
     expect(sideNames('en', 'nl')).toEqual({ prompt: 'Dutch', answer: 'English' })
   })
 

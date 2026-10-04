@@ -1,6 +1,10 @@
 /**
  * Text fixtures for textParse. Real English/Dutch pairs shaped like a school
  * textbook vocabulary table, so the parser is exercised against realistic input.
+ *
+ * The parser is language-blind: it only ever decides WHICH FIELD goes where, and since 017
+ * the first field of a line is the word being learnt (`col2`) and the rest is its meaning
+ * (`col1`). Nothing here needs to be in any particular language for that to be exercised.
  */
 
 /** Pasting from Excel / Google Sheets. The common case. */
@@ -16,10 +20,14 @@ daughter\tdochter
 to die\tdoodgaan`
 
 /**
- * The case that breaks a naive `line.split(',')`: the second column contains commas.
+ * The case that breaks a naive `line.split(',')`: the second field contains commas.
  * Splitting on the FIRST comma only is what keeps these intact.
+ *
+ * Named for the FIELD POSITION rather than for a column number: the first field is the
+ * word being learnt and lands in `col2` since 017, so a name like `..._IN_COL2` would now
+ * point at the wrong half.
  */
-export const COMMA_WITH_COMMAS_IN_COL2 = `niece,My sibling's daughter, my niece
+export const COMMA_WITH_COMMAS_IN_SECOND_FIELD = `niece,My sibling's daughter, my niece
 cousin,My aunt's child, my cousin
 nephew,My sibling's son, my nephew`
 

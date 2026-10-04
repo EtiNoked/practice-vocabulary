@@ -30,8 +30,9 @@ describe('normalizeRows', () => {
     ])
   })
 
-  // Column 2 holds whole sentences in a real textbook list. Stripping trailing
-  // punctuation generally would mangle them, so only | and _ are removed.
+  // A cell can hold a whole sentence — the meaning side of a list that explains its words
+  // rather than translating them. Stripping trailing punctuation generally would mangle
+  // those, so only | and _ are removed.
   it('keeps a trailing full stop on a sentence', () => {
     expect(normalizeRows([row('twins', 'Twins have the same birthday.')])[0]?.col2).toBe(
       'Twins have the same birthday.',

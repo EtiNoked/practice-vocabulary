@@ -2,8 +2,12 @@ import type { RawRow } from './types'
 
 /**
  * Characters that are table-drawing artifacts rather than content. Deliberately
- * narrow: column 2 holds whole sentences, so stripping trailing punctuation in
- * general would turn "Twins have the same birthday." into something wrong.
+ * narrow: a cell can hold a whole sentence — the meaning side of a list that explains its
+ * words rather than translating them — so stripping trailing punctuation in general would
+ * turn "Twins have the same birthday." into something wrong.
+ *
+ * `cleanCell` is applied to both cells identically, so 017's flip of which column is drawn
+ * first changed nothing here.
  */
 const EDGE_ARTIFACTS = /^[|_\s]+|[|_\s]+$/g
 

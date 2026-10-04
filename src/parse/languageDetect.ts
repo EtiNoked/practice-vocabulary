@@ -161,15 +161,26 @@ export function detectLanguages(rows: readonly RawRow[]): LanguageDetection {
 
   const first = rows[0]
   if (first) {
-    const left = matchHeaderCell(first.col1)
-    const right = matchHeaderCell(first.col2)
+    /*
+     * `col2` is the WORD cell and `col1` the MEANING cell, both here and in the row below
+     * it — this reads a row, not a screen, and by the time a row reaches here the first
+     * field is already in `col2`, whether it came from `parseDelimited` or from the
+     * editor's first input. 017 changed neither, which is why this mapping did not move.
+     *
+     * The trap, for whoever edits this next: "first" is `col2`. Flipping this to match the
+     * editor's left-to-right order double-flips it, and a `Dutch<TAB>English` header then
+     * labels the list backwards, reads every Dutch word in an English voice, and does it
+     * without failing a single unit test written against hand-built rows.
+     */
+    const meaning = matchHeaderCell(first.col1)
+    const word = matchHeaderCell(first.col2)
     /*
      * Both cells must name a language. They no longer have to DISAGREE: "Nederlands /
      * Nederlands" heads a word-and-explanation list, and rejecting it sent the clearest
      * possible statement of intent down the guessing path.
      */
-    if (left && right) {
-      return { col1Lang: left, col2Lang: right, source: 'header', headerConsumed: true }
+    if (meaning && word) {
+      return { col1Lang: meaning, col2Lang: word, source: 'header', headerConsumed: true }
     }
   }
 

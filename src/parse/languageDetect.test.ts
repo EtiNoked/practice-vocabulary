@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RawRow } from './types'
 import { detectLanguages, levenshtein } from './languageDetect'
+import { parseDelimited } from './textParse'
 
 const rows = (...pairs: Array<[string, string]>): RawRow[] =>
   pairs.map(([col1, col2]) => ({ col1, col2 }))
@@ -68,6 +69,26 @@ describe('detectLanguages — header row', () => {
     expect(result.source).toBe('header')
     expect(result.col1Lang).toBe('nl')
     expect(result.col2Lang).toBe('nl')
+    expect(result.headerConsumed).toBe(true)
+  })
+
+  /*
+   * Composed through the REAL parser, not through hand-built rows (017).
+   *
+   * Every other test here states its rows as `{col1, col2}` directly, which is a statement
+   * about fields and says nothing about what a user typed. This one starts from the text a
+   * user actually pastes, so it pins the thing they can see: the first cell of a header row
+   * names the first column, which is the word they are learning.
+   *
+   * It is here because a hand-built fixture cannot catch a double flip — get `parseDelimited`
+   * and this function both "flipped" and the two cancel, with the whole suite still green and
+   * every Dutch word read aloud in an English voice.
+   */
+  it('reads a pasted header row word-first, through the real parser', () => {
+    const result = detectLanguages(parseDelimited('Dutch\tEnglish\ndochter\tdaughter', 'tab'))
+    expect(result.source).toBe('header')
+    expect(result.col2Lang).toBe('nl')
+    expect(result.col1Lang).toBe('en')
     expect(result.headerConsumed).toBe(true)
   })
 
