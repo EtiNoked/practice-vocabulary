@@ -129,3 +129,33 @@ export const PROFILES: Record<LangCode, LangProfile> = {
     suffixes: ['tion', 'ment', 'eux', 'euse', 'ée', 'ais', 'ait', 'ez'],
   },
 }
+
+/**
+ * What to call each side of a card.
+ *
+ * Normally the two language names: the prompt is column 2 and the answer is column 1.
+ *
+ * A list may have the SAME language on both sides — a Dutch word against a Dutch sentence
+ * explaining it — and there the language name identifies nothing. Two headings both
+ * reading "Dutch" is worse than no heading at all, because it looks like a bug in exactly
+ * the layout where the reader is working out which half is which. So that case gets role
+ * names instead.
+ *
+ * The one place this distinction is written down. Three components render these labels,
+ * and three copies of `col1Lang === col2Lang ? … : …` is three chances for one of them to
+ * keep saying "Dutch → Dutch".
+ */
+export function sideNames(
+  col1Lang: LangCode,
+  col2Lang: LangCode,
+): { prompt: string; answer: string } {
+  if (col1Lang !== col2Lang) {
+    return { prompt: LANG_NAMES[col2Lang], answer: LANG_NAMES[col1Lang] }
+  }
+  return { prompt: 'Clue', answer: 'Answer' }
+}
+
+/** True when a list explains itself in its own language, rather than translating. */
+export function isSameLanguage(col1Lang: LangCode, col2Lang: LangCode): boolean {
+  return col1Lang === col2Lang
+}

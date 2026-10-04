@@ -1536,3 +1536,120 @@ describe('saving a new list from the editor', () => {
     expect(screen.getByText(/^1 word ·/)).toBeInTheDocument()
   })
 })
+
+/**
+ * A silent test, end to end.
+ *
+ * The unit tests pin each piece. This pins the one thing only the whole app can show:
+ * that "Show the word" keeps the device quiet for the WHOLE run, not just the first card.
+ * The gate lives at a single choke point in `App`, and the failure mode if it ever moves
+ * is a run that starts silent and begins talking again three cards in.
+ */
+describe('a test that shows the word instead of saying it', () => {
+  it('speaks nothing at all, card after card', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+
+    await user.click(screen.getByRole('button', { name: /practice/i }))
+    await user.click(screen.getByRole('button', { name: /show the word/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+
+    expect(screen.queryByRole('button', { name: /hear it again/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    await user.click(screen.getByRole('button', { name: /right/i }))
+    expect(screen.getByText(/card 2 of 2/i)).toBeInTheDocument()
+
+    expect(speechCalls.filter((c) => c.type === 'speak')).toEqual([])
+  })
+
+  it('leaves practice alone — the setting is scoped to Test', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+
+    await user.click(screen.getByRole('button', { name: /practice/i }))
+    await user.click(screen.getByRole('button', { name: /show the word/i }))
+    await user.click(screen.getByRole('button', { name: /^practice$/i }))
+
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(1)
+  })
+
+  it('is remembered for that list, like Order already is', async () => {
+    listRepo.save(seeded)
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+
+    await user.click(screen.getByRole('button', { name: /practice/i }))
+    await user.click(screen.getByRole('button', { name: /show the word/i }))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await user.click(screen.getByRole('button', { name: /practice/i }))
+
+    expect(screen.getByRole('button', { name: /show the word/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+})
+
+/**
+ * A list that explains its words in their own language, end to end.
+ *
+ * The feature is mostly an ABSENCE — of the rule that forced two different languages — so
+ * what it needs is a test that walks the whole path and finds nothing in the way.
+ */
+describe('a Dutch word against its Dutch explanation', () => {
+  const explained: WordList = {
+    id: 'nlnl',
+    name: 'Woorden uitgelegd',
+    col1Lang: 'nl',
+    col2Lang: 'nl',
+    langSource: 'manual',
+    pairs: [
+      { id: 'e1', col1: 'de tweeling', col2: 'twee kinderen van dezelfde geboorte' },
+      { id: 'e2', col1: 'de dochter', col2: 'het meisje van je ouders' },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    origin: 'manual',
+  }
+
+  it('drills like any other list, and names the sides by role', async () => {
+    listRepo.save(explained)
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+
+    await user.click(screen.getByRole('button', { name: /practice/i }))
+    expect(screen.getByText(/both sides are/i)).toHaveTextContent(/Dutch/)
+    expect(screen.queryByText(/answer in Dutch/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    expect(screen.getByText(/listen — clue/i)).toBeInTheDocument()
+    // Spoken in Dutch, which is the only language there is here.
+    expect(speechCalls.filter((c) => c.type === 'speak')[0]).toMatchObject({ lang: 'nl-NL' })
+
+    await user.click(screen.getByRole('button', { name: /show answer/i }))
+    expect(screen.getByText(/^answer$/i)).toBeInTheDocument()
+  })
+
+  it('scores and records it like any other drill', async () => {
+    listRepo.save(explained)
+    const user = userEvent.setup()
+    renderApp()
+    await goTo(user, 'My lists')
+
+    await user.click(screen.getByRole('button', { name: /practice/i }))
+    await user.click(screen.getByRole('button', { name: /^test$/i }))
+    for (let i = 0; i < 2; i++) {
+      await user.click(screen.getByRole('button', { name: /show answer/i }))
+      await user.click(screen.getByRole('button', { name: /right/i }))
+    }
+
+    expect(screen.getByText(/2 \/ 2/)).toBeInTheDocument()
+    expect(sessionRepo.getAll()[0]?.listId).toBe('nlnl')
+  })
+})

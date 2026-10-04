@@ -1,6 +1,19 @@
-import { DEFAULT_DRILL_OPTIONS, type DrillOptions } from '../state/types'
+import { DEFAULT_DRILL_OPTIONS, PROMPT_MODES, type DrillOptions, type PromptMode } from '../state/types'
 
 const key = (listId: string) => `pvt.drill.prefs.${listId}`
+
+/**
+ * The remembered prompt mode, reading a preference written before it was an enum.
+ *
+ * `showWord: true` was "say it and show it" and `false` was "say it" — 'both' and 'hear'.
+ * Mapping them keeps everyone's existing choice rather than silently resetting the one
+ * setting this feature touched. Anything unrecognized falls to the default.
+ */
+function storedPrompt(parsed: { prompt?: unknown; showWord?: unknown }): PromptMode {
+  if (PROMPT_MODES.includes(parsed.prompt as PromptMode)) return parsed.prompt as PromptMode
+  if (parsed.showWord === true) return 'both'
+  return DEFAULT_DRILL_OPTIONS.prompt
+}
 
 /**
  * The start screen's Order and Show-the-word choices for one list, as last used on this device.
@@ -15,10 +28,10 @@ export function readDrillPrefs(listId: string): DrillOptions {
   try {
     const raw = localStorage.getItem(key(listId))
     if (!raw) return DEFAULT_DRILL_OPTIONS
-    const parsed = JSON.parse(raw) as Partial<DrillOptions>
+    const parsed = JSON.parse(raw) as Partial<DrillOptions> & { showWord?: unknown }
     return {
       ordering: parsed.ordering === 'list' ? 'list' : 'random',
-      showWord: parsed.showWord === true,
+      prompt: storedPrompt(parsed),
     }
   } catch {
     return DEFAULT_DRILL_OPTIONS

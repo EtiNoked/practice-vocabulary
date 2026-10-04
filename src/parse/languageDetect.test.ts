@@ -53,10 +53,22 @@ describe('detectLanguages — header row', () => {
     expect(result.col2Lang).toBe('nl')
   })
 
-  it('ignores a header row that names the same language twice', () => {
-    const result = detectLanguages(rows(['English', 'English'], ...ENGLISH_DUTCH.map(r => [r.col1, r.col2] as [string, string])))
-    expect(result.source).not.toBe('header')
-    expect(result.headerConsumed).toBe(false)
+  /*
+   * The inverse of what this asserted before, and deliberately.
+   *
+   * "Nederlands / Nederlands" used to be read as a nonsense header and thrown away. It is
+   * now the clearest possible statement that this list explains its words in their own
+   * language rather than translating them, and the one thing it must not do is send that
+   * straight down the guessing path.
+   */
+  it('reads a header row that names the same language twice', () => {
+    const result = detectLanguages(
+      rows(['Nederlands', 'Nederlands'], ['de fiets', 'een ding met twee wielen']),
+    )
+    expect(result.source).toBe('header')
+    expect(result.col1Lang).toBe('nl')
+    expect(result.col2Lang).toBe('nl')
+    expect(result.headerConsumed).toBe(true)
   })
 
   it('does not consume a first row that is an ordinary word pair', () => {
@@ -154,23 +166,37 @@ describe('detectLanguages — three languages', () => {
     expect(detectLanguages(flipped)).toMatchObject({ col1Lang: 'en', col2Lang: 'nl' })
   })
 
-  it('never returns the same language for both columns, whatever the input', () => {
-    const inputs = [
-      DUTCH_FRENCH,
-      ENGLISH_DUTCH,
-      rows(['la porte', 'la fenêtre']),
-      rows(['nation', 'nation'], ['train', 'train']),
-      rows(['', '']),
-    ]
-    for (const input of inputs) {
+  /*
+   * This used to read "never returns the same language for both columns, whatever the
+   * input", and was enforced by excluding the identical pairs from the candidate set. A
+   * word-and-explanation list is one language on both sides, so those pairs have to be
+   * candidates — which means the guarantee now has to come from the SCORES rather than
+   * from the candidate set. These two check it still holds where it should.
+   */
+  it('still separates a translation list into two languages', () => {
+    for (const input of [DUTCH_FRENCH, ENGLISH_DUTCH, rows(['la porte', 'the door'])]) {
       const result = detectLanguages(input)
       expect(result.col1Lang).not.toBe(result.col2Lang)
     }
   })
 
+  it('reads a word and its explanation as one language', () => {
+    const result = detectLanguages(
+      rows(
+        ['de tweeling', 'twee kinderen die op dezelfde dag geboren zijn'],
+        ['de dochter', 'het meisje van je ouders'],
+        ['grootouders', 'de ouders van je vader of je moeder'],
+      ),
+    )
+    expect(result.source).toBe('heuristic')
+    expect(result.col1Lang).toBe('nl')
+    expect(result.col2Lang).toBe('nl')
+  })
+
   it('refuses to guess when no assignment stands out', () => {
-    // Latinate words shared by all three languages carry no signal either way.
-    const result = detectLanguages(rows(['nation', 'nation'], ['train', 'train']))
+    // No tokens the profiles recognize at all, so every assignment ties at zero —
+    // including the identical ones, which is the case this has to keep covering.
+    const result = detectLanguages(rows(['xyz', 'xyz'], ['qqq', 'zzz']))
     expect(result.source).toBe('default')
   })
 })

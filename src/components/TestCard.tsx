@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
-import { LANG_NAMES } from '../lang/languages'
+import { sideNames } from '../lang/languages'
 import { currentPair, score } from '../state/session'
 import type { DrillSubject } from '../state/drillRun'
-import type { MarkResult, Session } from '../state/types'
+import { promptShows, promptSpeaks, type MarkResult, type Session } from '../state/types'
 import { speak } from '../speech/tts'
 
 interface Props {
@@ -44,9 +44,19 @@ export function TestCard({
 }: Props) {
   const pair = currentPair(session)
   const tally = score(session)
+  const sides = sideNames(subject.col1Lang, subject.col2Lang)
+  const speaks = promptSpeaks(session.prompt)
+  /*
+   * `voiceMissing` OVERRIDES "just listen", and deliberately only that one.
+   *
+   * A silent card with nothing on it is not a harder test, it is an unanswerable one. It
+   * does NOT turn speech back on for 'see': that choice was the user asking for quiet,
+   * and a missing voice is no reason to overrule a run that was never going to speak.
+   */
+  const shows = promptShows(session.prompt) || voiceMissing
 
   const replay = () => {
-    if (pair) speak(pair.col2, subject.col2Lang)
+    if (pair && speaks) speak(pair.col2, subject.col2Lang)
   }
 
   useEffect(() => {
@@ -66,7 +76,7 @@ export function TestCard({
        */
       if (document.querySelector('[role="menu"],[role="dialog"]')) return
 
-      if (event.key === ' ') {
+      if (event.key === ' ' && speaks) {
         event.preventDefault()
         replay()
       } else if (event.key === 'Enter' && !session.revealed) {
@@ -103,34 +113,34 @@ export function TestCard({
         className="card p-6 text-center"
       >
         <p className="text-xs uppercase tracking-wide text-ink-faint">
-          Listen — {LANG_NAMES[subject.col2Lang]}
+          {speaks ? `Listen — ${sides.prompt}` : sides.prompt}
         </p>
 
         {/*
-          Shown as text when the device cannot say it, or when the test was started with
-          "Show the word" on. In the second case it steps aside once revealed, because the
-          answer block below repeats it right next to the translation.
+          Shown as text when the run asked to see it, or when the device cannot say it.
+          Either way it steps aside once revealed, because the answer block below repeats
+          it right next to the translation.
         */}
-        {(voiceMissing || (session.showWord && !session.revealed)) && (
-          <p className="mt-3 text-word font-bold">{pair.col2}</p>
-        )}
+        {shows && !session.revealed && <p className="mt-3 text-word font-bold">{pair.col2}</p>}
 
         {session.revealed ? (
           <div className="mt-4 flex flex-col gap-2">
             <p className="text-word font-bold">{pair.col2}</p>
-            <p className="text-xs uppercase tracking-wide text-ink-faint">
-              {LANG_NAMES[subject.col1Lang]}
-            </p>
+            <p className="text-xs uppercase tracking-wide text-ink-faint">{sides.answer}</p>
             <p className="text-word font-bold text-correct">{pair.col1}</p>
           </div>
         ) : (
-          <p className="mt-4 text-4xl" aria-hidden="true">
-            🔊
-          </p>
+          // The speaker glyph stands in for the word. A silent run already HAS the word
+          // on the card, so it would be a picture of sound over a run that makes none.
+          !shows && (
+            <p className="mt-4 text-4xl" aria-hidden="true">
+              🔊
+            </p>
+          )
         )}
       </div>
 
-      {resumed && (
+      {resumed && speaks && (
         <p className="rounded-lg bg-accent-soft p-3 text-center text-sm">
           Resumed — tap 🔊 to hear the word again
         </p>
@@ -155,13 +165,20 @@ export function TestCard({
         </div>
       ) : (
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={replay}
-            className="btn btn-quiet btn-lg flex-1"
-          >
-            Hear it again 🔊
-          </button>
+          {/*
+            Absent, not disabled, on a silent run. A dead speaker button on a card the
+            user deliberately asked to be silent invites the question an absent one never
+            raises — the rule the zero-count window chips already follow, inverted.
+          */}
+          {speaks && (
+            <button
+              type="button"
+              onClick={replay}
+              className="btn btn-quiet btn-lg flex-1"
+            >
+              Hear it again 🔊
+            </button>
+          )}
           <button
             type="button"
             onClick={onReveal}
@@ -173,7 +190,7 @@ export function TestCard({
       )}
 
       <p className="text-center text-xs text-ink-faint">
-        Space replays · Enter reveals · Y / N marks
+        {speaks && 'Space replays · '}Enter reveals · Y / N marks
       </p>
     </section>
   )

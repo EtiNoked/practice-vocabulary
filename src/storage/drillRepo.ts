@@ -1,11 +1,13 @@
 import { runFromList, type DrillRun } from '../state/drillRun'
 import { isFinished } from '../state/session'
-import type {
-  DrillMode,
-  PersistedDrill,
-  Session,
-  SessionRecord,
-  WordList,
+import {
+  PROMPT_MODES,
+  type DrillMode,
+  type PersistedDrill,
+  type PromptMode,
+  type Session,
+  type SessionRecord,
+  type WordList,
 } from '../state/types'
 import type { WriteResult } from './types'
 
@@ -35,6 +37,20 @@ export interface RestoredDrill {
 }
 
 const MODES: readonly DrillMode[] = ['practice', 'test']
+
+/**
+ * The parked test's prompt mode, or what the drill was actually running under before
+ * `showWord` became an enum.
+ *
+ * A payload written by the boolean build carries `showWord: true | false`, which maps
+ * exactly onto 'both' and 'hear' — the two states that already existed. Reading it is a
+ * restore; defaulting it to 'hear' instead would quietly take the word off the card of a
+ * drill someone is halfway through, which is the one thing a resume must not do.
+ */
+function restoredPrompt(session: { prompt?: unknown; showWord?: unknown }): PromptMode {
+  if (PROMPT_MODES.includes(session.prompt as PromptMode)) return session.prompt as PromptMode
+  return session.showWord === true ? 'both' : 'hear'
+}
 
 function isWordList(value: unknown): value is WordList {
   if (typeof value !== 'object' || value === null) return false
@@ -158,7 +174,7 @@ function read(now: number): RestoredDrill | null {
         // Coerced for the same reason: a drill parked before these existed is still a
         // drill worth resuming. Its order is already dealt; these only shape a re-run.
         ordering: payload.session.ordering === 'list' ? 'list' : 'random',
-        showWord: payload.session.showWord === true,
+        prompt: restoredPrompt(payload.session),
       },
       // COERCED, not rejected. Throwing away a drill in progress over this one
       // label would be a worse outcome than logging it as a full run — the same

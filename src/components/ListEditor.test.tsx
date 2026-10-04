@@ -211,13 +211,28 @@ describe('language selectors', () => {
     expect(list.col1Lang).toBe('fr')
   })
 
-  // Exchange rather than reject: a user setting both the same is almost always
-  // trying to swap them.
-  it('never lets both columns hold the same language', async () => {
+  /*
+   * The reverse of what this asserted before.
+   *
+   * It used to EXCHANGE the two columns when you picked the language the other already
+   * held, reading that as an attempt to swap. A word-and-explanation list is one language
+   * on both sides, so that reading now blocks the only way to express it — and swapping
+   * is still one tap away on Swap columns, which moves the words with their languages
+   * rather than only the labels.
+   */
+  it('lets both columns hold the same language, for a word and its explanation', async () => {
     const { user } = setup({ initialRows: NL_FR })
     await user.selectOptions(col2Select(), 'nl')
-    expect(col1Select().value).toBe('fr')
+    expect(col1Select().value).toBe('nl')
     expect(col2Select().value).toBe('nl')
+  })
+
+  it('still swaps the words along with the languages on Swap columns', async () => {
+    const { user } = setup({ initialRows: NL_FR })
+    const before = { col1: col1Select().value, col2: col2Select().value }
+    await user.click(screen.getByRole('button', { name: /swap columns/i }))
+    expect(col1Select().value).toBe(before.col2)
+    expect(col2Select().value).toBe(before.col1)
   })
 
   it('keeps a saved manual choice when the list is reopened', () => {

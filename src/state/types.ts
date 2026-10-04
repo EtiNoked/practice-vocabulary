@@ -84,13 +84,43 @@ export type DrillMode = 'practice' | 'test'
 /** The order a drill deals its words in. Chosen on the start screen, remembered per list. */
 export type DrillOrdering = 'random' | 'list'
 
+/**
+ * How a TEST gives you the word: by ear, by eye, or both.
+ *
+ * Widened from the `showWord: boolean` this replaced, because that boolean could only
+ * ever add text ON TOP of speech — it had no way to say "no sound at all". A quiet room,
+ * a shared desk, a device whose voice for the language is unbearable, or a prompt that is
+ * a sentence rather than a word are all reasons to want the third state, and none of them
+ * is served by a checkbox.
+ *
+ * 'hear' is the old `false` and 'both' is the old `true`, so the two settings that already
+ * existed keep behaving exactly as they did; 'see' is the new one.
+ *
+ * TEST ONLY, exactly as `showWord` was — practice shows the word and says it, always.
+ * `StudyCard` reads none of this.
+ */
+export type PromptMode = 'hear' | 'see' | 'both'
+
+/** The three, in the order they are offered. */
+export const PROMPT_MODES: readonly PromptMode[] = ['hear', 'see', 'both']
+
+/** Whether a test in this prompt mode speaks at all. The only reader of 'see'. */
+export function promptSpeaks(prompt: PromptMode): boolean {
+  return prompt !== 'see'
+}
+
+/** Whether the prompt word is on screen before the reveal. A missing voice also forces it. */
+export function promptShows(prompt: PromptMode): boolean {
+  return prompt !== 'hear'
+}
+
 /** The start screen's choices that are not the mode itself. */
 export interface DrillOptions {
   ordering: DrillOrdering
-  showWord: boolean
+  prompt: PromptMode
 }
 
-export const DEFAULT_DRILL_OPTIONS: DrillOptions = { ordering: 'random', showWord: false }
+export const DEFAULT_DRILL_OPTIONS: DrillOptions = { ordering: 'random', prompt: 'hear' }
 
 export interface Session {
   mode: DrillMode
@@ -121,10 +151,10 @@ export interface Session {
    */
   ordering: DrillOrdering
   /**
-   * Test mode only: show the spoken word as text as well as saying it. Practice always
-   * shows it. Off by default, which is 001's listen-and-answer test.
+   * Test mode only: how the word is given — heard, read, or both. Practice always shows
+   * it and says it. Defaults to 'hear', which is 001's listen-and-answer test.
    */
-  showWord: boolean
+  prompt: PromptMode
   /**
    * Both stay at their initial values in practice mode rather than being split
    * off into a union member. `score()` on a practice session therefore reports

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { LANG_NAMES } from '../lang/languages'
+import { sideNames } from '../lang/languages'
 import { currentPair } from '../state/session'
 import type { DrillSubject } from '../state/drillRun'
 import type { Session } from '../state/types'
@@ -55,6 +55,9 @@ export function StudyCard({
   onQuit,
 }: Props) {
   const pair = currentPair(session)
+  // Practice is untouched by the prompt mode — it shows the word and says it, always.
+  // These labels are the one thing a same-language list changes here.
+  const sides = sideNames(subject.col1Lang, subject.col2Lang)
   const atStart = session.index === 0
   const open = session.answersOpen
 
@@ -111,12 +114,12 @@ export function StudyCard({
 
       <div aria-live="polite" className="card flex flex-col gap-2 p-6 text-center">
         <p className="text-xs uppercase tracking-wide text-ink-faint">
-          {LANG_NAMES[subject.col2Lang]}
+          {sides.prompt}
         </p>
         <p className="text-word font-bold">{pair.col2}</p>
 
         <p className="mt-2 text-xs uppercase tracking-wide text-ink-faint">
-          {LANG_NAMES[subject.col1Lang]}
+          {sides.answer}
         </p>
         {/*
           Rendered either way, covered by a class rather than swapped out for a
