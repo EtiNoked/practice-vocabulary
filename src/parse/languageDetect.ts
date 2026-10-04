@@ -123,9 +123,23 @@ export function profileScore(text: string, lang: LangCode): number {
  */
 export const MARGIN = 0.15
 
-/** Every ordered pair of DISTINCT languages. Six of them for three languages. */
+/**
+ * Every ordered pair of languages, INCLUDING the identical ones. Nine for three.
+ *
+ * The identical pairs joined when a list stopped having to be a translation: a Dutch word
+ * against a Dutch sentence explaining it is one language on both sides, and while
+ * `a !== b` filtered those out such a list could only ever be detected as some other pair
+ * and then corrected by hand.
+ *
+ * Admitting them cannot disturb a translation list, and the arithmetic is worth stating
+ * because it is the whole safety argument: for an English/Dutch list, (en, nl) scores the
+ * English column as English PLUS the Dutch column as Dutch — both terms high — while
+ * (en, en) and (nl, nl) each keep one of those terms and trade the other for a low one.
+ * The identical pairs can therefore place second but not first, and second place is only
+ * ever read by the MARGIN test below.
+ */
 const ASSIGNMENTS: ReadonlyArray<readonly [LangCode, LangCode]> = LANG_CODES.flatMap((a) =>
-  LANG_CODES.filter((b) => b !== a).map((b) => [a, b] as const),
+  LANG_CODES.map((b) => [a, b] as const),
 )
 
 function scoreAll(text: string): Partial<Record<LangCode, number>> {
@@ -149,17 +163,19 @@ export function detectLanguages(rows: readonly RawRow[]): LanguageDetection {
   if (first) {
     const left = matchHeaderCell(first.col1)
     const right = matchHeaderCell(first.col2)
-    // Both cells must name a language, and they must disagree — "English/English"
-    // is not a usable header.
-    if (left && right && left !== right) {
+    /*
+     * Both cells must name a language. They no longer have to DISAGREE: "Nederlands /
+     * Nederlands" heads a word-and-explanation list, and rejecting it sent the clearest
+     * possible statement of intent down the guessing path.
+     */
+    if (left && right) {
       return { col1Lang: left, col2Lang: right, source: 'header', headerConsumed: true }
     }
   }
 
-  // Score each column against every language, then choose the two columns
-  // JOINTLY. Classifying each column on its own could return the same language
-  // twice for a list where both sides look vaguely alike; scoring assignments
-  // rather than columns makes that unrepresentable.
+  // Score each column against every language, then choose the two columns JOINTLY.
+  // Classifying each column on its own would weigh the two independently, where what
+  // decides the answer is how well the PAIR explains both at once.
   const col1 = rows.map((r) => r.col1).join(' ')
   const col2 = rows.map((r) => r.col2).join(' ')
   const score1 = scoreAll(col1)

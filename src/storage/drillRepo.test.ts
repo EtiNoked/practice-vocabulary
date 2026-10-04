@@ -418,3 +418,50 @@ describe('a run, not a list (011 FR-23)', () => {
     expect(drillRepo.load()).toBeNull()
   })
 })
+
+/**
+ * A drill parked while "show the word" was a checkbox.
+ *
+ * Coerced rather than rejected, the same trade-off this reader already makes for
+ * `answersOpen` and `runKind`: requiring the new key would return null for every drill in
+ * flight the moment this shipped, ending someone's test to gain a value we can work out
+ * from what is already there.
+ */
+describe('the prompt mode survives a reload', () => {
+  const park = (session: unknown) =>
+    putRaw({
+      schemaVersion: SCHEMA_VERSION,
+      savedAt: Date.now(),
+      screen: 'practising',
+      run,
+      session,
+      runKind: 'full',
+    })
+
+  it('round-trips each of the three', () => {
+    for (const prompt of ['hear', 'see', 'both'] as const) {
+      const session = createSession(list.pairs, noShuffle, list.id, 'test', { prompt })
+      drillRepo.save({ run, session, runKind: 'full' })
+      expect(drillRepo.load()?.session.prompt).toBe(prompt)
+    }
+  })
+
+  it('reads the old showWord: true as both — the card had the word on it', () => {
+    const { prompt: _dropped, ...legacy } = testSession()
+    park({ ...legacy, showWord: true })
+    expect(drillRepo.load()?.session.prompt).toBe('both')
+  })
+
+  it('reads the old showWord: false as listening', () => {
+    const { prompt: _dropped, ...legacy } = testSession()
+    park({ ...legacy, showWord: false })
+    expect(drillRepo.load()?.session.prompt).toBe('hear')
+  })
+
+  it('coerces junk rather than throwing the drill away', () => {
+    for (const junk of ['loud', 42, null, {}]) {
+      park({ ...testSession(), prompt: junk })
+      expect(drillRepo.load()?.session.prompt).toBe('hear')
+    }
+  })
+})

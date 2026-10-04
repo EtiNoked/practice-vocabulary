@@ -97,8 +97,12 @@ describe('drill modes', () => {
   })
 
   it('does not show the word in a test unless asked to', () => {
-    expect(createSession(pairs, seededRng(42), 'l1', 'test').showWord).toBe(false)
-    expect(createSession(pairs, seededRng(42), 'l1', 'test', { showWord: true }).showWord).toBe(true)
+    // 'hear' and 'both' are the old `showWord: false` and `true`; 'see' is the state the
+    // boolean had no way to express — the word on screen and NO sound at all.
+    expect(createSession(pairs, seededRng(42), 'l1', 'test').prompt).toBe('hear')
+    for (const prompt of ['see', 'both'] as const) {
+      expect(createSession(pairs, seededRng(42), 'l1', 'test', { prompt }).prompt).toBe(prompt)
+    }
   })
 
   // The counterpart: testing must not reward positional memory.
@@ -144,8 +148,8 @@ describe('drill modes', () => {
     const inOrder = createSession(pairs, noShuffle, 'l1', 'practice', { ordering: 'list' })
     expect(restartShuffled(inOrder, seededRng(42)).order).toEqual(['1', '2', '3', '4'])
 
-    const shown = createSession(pairs, noShuffle, 'l1', 'test', { showWord: true })
-    expect(restartShuffled(shown, seededRng(42)).showWord).toBe(true)
+    const silent = createSession(pairs, noShuffle, 'l1', 'test', { prompt: 'see' })
+    expect(restartShuffled(silent, seededRng(42)).prompt).toBe('see')
   })
 })
 

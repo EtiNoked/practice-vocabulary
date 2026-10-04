@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { detectLanguages } from '../parse/languageDetect'
-import { BCP47, HEADER_ALIASES, LANG_CODES, LANG_NAMES, PROFILES } from './languages'
+import {
+  BCP47,
+  HEADER_ALIASES,
+  LANG_CODES,
+  LANG_NAMES,
+  PROFILES,
+  isSameLanguage,
+  sideNames,
+} from './languages'
 
 /**
  * The suite that makes "adding a language is a data change" true rather than
@@ -113,6 +121,29 @@ describe('header aliases are unambiguous across languages', () => {
           headerConsumed: true,
           alias: `${aliasA}/${aliasB}`,
         })
+      }
+    }
+  })
+})
+
+describe('sideNames — what to call each side of a card', () => {
+  it('uses the two language names when the list translates', () => {
+    // The prompt is column 2 and the answer is column 1, which is the drill's direction.
+    expect(sideNames('en', 'nl')).toEqual({ prompt: 'Dutch', answer: 'English' })
+  })
+
+  it('falls back to roles when both sides are one language', () => {
+    /*
+     * Two headings both reading "Dutch" is worse than no heading: it looks like a bug in
+     * precisely the layout where the reader is working out which half is which.
+     */
+    expect(sideNames('nl', 'nl')).toEqual({ prompt: 'Clue', answer: 'Answer' })
+  })
+
+  it('agrees with isSameLanguage about which case it is in, for every pairing', () => {
+    for (const a of LANG_CODES) {
+      for (const b of LANG_CODES) {
+        expect(sideNames(a, b).prompt === 'Clue').toBe(isSameLanguage(a, b))
       }
     }
   })

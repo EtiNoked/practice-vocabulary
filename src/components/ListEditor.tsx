@@ -197,23 +197,25 @@ export function ListEditor({
   )
 
   /**
-   * Set one column's language, moving the other out of the way if it already
-   * held that language. An exchange rather than a rejection: a user setting both
-   * columns to the same language is almost always trying to swap them.
+   * Set one column's language. Just that.
+   *
+   * It used to EXCHANGE the two when you picked the language the other column already
+   * held, on the reasoning that a user setting both the same must be trying to swap them.
+   * That reasoning has expired: a list may now explain its words in their own language —
+   * `de tweeling` against `twee kinderen van dezelfde geboorte` — and the exchange made
+   * that the one list the dropdowns refused to express.
+   *
+   * Swapping is still available, and was always the better route to it: **Swap columns ⇄**
+   * moves the words along with their languages, which is what someone reaching for a swap
+   * actually wants.
    */
-  const chooseLang = useCallback(
-    (column: 'col1' | 'col2', lang: LangCode) => {
-      setDirty(true)
-      setOverride((current) => {
-        const base = current ?? { col1: effective.col1Lang, col2: effective.col2Lang }
-        const other = column === 'col1' ? 'col2' : 'col1'
-        return base[other] === lang
-          ? { ...base, [column]: lang, [other]: base[column] }
-          : { ...base, [column]: lang }
-      })
-    },
-    [effective.col1Lang, effective.col2Lang],
-  )
+  const chooseLang = useCallback((column: 'col1' | 'col2', lang: LangCode) => {
+    setDirty(true)
+    setOverride((current) => {
+      const base = current ?? { col1: effective.col1Lang, col2: effective.col2Lang }
+      return { ...base, [column]: lang }
+    })
+  }, [effective.col1Lang, effective.col2Lang])
 
   /**
    * Exchange both the column contents and their languages.

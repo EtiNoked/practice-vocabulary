@@ -70,7 +70,7 @@ export function createSession(
   mode: DrillMode = 'test',
   options: Partial<DrillOptions> = {},
 ): Session {
-  const { ordering, showWord } = { ...DEFAULT_DRILL_OPTIONS, ...options }
+  const { ordering, prompt } = { ...DEFAULT_DRILL_OPTIONS, ...options }
   const ids = pairs.map((p) => p.id)
   return {
     mode,
@@ -78,7 +78,7 @@ export function createSession(
     pairs: pairs.map((p) => ({ ...p })),
     order: ordering === 'random' ? shuffle(ids, rng) : ids,
     ordering,
-    showWord,
+    prompt,
     index: 0,
     revealed: false,
     // The ONLY place this is initialised, which is what makes "every new run
@@ -196,7 +196,7 @@ export function restartWrongOnly(session: Session, rng: Rng): Session {
 
 /** The start-screen choices a session was dealt with, so a re-run deals the same way. */
 export function optionsOf(session: Session): DrillOptions {
-  return { ordering: session.ordering, showWord: session.showWord }
+  return { ordering: session.ordering, prompt: session.prompt }
 }
 
 /**

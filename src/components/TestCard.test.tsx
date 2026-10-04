@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createSession } from '../state/session'
-import type { WordList } from '../state/types'
+import type { PromptMode, WordList } from '../state/types'
 import { speechCalls } from '../test/setup'
 import { TestCard } from './TestCard'
 
@@ -23,11 +23,11 @@ const list: WordList = {
 
 const noShuffle = () => 0.999999999
 
-const setup = (voiceMissing = false, resumed = false, showWord = false) => {
+const setup = (voiceMissing = false, resumed = false, prompt: PromptMode = 'hear') => {
   const onReveal = vi.fn()
   const onMark = vi.fn()
   const onQuit = vi.fn()
-  const session = createSession(list.pairs, noShuffle, list.id, 'test', { showWord })
+  const session = createSession(list.pairs, noShuffle, list.id, 'test', { prompt })
   const utils = render(
     <TestCard
       subject={list}
@@ -40,6 +40,32 @@ const setup = (voiceMissing = false, resumed = false, showWord = false) => {
     />,
   )
   return { onReveal, onMark, onQuit, session, user: userEvent.setup(), ...utils }
+}
+
+/**
+ * The card as it stands AFTER the reveal.
+ *
+ * Built by handing it a revealed session rather than by clicking Show answer, because
+ * `onReveal` is a spy here — the card reports the tap and nothing moves. Reveal is the
+ * reducer's job, and `appMachine.test.ts` is where that is checked.
+ */
+const renderRevealed = (
+  over: { prompt?: PromptMode; subject?: WordList; voiceMissing?: boolean } = {},
+) => {
+  const base = createSession(list.pairs, noShuffle, list.id, 'test', {
+    prompt: over.prompt ?? 'hear',
+  })
+  render(
+    <TestCard
+      subject={over.subject ?? list}
+      session={{ ...base, revealed: true }}
+      voiceMissing={over.voiceMissing ?? false}
+      resumed={false}
+      onReveal={vi.fn()}
+      onMark={vi.fn()}
+      onQuit={vi.fn()}
+    />,
+  )
 }
 
 describe('the prompt state', () => {
@@ -192,8 +218,91 @@ describe('Show the word (chosen on the start screen)', () => {
   })
 
   it('shows the spoken word as text when the test was started with it on', () => {
-    const { session } = setup(false, false, true)
+    const { session } = setup(false, false, 'both')
     const word = session.pairs.find((p) => p.id === session.order[0])!.col2
     expect(screen.getByText(word)).toBeInTheDocument()
+  })
+})
+
+/**
+ * The third state the checkbox could not express: the word on screen and NO sound.
+ *
+ * 'hear' and 'both' are the two the boolean already had, covered above. Everything here
+ * is about what the absence of sound has to take with it — a speaker button that would do
+ * nothing, a shortcut that would do nothing, and a resume hint that promises a replay.
+ */
+describe('a silent test', () => {
+  it('shows the word and offers no speaker', () => {
+    setup(false, false, 'see')
+    expect(screen.getByText('dochter')).toBeInTheDocument()
+    // Absent rather than disabled: a dead speaker on a card the user asked to be silent
+    // invites the question an absent one never raises.
+    expect(screen.queryByRole('button', { name: /hear it again/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps the answer hidden all the same', () => {
+    setup(false, false, 'see')
+    expect(screen.queryByText('daughter')).not.toBeInTheDocument()
+  })
+
+  it('says nothing on Space, and does not advertise it', async () => {
+    const { user } = setup(false, false, 'see')
+    await user.keyboard(' ')
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(0)
+    expect(screen.queryByText(/space replays/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/enter reveals/i)).toBeInTheDocument()
+  })
+
+  it('drops the resume hint, which promises a replay it cannot give', () => {
+    setup(false, true, 'see')
+    expect(screen.queryByText(/resumed/i)).not.toBeInTheDocument()
+  })
+
+  /*
+   * The override goes ONE way. A listening run on a device with no voice would be a
+   * blank, unanswerable card, so it shows the word. A silent run is left alone: the user
+   * asked for quiet, and a missing voice is no reason to overrule a run that was never
+   * going to make a sound.
+   */
+  it('is not turned back on by a missing voice', async () => {
+    const { user } = setup(true, false, 'see')
+    expect(screen.getByText('dochter')).toBeInTheDocument()
+    await user.keyboard(' ')
+    expect(speechCalls.filter((c) => c.type === 'speak')).toHaveLength(0)
+  })
+
+  it('prints the prompt once, not twice, when the answer comes out', () => {
+    // Rendered already revealed rather than clicked there: `onReveal` is a spy, so the
+    // card never advances on its own.
+    renderRevealed({ prompt: 'see' })
+    // getByText throws on a duplicate, which is the assertion: the pre-reveal copy has
+    // to step aside for the answer block's, or a shown prompt appears twice.
+    expect(screen.getByText('dochter')).toBeInTheDocument()
+    expect(screen.getByText('daughter')).toBeInTheDocument()
+  })
+})
+
+describe('a list that explains itself in its own language', () => {
+  const dutchBoth: WordList = { ...list, col1Lang: 'nl', col2Lang: 'nl' }
+
+  it('names the sides by role rather than printing one language twice', () => {
+    renderRevealed({ prompt: 'hear', subject: dutchBoth })
+    expect(screen.getByText(/^answer$/i)).toBeInTheDocument()
+    expect(screen.queryByText(/dutch/i)).not.toBeInTheDocument()
+  })
+
+  it('says Listen — Clue over the prompt, where the language name would say nothing', () => {
+    render(
+      <TestCard
+        subject={dutchBoth}
+        session={createSession(list.pairs, noShuffle, list.id, 'test', { prompt: 'hear' })}
+        voiceMissing={false}
+        resumed={false}
+        onReveal={vi.fn()}
+        onMark={vi.fn()}
+        onQuit={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/listen — clue/i)).toBeInTheDocument()
   })
 })

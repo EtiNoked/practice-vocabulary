@@ -126,7 +126,11 @@ safe: lines split at the *first* separator only, so
 ### Which column is which language
 
 **Pick them from the two dropdowns** in the editor. That is the reliable way, and
-your choice is saved with the list.
+your choice is saved with the list. **The two may be the same** — `de tweeling` against
+`twee kinderen van dezelfde geboorte` is a Dutch list on both sides, and the app treats it
+as one: it gives you the explanation and asks you for the word. Where naming the language
+twice would say nothing, the two halves of a card are labelled **Clue** and **Answer**
+instead.
 
 The app also fills them in for you. Name the languages in the first row — `English`
 and `Dutch`, or `Nederlands` and `Frans` — and it reads them straight from there.
@@ -139,8 +143,25 @@ their languages together.
 
 ## Practising
 
-Two modes, chosen fresh each time you start — the choice belongs to the run, not to
-the list.
+The list's start screen sets the run up above the **Practice** and **Test** buttons:
+
+| | |
+|---|---|
+| **Words** | **All words**, or only the ones you missed today / this week / this month / all time |
+| **Order** | **Random** or **List order** |
+| **In Test** | **Just listen** (nothing on screen), **Show the word** (no sound at all), or **Both** |
+
+Order and the In Test choice are remembered per list **on this device**, so they are that
+list's default next time. They are not stored on the list itself: one member of a shared
+list must not change how it deals for everyone else.
+
+If your device has no voice for the language, **Just listen** says so before you start and
+shows the word anyway — a silent blank card is not a harder test, it is an impossible one.
+**Show the word** is left alone, because you asked for quiet. On a silent run there is no
+speaker button and `Space` does nothing, rather than a dead control sitting there inviting
+the question.
+
+The mode itself — Practice or Test — belongs to the run and is chosen fresh each time.
 
 ### Practice — no score, no pressure
 
@@ -156,8 +177,8 @@ Keyboard: `Space` replays, `A` shows the answer, `→` next, `←` previous.
 
 ### Test — answer from memory, and mark yourself
 
-Start → hear the word → **Hear it again 🔊** as needed → **Show answer** → mark
-**Right ✓** or **Wrong ✗**. At the end you get a score, the words you missed, and
+Start → the word, heard or read or both → **Hear it again 🔊** as needed → **Show answer**
+→ mark **Right ✓** or **Wrong ✗**. At the end you get a score, the words you missed, and
 the option to shuffle and go again or drill only the ones you got wrong.
 
 Keyboard: `Space` replays, `Enter` reveals, `Y` / `N` marks.
@@ -172,8 +193,9 @@ Pick your lists, choose **All words** or **Words I got wrong**, and set a length
 a running count of how many words your selection actually has, so you decide against a
 real number rather than a guess.
 
-Lists have to share a language pair — you hear one language and answer in the other, and a
-lone French option among five Dutch ones would give itself away. Incompatible lists stay
+Lists have to share a language pair — you get one language and answer in the other, and a
+lone French option among five Dutch ones would give itself away. A list with the same
+language on both sides pairs only with other lists like it, for the same reason. Incompatible lists stay
 visible but disabled, with their own pair shown as the reason.
 
 Then **Practice** or **Test**, exactly as on a single list.
@@ -280,7 +302,10 @@ Two things worth knowing:
 
 Speech uses your device's own voices, so a voice for the language being read has to
 be installed. If it isn't, the app names the missing language and shows the word as
-text instead, so you can still practise.
+text instead, so you can still practise. The start screen says so before you begin, so
+**Just listen** never silently turns into reading.
+
+You can also pick **Show the word** in a test, which never makes a sound at all.
 
 - **iPhone / iPad** — Settings → Accessibility → Spoken Content → Voices
 - **Mac** — System Settings → Accessibility → Spoken Content → System Voice → Manage

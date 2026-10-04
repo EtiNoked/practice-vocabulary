@@ -1,4 +1,4 @@
-import { LANG_NAMES } from '../lang/languages'
+import { LANG_NAMES, isSameLanguage } from '../lang/languages'
 import type { MissedSource } from '../state/appMachine'
 import {
   REVIEW_WINDOWS,
@@ -6,7 +6,7 @@ import {
   WINDOW_PHRASES,
   type ReviewWindow,
 } from '../state/missedWords'
-import type { DrillMode, DrillOptions, WordList } from '../state/types'
+import { PROMPT_MODES, type DrillMode, type DrillOptions, type WordList } from '../state/types'
 
 interface Props {
   list: WordList
@@ -17,14 +17,29 @@ interface Props {
   counts: Record<ReviewWindow, number>
   /** Some history in range predates right-answer recording. */
   degraded: boolean
-  /** Order and Show-the-word, as this list last used them on this device. */
+  /** Order and how a test gives the word, as this list last used them on this device. */
   options: DrillOptions
   onOptionsChange: (options: DrillOptions) => void
+  /** True when the device has no voice for this list's prompt language. */
+  voiceMissing: boolean
   onStart: (mode: DrillMode) => void
   onPickWindow: (window: ReviewWindow) => void
   onPractiseFull: () => void
   onSave: () => void
   onBack: () => void
+}
+
+/**
+ * Label and one-liner for each prompt mode, in offering order.
+ *
+ * Here and not in `state/types.ts` for the reason `MissedSource` keeps its prose in the
+ * component: the enum is state and has to stay serializable and comparable, the words are
+ * copy and change without anything else changing.
+ */
+const PROMPT_COPY: Record<(typeof PROMPT_MODES)[number], { label: string; hint: string }> = {
+  hear: { label: 'Just listen', hint: 'Nothing on screen' },
+  see: { label: 'Show the word', hint: 'No sound' },
+  both: { label: 'Both', hint: 'Hear it and read it' },
 }
 
 /** What the subset is, in words. */
@@ -43,6 +58,7 @@ export function ReadyScreen({
   degraded,
   options,
   onOptionsChange,
+  voiceMissing,
   onStart,
   onPickWindow,
   onPractiseFull,
@@ -59,6 +75,18 @@ export function ReadyScreen({
       {missed ? (
         <p className="rounded-lg bg-primary-soft p-3 text-ink">
           {missedSummary(missed.count, missed.source)}
+        </p>
+      ) : isSameLanguage(list.col1Lang, list.col2Lang) ? (
+        /*
+          A list that explains its words in their own language, rather than translating.
+
+          "You'll hear Dutch, and answer in Dutch" is true and says nothing — naming the
+          same language twice describes neither half of what is about to happen. What the
+          reader needs instead is which half they get and which half they owe.
+        */
+        <p className="rounded-lg bg-surface-sunken p-3">
+          Both sides are <strong>{LANG_NAMES[list.col1Lang]}</strong>. You&apos;ll get the clue,
+          and answer with the word.
         </p>
       ) : (
         <p className="rounded-lg bg-surface-sunken p-3">
@@ -142,18 +170,51 @@ export function ReadyScreen({
         </div>
       </section>
 
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={options.showWord}
-          onChange={(e) => onOptionsChange({ ...options, showWord: e.target.checked })}
-          className="h-5 w-5"
-        />
-        <span>
-          In Test, show the {LANG_NAMES[list.col2Lang]} word as well as saying it
-        </span>
-      </label>
-      <p className="-mt-3 text-sm text-ink-muted">This list remembers your choices on this device.</p>
+      {/*
+        Three buttons where a checkbox used to sit, because the checkbox could only ever
+        add text ON TOP of speech. "Show the word" with no sound is the state it had no
+        way to express, and the one people in a quiet room or on a shared desk want.
+
+        Still TEST only, exactly as the checkbox was — the heading says so, and practice
+        shows the word and says it whatever is picked here.
+      */}
+      <section aria-labelledby="prompt-heading" className="flex flex-col gap-2">
+        <h2 id="prompt-heading" className="font-semibold">
+          In Test
+        </h2>
+        <div className="flex gap-2">
+          {PROMPT_MODES.map((value) => {
+            const chosen = options.prompt === value
+            const { label, hint } = PROMPT_COPY[value]
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={chosen}
+                onClick={() => onOptionsChange({ ...options, prompt: value })}
+                className={`${
+                  chosen ? 'btn btn-primary' : 'btn btn-quiet'
+                } flex-1 flex-col items-center gap-0 py-2 text-sm`}
+              >
+                <span>{label}</span>
+                <span className="text-xs font-normal opacity-80">{hint}</span>
+              </button>
+            )
+          })}
+        </div>
+        {/*
+          Said here rather than left for the card to discover. The card does fall back to
+          showing the word when there is no voice, so "Just listen" never fails silently —
+          but a user who picks it and then reads the word has been overruled without being
+          told, and the honest place to say so is the control they are about to press.
+        */}
+        {voiceMissing && options.prompt === 'hear' && (
+          <p className="text-sm text-ink-muted">
+            This device has no voice for that language, so the word will be shown anyway.
+          </p>
+        )}
+      </section>
+      <p className="-mt-2 text-sm text-ink-muted">This list remembers your choices on this device.</p>
 
       {/*
         EITHER button starts its mode's first utterance. On iOS that matters:

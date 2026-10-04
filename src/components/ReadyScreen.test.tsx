@@ -35,7 +35,8 @@ const setup = (saved = false, over: Partial<Parameters<typeof ReadyScreen>[0]> =
       missed={null}
       counts={NO_MISSES}
       degraded={false}
-      options={{ ordering: 'random', showWord: false }}
+      options={{ ordering: 'random', prompt: 'hear' }}
+      voiceMissing={false}
       onOptionsChange={onOptionsChange}
       onStart={onStart}
       onPickWindow={onPickWindow}
@@ -228,14 +229,60 @@ describe('setting up the run, before starting it', () => {
     const { user, onOptionsChange } = setup()
     expect(screen.getByRole('button', { name: 'Random' })).toHaveAttribute('aria-pressed', 'true')
     await user.click(screen.getByRole('button', { name: 'List order' }))
-    expect(onOptionsChange).toHaveBeenCalledWith({ ordering: 'list', showWord: false })
+    expect(onOptionsChange).toHaveBeenCalledWith({ ordering: 'list', prompt: 'hear' })
   })
 
-  it('offers to show the word in a test, naming the language', async () => {
-    const { user, onOptionsChange } = setup(false, { options: { ordering: 'list', showWord: false } })
-    const box = screen.getByRole('checkbox', { name: /in test, show the dutch word/i })
-    expect(box).not.toBeChecked()
-    await user.click(box)
-    expect(onOptionsChange).toHaveBeenCalledWith({ ordering: 'list', showWord: true })
+  /*
+   * Was a checkbox named "In Test, show the Dutch word as well as saying it". It is three
+   * buttons now, because the checkbox could only ever add text on top of speech and had
+   * no way to say "no sound at all". The two states it DID have still exist, unchanged,
+   * as 'hear' and 'both'.
+   */
+  it('offers all three ways a test can give the word, listening preselected', () => {
+    setup()
+    expect(screen.getByRole('button', { name: /just listen/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    for (const name of [/show the word/i, /^both/i]) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    }
+  })
+
+  it('reports the choice up, keeping the order alongside it', async () => {
+    const { user, onOptionsChange } = setup(false, {
+      options: { ordering: 'list', prompt: 'hear' },
+    })
+    await user.click(screen.getByRole('button', { name: /show the word/i }))
+    expect(onOptionsChange).toHaveBeenCalledWith({ ordering: 'list', prompt: 'see' })
+  })
+
+  it('keeps it scoped to Test, where it applies', () => {
+    setup()
+    expect(screen.getByRole('heading', { name: /^in test$/i })).toBeInTheDocument()
+  })
+
+  it('warns up front that a missing voice will overrule “just listen”', () => {
+    setup(false, { voiceMissing: true })
+    expect(screen.getByText(/no voice for that language/i)).toBeInTheDocument()
+  })
+
+  it('says nothing about voices once the run is not going to speak anyway', () => {
+    setup(false, { voiceMissing: true, options: { ordering: 'random', prompt: 'see' } })
+    expect(screen.queryByText(/no voice for that language/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('a list that explains itself in its own language', () => {
+  it('does not claim to translate between a language and itself', () => {
+    setup(false, { list: { ...list, col1Lang: 'nl', col2Lang: 'nl' } })
+    expect(screen.getByText(/both sides are/i)).toHaveTextContent(/Dutch/)
+    expect(screen.queryByText(/answer in Dutch/i)).not.toBeInTheDocument()
+  })
+
+  it('still names both languages for an ordinary translation list', () => {
+    setup()
+    expect(screen.getByText(/you'll hear/i)).toHaveTextContent(/Dutch/)
+    expect(screen.getByText(/you'll hear/i)).toHaveTextContent(/English/)
   })
 })

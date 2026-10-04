@@ -15,7 +15,14 @@ import { MigratePrompt } from './components/MigratePrompt'
 import { SyncStatus } from './components/SyncStatus'
 import { VoiceWarning } from './components/VoiceWarning'
 import { initialState, reduce, type AppAction, type AppState } from './state/appMachine'
-import { DEFAULT_DRILL_OPTIONS, type DrillMode, type DrillOptions, type SessionRecord, type WordList } from './state/types'
+import {
+  DEFAULT_DRILL_OPTIONS,
+  promptSpeaks,
+  type DrillMode,
+  type DrillOptions,
+  type SessionRecord,
+  type WordList,
+} from './state/types'
 import { readDrillPrefs, writeDrillPrefs } from './storage/drillPrefs'
 import { speak } from './speech/tts'
 import { useVoices, voiceMissingFor } from './speech/useVoices'
@@ -477,6 +484,14 @@ export default function App() {
   const speakCurrent = useCallback(
     (next: AppState) => {
       if (next.screen !== 'practising') return
+      /*
+       * A test started with "Show the word" is silent BY REQUEST.
+       *
+       * Gated here, at the one place every mid-drill utterance passes through, rather
+       * than at each of the seven actions that can land on a new card. Practice is
+       * exempt: the prompt mode is a Test setting, exactly as `showWord` was.
+       */
+      if (next.session.mode === 'test' && !promptSpeaks(next.session.prompt)) return
       const pair = currentPair(next.session)
       if (pair) speak(pair.col2, next.run.subject.col2Lang, voices)
     },
@@ -1063,6 +1078,7 @@ export default function App() {
           counts={missedForReady?.counts ?? { day: 0, week: 0, month: 0, all: 0 }}
           degraded={missedForReady?.degraded ?? false}
           options={readyOptions}
+          voiceMissing={voiceMissing}
           onOptionsChange={(options) => {
             setChangedOptions({ id: state.list.id, options })
             writeDrillPrefs(state.list.id, options)
