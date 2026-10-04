@@ -446,16 +446,26 @@ describe('the Save button', () => {
 describe('duplicate words', () => {
   it('warns when a new word repeats an earlier one in a different case', async () => {
     const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: '', col2: '' }] })
-    await user.type(cells()[2]!, 'Bad')
-    expect(screen.getByText('Duplicate: “Bad” is already in row 1.')).toBeInTheDocument()
+    await user.type(cells()[3]!, 'Slecht')
+    expect(screen.getByText('Duplicate: “Slecht” is already in row 1.')).toBeInTheDocument()
     expect(screen.getByText(/1 duplicate$/)).toBeInTheDocument()
   })
 
   it('clears the warning once the word is changed', async () => {
-    const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: 'BAD', col2: 'kwaad' }] })
+    const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: 'evil', col2: 'SLECHT' }] })
     expect(screen.getByText(/Duplicate:/)).toBeInTheDocument()
-    await user.clear(cells()[2]!)
-    await user.type(cells()[2]!, 'evil')
+    await user.clear(cells()[3]!)
+    await user.type(cells()[3]!, 'kwaad')
+    expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
+  })
+
+  it('says nothing when only column 1 repeats, which two translations may fairly share', () => {
+    setup({
+      initialRows: [
+        { col1: 'bad', col2: 'slecht' },
+        { col1: 'Bad', col2: 'kwaad' },
+      ],
+    })
     expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
   })
 
@@ -463,7 +473,7 @@ describe('duplicate words', () => {
     const { user, onConfirm } = setup({
       initialRows: [
         { col1: 'bad', col2: 'slecht' },
-        { col1: 'Bad', col2: 'kwaad' },
+        { col1: 'evil', col2: 'Slecht' },
       ],
     })
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -474,7 +484,7 @@ describe('duplicate words', () => {
     setup({
       initialRows: [
         { col1: 'English', col2: 'Dutch' },
-        { col1: 'english', col2: 'Engels' },
+        { col1: 'hello', col2: 'dutch' },
       ],
     })
     expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
