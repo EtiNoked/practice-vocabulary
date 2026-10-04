@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ListEditor } from './ListEditor'
+import { cell } from '../test/cells'
 
 const setup = (props: Partial<Parameters<typeof ListEditor>[0]> = {}) => {
   const onConfirm = vi.fn()
@@ -19,7 +20,6 @@ const setup = (props: Partial<Parameters<typeof ListEditor>[0]> = {}) => {
 }
 
 const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
-
 describe('typing pairs', () => {
   it('starts with one empty row', () => {
     setup()
@@ -29,8 +29,8 @@ describe('typing pairs', () => {
   // No "add row" ceremony in the common case.
   it('auto-appends a new row when the last row is filled in', async () => {
     const { user } = setup()
-    await user.type(cells()[0]!, 'daughter')
-    await user.type(cells()[1]!, 'dochter')
+    await user.type(cell(0, 'col1'), 'daughter')
+    await user.type(cell(0, 'col2'), 'dochter')
     expect(cells().length).toBeGreaterThan(2)
   })
 
@@ -69,8 +69,8 @@ describe('guards', () => {
     const { user } = setup()
     const start = screen.getByRole('button', { name: /^save$/i })
     expect(start).toBeDisabled()
-    await user.type(cells()[0]!, 'daughter')
-    await user.type(cells()[1]!, 'dochter')
+    await user.type(cell(0, 'col1'), 'daughter')
+    await user.type(cell(0, 'col2'), 'dochter')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
   })
 
@@ -82,7 +82,7 @@ describe('guards', () => {
   it('confirms before discarding unsaved changes', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const { user, onCancel } = setup()
-    await user.type(cells()[0]!, 'x')
+    await user.type(cell(0, 'col1'), 'x')
     await user.click(screen.getByRole('button', { name: /cancel/i }))
     expect(confirmSpy).toHaveBeenCalled()
     expect(onCancel).not.toHaveBeenCalled()
@@ -179,8 +179,8 @@ describe('language selectors', () => {
 
   it('follows detection while the user has not chosen', async () => {
     const { user } = setup()
-    await user.type(cells()[0]!, 'de deur')
-    await user.type(cells()[1]!, 'la fenêtre')
+    await user.type(cell(0, 'col1'), 'de deur')
+    await user.type(cell(0, 'col2'), 'la fenêtre')
     expect(col1Select().value).toBe('nl')
   })
 
@@ -198,7 +198,7 @@ describe('language selectors', () => {
   it('does not let a later row edit revert the chosen language', async () => {
     const { user } = setup({ initialRows: NL_FR })
     await user.selectOptions(col2Select(), 'en')
-    await user.type(cells()[0]!, ' extra')
+    await user.type(cell(0, 'col1'), ' extra')
     expect(col2Select().value).toBe('en')
   })
 
@@ -446,7 +446,7 @@ describe('the Save button', () => {
 describe('duplicate words', () => {
   it('warns when a new word repeats an earlier one in a different case', async () => {
     const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: '', col2: '' }] })
-    await user.type(cells()[3]!, 'Slecht')
+    await user.type(cell(1, 'col2'), 'Slecht')
     expect(screen.getByText('Duplicate: “Slecht” is already in row 1.')).toBeInTheDocument()
     expect(screen.getByText(/1 duplicate$/)).toBeInTheDocument()
   })
@@ -454,8 +454,8 @@ describe('duplicate words', () => {
   it('clears the warning once the word is changed', async () => {
     const { user } = setup({ initialRows: [{ col1: 'bad', col2: 'slecht' }, { col1: 'evil', col2: 'SLECHT' }] })
     expect(screen.getByText(/Duplicate:/)).toBeInTheDocument()
-    await user.clear(cells()[3]!)
-    await user.type(cells()[3]!, 'kwaad')
+    await user.clear(cell(1, 'col2'))
+    await user.type(cell(1, 'col2'), 'kwaad')
     expect(screen.queryByText(/Duplicate:/)).not.toBeInTheDocument()
   })
 

@@ -13,6 +13,7 @@ import {
   signedInStore,
 } from './test/renderApp'
 import { goTo } from './test/navigate'
+import { cell } from './test/cells'
 import { GUEST_CHOICE_KEY, writeGuestChoice } from './auth/guestChoice'
 import type { AuthUser } from './auth/types'
 
@@ -46,9 +47,8 @@ describe('typing a list and practicing it', () => {
 
     await user.click(screen.getByRole('button', { name: /new list/i }))
 
-    const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
-    await user.type(cells()[0]!, 'daughter')
-    await user.type(cells()[1]!, 'dochter')
+    await user.type(cell(0, 'col1'), 'daughter')
+    await user.type(cell(0, 'col2'), 'dochter')
 
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(screen.getByText(/you'll hear/i)).toBeInTheDocument()
@@ -918,9 +918,8 @@ describe('the welcome gate', () => {
 async function drillAsSignedIn(user: ReturnType<typeof userEvent.setup>) {
   await goTo(user, 'My lists')
   await user.click(screen.getByRole('button', { name: /new list/i }))
-  const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
-  await user.type(cells()[0]!, 'daughter')
-  await user.type(cells()[1]!, 'dochter')
+  await user.type(cell(0, 'col1'), 'daughter')
+  await user.type(cell(0, 'col2'), 'dochter')
   await user.click(screen.getByRole('button', { name: /^save$/i }))
   await user.click(screen.getByRole('button', { name: /^test$/i }))
 }
@@ -1526,9 +1525,8 @@ describe('saving a new list from the editor', () => {
     renderApp()
     await goTo(user, 'My lists')
     await user.click(screen.getByRole('button', { name: /new list/i }))
-    const cells = () => screen.getAllByRole('textbox').filter((el) => el.dataset.cell !== undefined)
-    await user.type(cells()[0]!, 'daughter')
-    await user.type(cells()[1]!, 'dochter')
+    await user.type(cell(0, 'col1'), 'daughter')
+    await user.type(cell(0, 'col2'), 'dochter')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(listRepo.getAll().map((l) => l.pairs.map((p) => p.col2))).toEqual([['dochter']])
