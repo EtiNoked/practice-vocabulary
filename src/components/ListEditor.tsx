@@ -113,54 +113,61 @@ const Row = memo(function Row({
           onChange={(e) => onChange(index, { col1: e.target.value })}
           className="min-h-11 flex-1 rounded border border-line-strong px-2"
         />
-        <span className="w-24 shrink-0 text-xs text-accent">
-          {incomplete ? 'Incomplete' : ''}
-        </span>
-        {translateMode === 'web' && (
-          /*
-            No on-device translator here (phones, Safari, Firefox), so the same button opens
-            Google Translate on this row's word instead. The direction follows the same rule
-            as the built-in one: the word into its meaning, or the meaning into the word while
-            the word is still empty. Nothing is sent anywhere until the user taps it.
-          */
-          <a
-            aria-label={`Translate row ${index + 1} in Google Translate`}
-            title="Look this up in Google Translate"
-            aria-disabled={empty}
-            href={
-              empty
-                ? undefined
-                : row.col2.trim() !== ''
-                  ? webTranslateUrl(row.col2, col2Lang, col1Lang)
-                  : webTranslateUrl(row.col1, col1Lang, col2Lang)
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`grid min-h-11 min-w-11 place-items-center rounded border border-line-strong ${empty ? 'pointer-events-none opacity-40' : ''}`}
-          >
-            🌐
-          </a>
-        )}
-        {translateMode === 'built-in' && (
+        {/*
+          The row's status and its two buttons share one line on a phone, under the two boxes,
+          instead of each taking a full-width line of its own. From `sm` up they sit in the
+          row itself, as before.
+        */}
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-xs text-accent sm:w-24 sm:flex-none">
+            {incomplete ? 'Incomplete' : ''}
+          </span>
+          {translateMode === 'web' && (
+            /*
+              No on-device translator here (phones, Safari, Firefox), so the same button opens
+              Google Translate on this row's word instead. The direction follows the same rule
+              as the built-in one: the word into its meaning, or the meaning into the word while
+              the word is still empty. Nothing is sent anywhere until the user taps it.
+            */
+            <a
+              aria-label={`Translate row ${index + 1} in Google Translate`}
+              title="Look this up in Google Translate"
+              aria-disabled={empty}
+              href={
+                empty
+                  ? undefined
+                  : row.col2.trim() !== ''
+                    ? webTranslateUrl(row.col2, col2Lang, col1Lang)
+                    : webTranslateUrl(row.col1, col1Lang, col2Lang)
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`grid min-h-11 min-w-11 place-items-center rounded border border-line-strong ${empty ? 'pointer-events-none opacity-40' : ''}`}
+            >
+              🌐
+            </a>
+          )}
+          {translateMode === 'built-in' && (
+            <button
+              type="button"
+              aria-label={`Translate row ${index + 1}`}
+              title="Suggest a translation for this row"
+              disabled={empty || translation?.busy !== undefined}
+              onClick={() => onTranslate(index)}
+              className="min-h-11 min-w-11 rounded border border-line-strong disabled:opacity-40"
+            >
+              🌐
+            </button>
+          )}
           <button
             type="button"
-            aria-label={`Translate row ${index + 1}`}
-            title="Suggest a translation for this row"
-            disabled={empty || translation?.busy !== undefined}
-            onClick={() => onTranslate(index)}
-            className="min-h-11 min-w-11 rounded border border-line-strong disabled:opacity-40"
+            aria-label={`Delete row ${index + 1}`}
+            onClick={() => onDelete(index)}
+            className="min-h-11 min-w-11 rounded border border-line-strong"
           >
-            🌐
+            ✕
           </button>
-        )}
-        <button
-          type="button"
-          aria-label={`Delete row ${index + 1}`}
-          onClick={() => onDelete(index)}
-          className="min-h-11 min-w-11 rounded border border-line-strong"
-        >
-          ✕
-        </button>
+        </div>
       </div>
       {duplicate && (
         <p role="status" className="text-xs text-accent">
