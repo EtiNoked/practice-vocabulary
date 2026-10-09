@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { makeList, pair } from '../test/fixtures/words'
 import { buildGameRecord, gameMissSources } from './gameRecord'
 import { advance, answer, createGame, currentQuestion, timeOut } from './game'
 import { QUESTION_MS, type Game, type GameRecord, type GameSettings } from './types'
 import { collectMissed } from '../state/missedWords'
 import { seededRng } from '../state/session'
 import type { PooledWord } from '../state/wordPool'
-import type { WordList } from '../state/types'
 
 const NOW = Date.UTC(2026, 8, 6, 12, 0, 0)
 
@@ -45,21 +45,13 @@ function play(rightIds: Set<string>, count = 9): Game {
   return g
 }
 
-const food: WordList = {
+const food = makeList({
   id: 'l1',
   name: 'Food',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'p1', col1: 'bread', col2: 'brood' },
-    { id: 'p2', col1: 'cheese', col2: 'kaas' },
-    { id: 'p3', col1: 'apple', col2: 'appel' },
-  ],
+  pairs: [pair('p1', 'bread', 'brood'), pair('p2', 'cheese', 'kaas'), pair('p3', 'apple', 'appel')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 describe('buildGameRecord', () => {
   it('is null when nothing was answered — an empty log entry is noise', () => {

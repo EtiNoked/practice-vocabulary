@@ -1,19 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { makeList as baseList, pair } from '../test/fixtures/words'
 import { MAX_TESTS, TEST_COUNT_CHIPS, describeTest, isRunnable } from './testPlan'
 import type { TestPlan } from './drillRun'
 import type { WordList } from './types'
 
-const makeList = (id: string, name: string): WordList => ({
-  id,
-  name,
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'a', col2: 'b' }],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-})
+const makeList = (id: string, name: string): WordList =>
+  baseList({ id, name, pairs: [pair('p1', 'a', 'b')], createdAt: 1, updatedAt: 1 })
 
 const LISTS = [makeList('A', 'Chapter 1'), makeList('B', 'Chapter 2'), makeList('C', 'Chapter 3')]
 

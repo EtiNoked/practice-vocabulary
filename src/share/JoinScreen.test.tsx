@@ -10,7 +10,6 @@ import type { ShareLink, ShareStore } from './types'
 
 vi.mock('../auth/firebase', () => ({
   loadFirebase: async () => ({ db: {}, fs: {} }),
-  resetFirebaseForTests: () => {},
 }))
 
 const readLink = vi.fn<(services: unknown, code: string) => Promise<ShareLink | null>>()

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { makeRecord } from '../test/fixtures/words'
 import { trend } from './scoreTrend'
 import type { SessionRecord } from './types'
 
@@ -9,20 +10,17 @@ import type { SessionRecord } from './types'
  * rendered sentence and onto the number — which is where they always belonged.
  */
 
-const rec = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: Math.random().toString(36),
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: 8,
-  wrong: 2,
-  total: 10,
-  pct: 80,
-  wrongPairs: [],
-  finishedAt: Date.UTC(2026, 8, 1),
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+const rec = (over: Partial<SessionRecord> = {}): SessionRecord =>
+  makeRecord({
+    id: Math.random().toString(36),
+    listId: 'l1',
+    right: 8,
+    wrong: 2,
+    total: 10,
+    pct: 80,
+    finishedAt: Date.UTC(2026, 8, 1),
+    ...over,
+  })
 
 describe('trend', () => {
   it('averages full runs once there are at least two', () => {

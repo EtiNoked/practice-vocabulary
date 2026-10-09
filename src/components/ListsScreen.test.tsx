@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList } from '../test/fixtures/words'
 import { ListsScreen } from './ListsScreen'
 import type { WordList } from '../state/types'
 
@@ -12,17 +13,7 @@ import type { WordList } from '../state/types'
  * derivation belongs in `App` where the single `now` lives.
  */
 
-const list: WordList = {
-  id: 'a',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-}
+const list = makeList({ createdAt: 1, updatedAt: 1 })
 
 const setup = (over: Partial<Parameters<typeof ListsScreen>[0]> = {}) => {
   const onNewList = vi.fn()

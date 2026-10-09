@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeRecord, pair } from '../test/fixtures/words'
 import type { SessionRecord } from '../state/types'
 import {
   DETAIL_KEEP,
@@ -8,21 +9,19 @@ import {
   sessionRepo,
 } from './sessionRepo'
 
-const rec = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: Math.random().toString(36).slice(2),
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: 8,
-  wrong: 2,
-  total: 10,
-  pct: 80,
-  wrongPairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  rightPairs: [{ id: 'p2', col1: 'son', col2: 'zoon' }],
-  finishedAt: 1000,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+const rec = (over: Partial<SessionRecord> = {}): SessionRecord =>
+  makeRecord({
+    id: Math.random().toString(36).slice(2),
+    listId: 'l1',
+    right: 8,
+    wrong: 2,
+    total: 10,
+    pct: 80,
+    wrongPairs: [pair('p1', 'daughter', 'dochter')],
+    rightPairs: [pair('p2', 'son', 'zoon')],
+    finishedAt: 1000,
+    ...over,
+  })
 
 const stored = (): SessionRecord[] => {
   const raw = localStorage.getItem(SESSION_STORAGE_KEY)

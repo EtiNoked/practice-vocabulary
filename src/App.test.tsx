@@ -1,10 +1,10 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from './test/fixtures/words'
 import { drillRepo } from './storage/drillRepo'
 import { listRepo } from './storage/listRepo'
 import { sessionRepo } from './storage/sessionRepo'
-import type { WordList } from './state/types'
 import { setStubVoices, speechCalls } from './test/setup'
 import {
   configuredGuestStore,
@@ -17,20 +17,12 @@ import { cell } from './test/cells'
 import { GUEST_CHOICE_KEY, writeGuestChoice } from './auth/guestChoice'
 import type { AuthUser } from './auth/types'
 
-const seeded: WordList = {
+const seeded = makeList({
   id: 'seed',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'p1', col1: 'daughter', col2: 'dochter' },
-    { id: 'p2', col1: 'son', col2: 'zoon' },
-  ],
+  pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 beforeEach(() => {
   localStorage.clear()
@@ -264,20 +256,15 @@ describe('recording score history', () => {
 })
 
 describe('practicing a Dutch/French list', () => {
-  const dutchFrench: WordList = {
+  const dutchFrench = makeList({
     id: 'fr1',
     name: 'Frans les 1',
     col1Lang: 'nl',
     col2Lang: 'fr',
-    langSource: 'header',
-    pairs: [
-      { id: 'p1', col1: 'de deur', col2: 'la porte' },
-      { id: 'p2', col1: 'het raam', col2: 'la fenêtre' },
-    ],
+    pairs: [pair('p1', 'de deur', 'la porte'), pair('p2', 'het raam', 'la fenêtre')],
     createdAt: 1,
     updatedAt: 1,
-    origin: 'manual',
-  }
+  })
 
   /**
    * Asserts the LANGUAGE, not just that speech happened. "Spoke the right words
@@ -1697,20 +1684,19 @@ describe('a test that shows the word instead of saying it', () => {
  * what it needs is a test that walks the whole path and finds nothing in the way.
  */
 describe('a Dutch word against its Dutch explanation', () => {
-  const explained: WordList = {
+  const explained = makeList({
     id: 'nlnl',
     name: 'Woorden uitgelegd',
     col1Lang: 'nl',
     col2Lang: 'nl',
     langSource: 'manual',
     pairs: [
-      { id: 'e1', col1: 'de tweeling', col2: 'twee kinderen van dezelfde geboorte' },
-      { id: 'e2', col1: 'de dochter', col2: 'het meisje van je ouders' },
+      pair('e1', 'de tweeling', 'twee kinderen van dezelfde geboorte'),
+      pair('e2', 'de dochter', 'het meisje van je ouders'),
     ],
     createdAt: 1,
     updatedAt: 1,
-    origin: 'manual',
-  }
+  })
 
   it('drills like any other list, and names the sides by role', async () => {
     listRepo.save(explained)

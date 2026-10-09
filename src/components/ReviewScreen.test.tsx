@@ -1,27 +1,25 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeRecord } from '../test/fixtures/words'
 import { ReviewScreen } from './ReviewScreen'
 import type { SessionRecord } from '../state/types'
 
 const DAY = 86_400_000
 const NOW = new Date(2026, 8, 5, 12, 0, 0).getTime()
 
-const rec = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: Math.random().toString(36).slice(2),
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: 8,
-  wrong: 2,
-  total: 10,
-  pct: 80,
-  wrongPairs: [],
-  rightPairs: [],
-  finishedAt: NOW,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+const rec = (over: Partial<SessionRecord> = {}): SessionRecord =>
+  makeRecord({
+    id: Math.random().toString(36).slice(2),
+    listId: 'l1',
+    right: 8,
+    wrong: 2,
+    total: 10,
+    pct: 80,
+    rightPairs: [],
+    finishedAt: NOW,
+    ...over,
+  })
 
 const setup = (records: SessionRecord[], over = {}) => {
   const onOpen = vi.fn()

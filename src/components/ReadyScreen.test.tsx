@@ -2,23 +2,14 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ReviewWindow } from '../state/missedWords'
-import type { WordList } from '../state/types'
+import { makeList, pair } from '../test/fixtures/words'
 import { ReadyScreen, type SubsetCounts } from './ReadyScreen'
 
-const list: WordList = {
-  id: 'a',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [
-    { id: 'p1', col1: 'daughter', col2: 'dochter' },
-    { id: 'p2', col1: 'son', col2: 'zoon' },
-  ],
+const list = makeList({
+  pairs: [pair('p1', 'daughter', 'dochter'), pair('p2', 'son', 'zoon')],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 const NOTHING = { day: 0, week: 0, month: 0, all: 0 }
 

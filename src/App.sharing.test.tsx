@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from './test/fixtures/words'
 import type { ShareStore } from './share/types'
 import type { ListStore } from './storage/types'
 import type { ListMember, WordList } from './state/types'
@@ -50,24 +51,23 @@ const member = (role: ListMember['role'], displayName: string): ListMember => ({
   joinedAt: 1,
 })
 
-const sharedList = (over: Partial<WordList> = {}): WordList => ({
-  id: 'shared-1',
-  name: 'French verbs',
-  col1Lang: 'en',
-  col2Lang: 'fr',
-  langSource: 'manual',
-  pairs: [{ id: 'p1', col1: 'to be', col2: 'être' }],
-  createdAt: 1,
-  updatedAt: 100,
-  origin: 'manual',
-  sharing: {
-    ownerUid: 'dana',
-    memberUids: ['dana', 'eti'],
-    members: { dana: member('owner', 'Dana'), eti: member('editor', 'Eti') },
-    updatedBy: 'dana',
-  },
-  ...over,
-})
+const sharedList = (over: Partial<WordList> = {}): WordList =>
+  makeList({
+    id: 'shared-1',
+    name: 'French verbs',
+    col2Lang: 'fr',
+    langSource: 'manual',
+    pairs: [pair('p1', 'to be', 'être')],
+    createdAt: 1,
+    updatedAt: 100,
+    sharing: {
+      ownerUid: 'dana',
+      memberUids: ['dana', 'eti'],
+      members: { dana: member('owner', 'Dana'), eti: member('editor', 'Eti') },
+      updatedBy: 'dana',
+    },
+    ...over,
+  })
 
 function fakeShare(): ShareStore {
   return {

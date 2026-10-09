@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from '../test/fixtures/words'
 import type { Farewell } from '../share/types'
 import { FarewellBanner } from './FarewellBanner'
 
@@ -12,20 +13,14 @@ function farewell(reason: Farewell['reason'], byName: string | null = 'Dana'): F
     reason,
     byName,
     at: 1,
-    list: {
+    list: makeList({
       id: 'l1',
       name: 'French verbs',
-      col1Lang: 'en',
       col2Lang: 'fr',
-      langSource: 'header',
-      pairs: [
-        { id: 'p1', col1: 'to be', col2: 'être' },
-        { id: 'p2', col1: 'to have', col2: 'avoir' },
-      ],
+      pairs: [pair('p1', 'to be', 'être'), pair('p2', 'to have', 'avoir')],
       createdAt: 1,
       updatedAt: 1,
-      origin: 'manual',
-    },
+    }),
   }
 }
 

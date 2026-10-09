@@ -1,21 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeList as baseList } from '../test/fixtures/words'
 import { createMemoryStore } from './memoryStore'
 import { hasMigrated, markMigrated, migrateLists, readListsOnce } from './migrate'
 import type { ListStore } from './types'
 import type { WordList } from '../state/types'
 
-const makeList = (id: string, over: Partial<WordList> = {}): WordList => ({
-  id,
-  name: `List ${id}`,
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1000,
-  updatedAt: 1000,
-  origin: 'manual',
-  ...over,
-})
+const makeList = (id: string, over: Partial<WordList> = {}): WordList =>
+  baseList({ id, name: `List ${id}`, ...over })
 
 const countIn = async (store: ListStore) => (await readListsOnce(store)).length
 

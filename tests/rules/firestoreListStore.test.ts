@@ -20,7 +20,9 @@ import {
 } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createFirestoreListStore, stripUndefined } from '../../src/storage/firestoreListStore'
+import { makeGameRecord as baseGame, makeList as baseList, makeRecord as baseRecord } from '../../src/test/fixtures/words'
+import { createFirestoreListStore } from '../../src/storage/firestoreListStore'
+import { stripUndefined } from '../../src/storage/stripUndefined'
 import { moveLegacyLists } from '../../src/storage/moveLegacyLists'
 import { releaseAllLists } from '../../src/storage/listEndings'
 import type { FirebaseServices } from '../../src/auth/firebase'
@@ -37,33 +39,10 @@ import type { GameRecord } from '../../src/game/types'
 let testEnv: RulesTestEnvironment
 const UID = 'alice'
 
-const makeList = (over: Partial<WordList> = {}): WordList => ({
-  id: 'l1',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1000,
-  updatedAt: 1000,
-  origin: 'manual',
-  ...over,
-})
+const makeList = (over: Partial<WordList> = {}): WordList => baseList({ id: 'l1', ...over })
 
-const makeRecord = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: 's1',
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: 1,
-  wrong: 0,
-  total: 1,
-  pct: 100,
-  wrongPairs: [],
-  finishedAt: 2000,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+const makeRecord = (over: Partial<SessionRecord> = {}): SessionRecord =>
+  baseRecord({ listId: 'l1', ...over })
 
 /** The SDK surface firebase.ts hands to adapters, built from the test env. */
 function servicesFor(uid: string): FirebaseServices {
@@ -124,25 +103,18 @@ beforeAll(async () => {
 afterAll(() => testEnv.cleanup())
 beforeEach(() => testEnv.clearFirestore())
 
-const makeGame = (over: Partial<GameRecord> = {}): GameRecord => ({
-  id: 'g1',
-  finishedAt: 1000,
-  listIds: ['l1', 'l2'],
-  listNames: ['Lesson 3', 'Market'],
-  source: 'all',
-  correct: 7,
-  asked: 10,
-  points: 52,
-  available: 100,
-  results: [
-    {
-      word: { id: 'w0', col1: 'daughter', col2: 'dochter', listId: 'l1', listName: 'Lesson 3' },
-      correct: true,
-    },
-  ],
-  partial: false,
-  ...over,
-})
+const makeGame = (over: Partial<GameRecord> = {}): GameRecord =>
+  baseGame({
+    listIds: ['l1', 'l2'],
+    listNames: ['Lesson 3', 'Market'],
+    results: [
+      {
+        word: { id: 'w0', col1: 'daughter', col2: 'dochter', listId: 'l1', listName: 'Lesson 3' },
+        correct: true,
+      },
+    ],
+    ...over,
+  })
 
 describe('lists round-trip', () => {
   it('saves a list and emits it to a subscriber', async () => {

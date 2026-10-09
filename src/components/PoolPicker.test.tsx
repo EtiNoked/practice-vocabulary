@@ -1,21 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList as baseList, pair } from '../test/fixtures/words'
 import { PoolPicker } from './PoolPicker'
 import { usePoolDraft, type PoolDraft, type PoolLimits } from './usePoolDraft'
 import type { PoolSpec } from '../state/wordPool'
 import type { WordList } from '../state/types'
 
-const makeList = (over: Partial<WordList> & Pick<WordList, 'id' | 'name'>): WordList => ({
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'a', col2: 'b' }],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-  ...over,
-})
+const makeList = (over: Partial<WordList> & Pick<WordList, 'id' | 'name'>): WordList =>
+  baseList({ pairs: [pair('p1', 'a', 'b')], createdAt: 1, updatedAt: 1, ...over })
 
 const LISTS = [
   makeList({ id: 'A', name: 'Chapter 1' }),

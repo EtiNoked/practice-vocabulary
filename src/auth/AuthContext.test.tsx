@@ -18,7 +18,6 @@ const loadFirebase = vi.fn(() => Promise.reject(new Error('should never be calle
 vi.mock('./firebase', () => ({
   loadFirebase: () => loadFirebase(),
   clearFirestoreCache: async () => {},
-  resetFirebaseForTests: () => {},
 }))
 
 /**

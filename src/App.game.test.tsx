@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeList, pair } from './test/fixtures/words'
 import { listRepo } from './storage/listRepo'
 import { gameRepo } from './storage/gameRepo'
 import { sessionRepo } from './storage/sessionRepo'
@@ -18,17 +19,14 @@ import { QUESTION_MS, VERDICT_MS } from './game/types'
  * timers of its own until the two deadlock.
  */
 
-const food: WordList = {
+const food = makeList({
   id: 'food',
   name: 'Food',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
   pairs: [
-    { id: 'f1', col1: 'bread', col2: 'brood' },
-    { id: 'f2', col1: 'cheese', col2: 'kaas' },
-    { id: 'f3', col1: 'apple', col2: 'appel' },
-    { id: 'f4', col1: 'milk', col2: 'melk' },
+    pair('f1', 'bread', 'brood'),
+    pair('f2', 'cheese', 'kaas'),
+    pair('f3', 'apple', 'appel'),
+    pair('f4', 'milk', 'melk'),
     /*
      * NOT 'water'/'water', which is what this was and which made this whole file flaky
      * about one run in six.
@@ -43,23 +41,22 @@ const food: WordList = {
      * suites for `questions`, `game` and `wordPool` all carry a 'water/water' pair
      * against an injected rng.
      */
-    { id: 'f5', col1: 'egg', col2: 'ei' },
-    { id: 'f6', col1: 'sugar', col2: 'suiker' },
+    pair('f5', 'egg', 'ei'),
+    pair('f6', 'sugar', 'suiker'),
   ],
   createdAt: 1,
   updatedAt: 1,
-  origin: 'manual',
-}
+})
 
 const market: WordList = {
   ...food,
   id: 'market',
   name: 'Market',
   pairs: [
-    { id: 'm1', col1: 'money', col2: 'geld' },
-    { id: 'm2', col1: 'stall', col2: 'kraam' },
-    { id: 'm3', col1: 'price', col2: 'prijs' },
-    { id: 'm4', col1: 'basket', col2: 'mand' },
+    pair('m1', 'money', 'geld'),
+    pair('m2', 'stall', 'kraam'),
+    pair('m3', 'price', 'prijs'),
+    pair('m4', 'basket', 'mand'),
   ],
 }
 

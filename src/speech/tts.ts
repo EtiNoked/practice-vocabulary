@@ -130,10 +130,6 @@ export function hasVoiceFor(
   return pickVoice(lang, voices) !== null
 }
 
-export function cancel(): void {
-  synth()?.cancel()
-}
-
 /**
  * Speak `text` in `lang`.
  *

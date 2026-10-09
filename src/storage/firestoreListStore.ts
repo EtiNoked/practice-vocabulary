@@ -2,46 +2,13 @@ import type { GameRecord } from '../game/types'
 import type { SavedTest } from '../state/testPlan'
 import type { ListMember, ListSharing, SessionRecord, WordList } from '../state/types'
 import type { FirebaseServices } from '../auth/firebase'
-import type { ListStore, StoreError, Unsubscribe, WriteResult } from './types'
+import type { ListStore, Unsubscribe } from './types'
+import { errorCode } from '../auth/firebaseError'
+import { createTracker, toStoreError, write } from './firestoreAdapter'
 import { MAX_RECORDS as MAX_SESSION_RECORDS } from './sessionRepo'
 import { MAX_GAME_RECORDS } from './gameRepo'
 import { endListForEveryone } from './listEndings'
 import { stripUndefined } from './stripUndefined'
-
-export { stripUndefined }
-
-function errorCode(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code: unknown }).code
-    if (typeof code === 'string') return code
-  }
-  return ''
-}
-
-function toWriteResult(error: unknown): WriteResult {
-  switch (errorCode(error)) {
-    case 'permission-denied':
-      return { ok: false, reason: 'permission' }
-    case 'unavailable':
-      return { ok: false, reason: 'offline' }
-    case 'not-found':
-      return { ok: false, reason: 'missing' }
-    default:
-      return { ok: false, reason: 'network' }
-  }
-}
-
-export function toStoreError(error: unknown): StoreError {
-  const message = error instanceof Error ? error.message : 'Something went wrong.'
-  switch (errorCode(error)) {
-    case 'permission-denied':
-      return { kind: 'permission', message: "Your account wouldn't allow that. Try signing in again." }
-    case 'unavailable':
-      return { kind: 'offline', message: "You're offline. Showing your last synced lists." }
-    default:
-      return { kind: 'unknown', message }
-  }
-}
 
 /** Top-level: every cloud list, associated with people by membership (016 D-5). */
 export const LISTS = 'lists'
@@ -115,7 +82,7 @@ export function markLegacyMoved(uid: string): void {
 
 export function createFirestoreListStore(services: FirebaseServices, uid: string): ListStore {
   const { db, fs } = services
-  let detachers: Unsubscribe[] = []
+  const { track, detachAll } = createTracker()
   let disposed = false
 
   /** LEGACY (016). Read and emptied by moveLegacyLists; never written. */
@@ -123,17 +90,6 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
   const sessionsPath = `users/${uid}/sessions`
   const gamesPath = `users/${uid}/games`
   const testsPath = `users/${uid}/tests`
-
-  /** Track every listener so dispose() can detach all of them. A leaked
-   * onSnapshot keeps firing after sign-out and would write one user's data
-   * into the next user's view. */
-  function track(detach: Unsubscribe): Unsubscribe {
-    detachers.push(detach)
-    return () => {
-      detach()
-      detachers = detachers.filter((d) => d !== detach)
-    }
-  }
 
   /**
    * The lists this user is currently a member of, from the live subscription, keyed by id.
@@ -144,15 +100,6 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
   let known: Map<string, WordList> | null = null
   /** Legacy lists still waiting to be moved, by id. */
   let legacy = new Map<string, WordList>()
-
-  async function write(fn: () => Promise<void>): Promise<WriteResult> {
-    try {
-      await fn()
-      return { ok: true }
-    } catch (error) {
-      return toWriteResult(error)
-    }
-  }
 
   return {
     subscribeLists(onChange, onError): Unsubscribe {
@@ -372,8 +319,7 @@ export function createFirestoreListStore(services: FirebaseServices, uid: string
 
     async dispose(): Promise<void> {
       disposed = true
-      detachers.forEach((d) => d())
-      detachers = []
+      detachAll()
     },
   }
 }

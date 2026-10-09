@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { availabilityFor, isTranslationSupported, translate } from './translator'
+import { availabilityFor, translate } from './translator'
 
 type Availability = 'unavailable' | 'downloadable' | 'downloading' | 'available'
 
@@ -39,10 +39,6 @@ afterEach(() => {
 })
 
 describe('browsers without the API', () => {
-  it('reports no support rather than throwing', () => {
-    expect(isTranslationSupported()).toBe(false)
-  })
-
   it('reports every pair unavailable', async () => {
     await expect(availabilityFor('nl', 'en')).resolves.toBe('unavailable')
   })
@@ -52,9 +48,9 @@ describe('browsers without the API', () => {
   })
 
   // A global of the wrong shape is no more use than no global at all.
-  it('ignores a Translator that does not answer availability', () => {
+  it('ignores a Translator that does not answer availability', async () => {
     Object.assign(globalThis, { Translator: {} })
-    expect(isTranslationSupported()).toBe(false)
+    await expect(availabilityFor('nl', 'en')).resolves.toBe('unavailable')
   })
 })
 

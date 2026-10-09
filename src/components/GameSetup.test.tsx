@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList as baseList, pair } from '../test/fixtures/words'
 import { GameSetup } from './GameSetup'
 import { buildWordPool, poolSize, type PoolSpec } from '../state/wordPool'
 import type { WordList } from '../state/types'
@@ -14,22 +15,17 @@ const makeList = (
   name: string,
   words: number,
   over: Partial<WordList> = {},
-): WordList => ({
-  id,
-  name,
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: Array.from({ length: words }, (_, i) => ({
-    id: `${id}-p${i}`,
-    col1: `${id}-word-${i}`,
-    col2: `${id}-vertaling-${i}`,
-  })),
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-  ...over,
-})
+): WordList =>
+  baseList({
+    id,
+    name,
+    pairs: Array.from({ length: words }, (_, i) =>
+      pair(`${id}-p${i}`, `${id}-word-${i}`, `${id}-vertaling-${i}`),
+    ),
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  })
 
 const food = makeList('l1', 'Food', 12)
 const market = makeList('l2', 'Market', 9)

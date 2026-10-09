@@ -60,10 +60,6 @@ function api(): TranslatorApi | null {
   return candidate
 }
 
-export function isTranslationSupported(): boolean {
-  return api() !== null
-}
-
 /**
  * Whether this device can translate between two languages.
  *

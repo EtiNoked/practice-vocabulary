@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeGameRecord } from '../test/fixtures/words'
 import type { GameRecord } from '../game/types'
 import {
   DETAIL_KEEP,
@@ -8,22 +9,14 @@ import {
   gameRepo,
 } from './gameRepo'
 
-const rec = (over: Partial<GameRecord> = {}): GameRecord => ({
-  id: Math.random().toString(36).slice(2),
-  finishedAt: 1000,
-  listIds: ['l1'],
-  listNames: ['Food'],
-  source: 'all',
-  correct: 7,
-  asked: 10,
-  points: 52,
-  available: 100,
-  results: [
-    { word: { id: 'w0', col1: 'bread', col2: 'brood', listId: 'l1', listName: 'Food' }, correct: true },
-  ],
-  partial: false,
-  ...over,
-})
+const rec = (over: Partial<GameRecord> = {}): GameRecord =>
+  makeGameRecord({
+    id: Math.random().toString(36).slice(2),
+    results: [
+      { word: { id: 'w0', col1: 'bread', col2: 'brood', listId: 'l1', listName: 'Food' }, correct: true },
+    ],
+    ...over,
+  })
 
 const stored = (): GameRecord[] => {
   const raw = localStorage.getItem(GAME_STORAGE_KEY)

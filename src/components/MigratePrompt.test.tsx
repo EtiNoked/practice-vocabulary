@@ -1,23 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { makeList } from '../test/fixtures/words'
 import { MigratePrompt } from './MigratePrompt'
 import type { MigrationResult } from '../storage/migrate'
-import type { WordList } from '../state/types'
 
 const ok = (copied: number): MigrationResult => ({ copied, failed: [] })
 
-const stubList: WordList = {
-  id: 'b',
-  name: 'List b',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-}
+const stubList = makeList({ id: 'b', name: 'List b', pairs: [], createdAt: 1, updatedAt: 1 })
 
 describe('the offer', () => {
   it('states exactly how many lists will be copied', () => {

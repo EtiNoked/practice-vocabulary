@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { makeList as baseList, pair } from '../test/fixtures/words'
 import {
   canRedraw,
   poolSubject,
@@ -12,19 +13,10 @@ import {
 } from './drillRun'
 import { seededRng } from './session'
 import type { PooledWord } from './wordPool'
-import type { WordList, WordPair } from './types'
+import type { WordList } from './types'
 
-const pair = (id: string, col1: string, col2: string): WordPair => ({ id, col1, col2 })
-
-const makeList = (over: Partial<WordList> & Pick<WordList, 'id' | 'name' | 'pairs'>): WordList => ({
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-  ...over,
-})
+const makeList = (over: Partial<WordList> & Pick<WordList, 'id' | 'name' | 'pairs'>): WordList =>
+  baseList({ createdAt: 1, updatedAt: 1, ...over })
 
 const food = makeList({
   id: 'l1',

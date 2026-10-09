@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeList } from '../test/fixtures/words'
 import type { ReactNode } from 'react'
 import { useListStore } from './useListStore'
 import { AuthProvider } from '../auth/AuthContext'
@@ -11,7 +12,6 @@ import type { WordList } from '../state/types'
 const loadFirebase = vi.fn()
 vi.mock('../auth/firebase', () => ({
   loadFirebase: () => loadFirebase(),
-  resetFirebaseForTests: () => {},
 }))
 
 const disposeSpy = vi.fn()
@@ -30,7 +30,6 @@ vi.mock('./firestoreListStore', () => ({
     recordSession: async () => ({ ok: true }),
     dispose: async () => disposeSpy(uid),
   }),
-  stripUndefined: <T,>(v: T) => v,
   legacyMoved: () => legacyMovedFlag,
 }))
 
@@ -43,17 +42,7 @@ vi.mock('./moveLegacyLists', () => ({
 
 const user: AuthUser = { uid: 'u1', displayName: 'Eti', email: 'e@x.com', photoURL: null }
 
-const seeded: WordList = {
-  id: 'seed',
-  name: 'Lesson 3',
-  col1Lang: 'en',
-  col2Lang: 'nl',
-  langSource: 'header',
-  pairs: [{ id: 'p1', col1: 'daughter', col2: 'dochter' }],
-  createdAt: 1,
-  updatedAt: 1,
-  origin: 'manual',
-}
+const seeded = makeList({ id: 'seed', createdAt: 1, updatedAt: 1 })
 
 function portFor(u: AuthUser | null): AuthPort {
   return {

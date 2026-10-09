@@ -1,22 +1,20 @@
 import { describe, expect, it } from 'vitest'
+import { makeRecord } from '../test/fixtures/words'
 import { bandBorder, scoreBand } from './scoreBand'
 import type { SessionRecord } from './types'
 
-const rec = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: 'r1',
-  listId: 'l1',
-  listName: 'Lesson 3',
-  right: 8,
-  wrong: 2,
-  total: 10,
-  pct: 80,
-  wrongPairs: [],
-  rightPairs: [],
-  finishedAt: 1000,
-  mode: 'full',
-  partial: false,
-  ...over,
-})
+const rec = (over: Partial<SessionRecord> = {}): SessionRecord =>
+  makeRecord({
+    id: 'r1',
+    listId: 'l1',
+    right: 8,
+    wrong: 2,
+    total: 10,
+    pct: 80,
+    rightPairs: [],
+    finishedAt: 1000,
+    ...over,
+  })
 
 describe('scoreBand', () => {
   it('calls a clean sweep perfect', () => {
