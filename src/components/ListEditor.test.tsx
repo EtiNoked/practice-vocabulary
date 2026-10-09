@@ -667,11 +667,41 @@ describe('translation suggestions', () => {
 
   const translateButtons = () => screen.queryAllByRole('button', { name: /^translate row/i })
 
-  it('offers nothing in a browser without the API', async () => {
+  const webLinks = () => screen.queryAllByRole('link', { name: /in google translate$/i })
+
+  /*
+   * Phones, Safari and Firefox have no on-device translator. There the same button opens
+   * Google Translate on the row's word instead, so translating still works on a phone.
+   */
+  it('links to Google Translate, word filled in, in a browser without the API', async () => {
     setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
-    // An await so a promise-resolved button would have had its chance to appear.
-    await screen.findByRole('button', { name: 'Save' })
+    const [link] = await screen.findAllByRole('link', { name: /^translate row 1 in google translate$/i })
     expect(translateButtons()).toHaveLength(0)
+    const url = new URL(link!.getAttribute('href')!)
+    expect(url.origin).toBe('https://translate.google.com')
+    expect(url.searchParams.get('text')).toBe('dochter')
+    expect(url.searchParams.get('sl')).toBe('nl')
+    expect(url.searchParams.get('tl')).toBe('en')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
+  it('links the other way when only the meaning is filled in', async () => {
+    setup({ initialRows: [{ col1: 'daughter', col2: '' }] })
+    const [link] = await screen.findAllByRole('link', { name: /^translate row 1 in google translate$/i })
+    const url = new URL(link!.getAttribute('href')!)
+    expect([url.searchParams.get('text'), url.searchParams.get('sl'), url.searchParams.get('tl')]).toEqual([
+      'daughter',
+      'en',
+      'nl',
+    ])
+  })
+
+  it('does not link to Google Translate where the built-in translator is there', async () => {
+    installTranslator()
+    setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
+    await screen.findAllByRole('button', { name: /^translate row/i })
+    expect(webLinks()).toHaveLength(0)
   })
 
   it('offers a translate button per row once the browser confirms the pair', async () => {
@@ -681,11 +711,11 @@ describe('translation suggestions', () => {
     expect(translateButtons().length).toBeGreaterThan(0)
   })
 
-  it('hides it when the browser cannot do that pair', async () => {
+  it('falls back to Google Translate when the browser cannot do that pair', async () => {
     const api = installTranslator()
     api.availability.mockResolvedValue('unavailable')
     setup({ initialRows: [{ col1: '', col2: 'dochter' }] })
-    await screen.findByRole('button', { name: 'Save' })
+    await screen.findAllByRole('link', { name: /in google translate$/i })
     expect(translateButtons()).toHaveLength(0)
   })
 
@@ -704,6 +734,7 @@ describe('translation suggestions', () => {
     await user.selectOptions(screen.getByLabelText('Meaning language'), 'nl')
     await user.selectOptions(screen.getByLabelText('Word language'), 'nl')
     expect(translateButtons()).toHaveLength(0)
+    expect(webLinks()).toHaveLength(0)
   })
 
   it('suggests a translation without writing it into the cell', async () => {
