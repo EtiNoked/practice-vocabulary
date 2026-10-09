@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LANG_CODES, LANG_NAMES, type LangCode } from '../lang/languages'
 import { translate } from '../translate/translator'
-import { useTranslationReady } from '../translate/useTranslation'
+import { useTranslationMode, webTranslateUrl, type TranslationMode } from '../translate/useTranslation'
 import { detectLanguages, type LanguageDetection } from '../parse/languageDetect'
 import { findDuplicates } from '../parse/duplicates'
 import { sortRows } from '../parse/sortRows'
@@ -62,7 +62,9 @@ const Row = memo(function Row({
   row,
   index,
   duplicate,
-  canTranslate,
+  translateMode,
+  col1Lang,
+  col2Lang,
   translation,
   onChange,
   onDelete,
@@ -74,8 +76,10 @@ const Row = memo(function Row({
   index: number
   /** Why this row repeats an earlier one, if it does. A string so memo can compare it. */
   duplicate: string | undefined
-  /** Whether this browser can translate this list's pair of languages at all. */
-  canTranslate: boolean
+  /** Whether, and how, this browser can translate this list's pair of languages. */
+  translateMode: TranslationMode
+  col1Lang: LangCode
+  col2Lang: LangCode
   /** Set only on the row being translated; `undefined` everywhere else. */
   translation: RowTranslation | undefined
   onChange: (index: number, patch: Partial<RawRow>) => void
@@ -112,7 +116,32 @@ const Row = memo(function Row({
         <span className="w-24 shrink-0 text-xs text-accent">
           {incomplete ? 'Incomplete' : ''}
         </span>
-        {canTranslate && (
+        {translateMode === 'web' && (
+          /*
+            No on-device translator here (phones, Safari, Firefox), so the same button opens
+            Google Translate on this row's word instead. The direction follows the same rule
+            as the built-in one: the word into its meaning, or the meaning into the word while
+            the word is still empty. Nothing is sent anywhere until the user taps it.
+          */
+          <a
+            aria-label={`Translate row ${index + 1} in Google Translate`}
+            title="Look this up in Google Translate"
+            aria-disabled={empty}
+            href={
+              empty
+                ? undefined
+                : row.col2.trim() !== ''
+                  ? webTranslateUrl(row.col2, col2Lang, col1Lang)
+                  : webTranslateUrl(row.col1, col1Lang, col2Lang)
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`grid min-h-11 min-w-11 place-items-center rounded border border-line-strong ${empty ? 'pointer-events-none opacity-40' : ''}`}
+          >
+            🌐
+          </a>
+        )}
+        {translateMode === 'built-in' && (
           <button
             type="button"
             aria-label={`Translate row ${index + 1}`}
@@ -320,7 +349,7 @@ export function ListEditor({
   /** Distinguishes the reply to the latest click from a slower earlier one. */
   const requestRef = useRef(0)
 
-  const canTranslate = useTranslationReady(effective.col2Lang, effective.col1Lang)
+  const translateMode = useTranslationMode(effective.col2Lang, effective.col1Lang)
 
   /**
    * Offer a translation for one row.
@@ -613,7 +642,7 @@ export function ListEditor({
         <span className="flex-1">Word — spoken aloud</span>
         <span className="flex-1">Meaning — the answer</span>
         <span className="w-24" />
-        {canTranslate && <span className="w-11" />}
+        {(translateMode === 'built-in' || translateMode === 'web') && <span className="w-11" />}
         <span className="w-11" />
       </div>
 
@@ -624,7 +653,9 @@ export function ListEditor({
             row={row}
             index={index}
             duplicate={duplicates.get(index)}
-            canTranslate={canTranslate}
+            translateMode={translateMode}
+            col1Lang={effective.col1Lang}
+            col2Lang={effective.col2Lang}
             translation={translation?.index === index ? translation : undefined}
             onChange={handleChange}
             onDelete={handleDelete}
